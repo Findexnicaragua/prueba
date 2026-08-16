@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="653" viewBox="0 0 720 653" role="img">
+<rect width="720" height="653" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cambiar el plan de un contrato vigente</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza (si el dueño del sistema habilitó «Cambio de plan»)</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Detalle del contrato → «Cambiar plan»: elegí el nuevo (ACTUAL → NUEVO)</text>
+<rect x="56" y="82" width="652" height="140" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="93" width="520" height="118" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="119" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cambiar de plan</text>
+<text x="144.0" y="140" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >ACTUAL: Básico 10 Mbps · C$ 450/mes → NUEVO: Premium 20 Mbps · C$ 700/mes (↑</text>
+<text x="144.0" y="155" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >sube C$ 250)</text>
+<text x="584.5" y="185.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<circle cx="28" cy="248" r="11" fill="#E8F0FE"/>
+<text x="28" y="252" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="252" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«¿Cuándo aplica?» — dos opciones</text>
+<rect x="56" y="260" width="652" height="106" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="313" x2="696" y2="313" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="644" y="280.0" width="52" height="18" rx="9" fill="#E8F0FE"/>
+<text x="670.0" y="292.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >elegido</text>
+<text x="70" y="285" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Próximo ciclo</text>
+<text x="70" y="301" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Arranca el próximo mes. No se cobra nada hoy.</text>
+<line x1="68" y1="361" x2="696" y2="361" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="333" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Hoy con prorrateo</text>
+<text x="70" y="349" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Arranca ya. Se ajustan los días que faltan del ciclo actual.</text>
+<circle cx="28" cy="392" r="11" fill="#E8F0FE"/>
+<text x="28" y="396" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="396" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >El resumen «QUÉ CAMBIA, CUÁNDO Y POR QUÉ» te muestra todo antes de confirmar</text>
+<rect x="56" y="404" width="652" height="158" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="445" x2="696" y2="445" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="431.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >sigue al plan actual</text>
+<text x="70" y="431.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Ciclo en curso</text>
+<line x1="68" y1="481" x2="696" y2="481" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="467.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >desde Ago · pasan a C$ 700</text>
+<text x="70" y="467.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >10 cuotas futuras</text>
+<line x1="68" y1="517" x2="696" y2="517" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="503.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >nada</text>
+<text x="70" y="503.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Se cobra hoy</text>
+<rect x="68" y="523" width="75" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="105.5" y="541.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<rect x="153" y="523" width="81" height="28" rx="14" fill="#1A73E8"/>
+<text x="193.5" y="541.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Confirmar</text>
+<rect x="16" y="576" width="688" height="59" rx="8" fill="#E8F0FE"/>
+<text x="28" y="595" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: No cambian: el día de pago, la vigencia del contrato ni el conteo de cuotas — solo el plan</text>
+<text x="28" y="610" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >y el precio de las cuotas futuras. En un downgrade con prorrateo, la diferencia queda como</text>
+<text x="28" y="625" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >crédito a favor del cliente.</text>
+</svg>

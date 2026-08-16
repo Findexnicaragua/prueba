@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="389" viewBox="0 0 720 389" role="img">
+<rect width="720" height="389" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Configuración → Empresa (identidad del ISP)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: solo admin</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Logo + «Datos de la empresa»</text>
+<rect x="56" y="82" width="652" height="240" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="97" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="92" width="89" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="100" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Nombre comercial</text>
+<text x="80" y="117.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >Telecable Mairena S.A.</text>
+<rect x="68" y="143" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="138" width="54" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="146" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Dirección</text>
+<text x="80" y="163.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >Somotillo, Chinandega</text>
+<rect x="68" y="189" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="184" width="49" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="192" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Teléfono</text>
+<text x="80" y="209.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >8877-0000</text>
+<rect x="68" y="235" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="230" width="24" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="238" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >RUC</text>
+<text x="80" y="255.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >J031000000xxxx</text>
+<rect x="68" y="281" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="276" width="49" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="284" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >WhatsApp</text>
+<text x="80" y="301.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >8877-0000</text>
+<circle cx="28" cy="348" r="11" fill="#E8F0FE"/>
+<text x="28" y="352" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="352" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >¿A qué afecta? Al encabezado del RECIBO (térmica y PDF) y a los REPORTES exportados (salen</text>
+<text x="56" y="367" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >con el logo y estos datos)</text>
+</svg>

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="327" viewBox="0 0 720 327" role="img">
+<rect width="720" height="327" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Leer la lista del personal</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: solo admin</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cada miembro que cobra muestra Prefijo, Clientes y «Cobrado este mes»</text>
+<rect x="56" y="82" width="652" height="154" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="135" x2="696" y2="135" stroke="#EEEEEE" stroke-width="0.8"/>
+<circle cx="82" cy="111.0" r="13" fill="#E8F0FE"/>
+<text x="82" y="114.8" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >JL</text>
+<path d="M675 116.0 L675 113.5 L682.5 106.0 L685 108.5 L677.5 116.0 Z" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="646" cy="111.0" r="6" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M646 108.0 V111.0 L648.5 112.5" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="571" y="102.0" width="57" height="18" rx="9" fill="#FFFFFF"/>
+<text x="599.5" y="114.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#5F6368" font-weight="500" text-anchor="middle" >Cobrador</text>
+<text x="102" y="107" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Juan López</text>
+<text x="102" y="123" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Prefijo JL · Clientes 120 · Cobrado este mes C$ 45,300</text>
+<line x1="68" y1="183" x2="696" y2="183" stroke="#EEEEEE" stroke-width="0.8"/>
+<circle cx="82" cy="159.0" r="13" fill="#E8F0FE"/>
+<text x="82" y="162.8" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >AR</text>
+<path d="M675 164.0 L675 161.5 L682.5 154.0 L685 156.5 L677.5 164.0 Z" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="646" cy="159.0" r="6" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M646 156.0 V159.0 L648.5 160.5" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="571" y="150.0" width="57" height="18" rx="9" fill="#FFFFFF"/>
+<text x="599.5" y="162.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#5F6368" font-weight="500" text-anchor="middle" >Cobranza</text>
+<text x="102" y="155" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Ana Ruiz</text>
+<text x="102" y="171" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Prefijo AR · Clientes 85 · Cobrado este mes C$ 31,150</text>
+<line x1="68" y1="231" x2="696" y2="231" stroke="#EEEEEE" stroke-width="0.8"/>
+<circle cx="82" cy="207.0" r="13" fill="#E8F0FE"/>
+<text x="82" y="210.8" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >PM</text>
+<rect x="639" y="198.0" width="57" height="18" rx="9" fill="#FFFFFF"/>
+<text x="667.5" y="210.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#5F6368" font-weight="500" text-anchor="middle" >Inactivo</text>
+<text x="102" y="203" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Pedro Mora</text>
+<text x="102" y="219" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Técnico</text>
+<rect x="16" y="250" width="688" height="59" rx="8" fill="#E8F0FE"/>
+<text x="28" y="269" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: «Cobrado este mes» cuenta los pagos que ESA persona registró (no los de sus clientes</text>
+<text x="28" y="284" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >asignados) — la misma cifra del reporte por cobrador. Un prefijo «— sin asignar —» sale en rojo:</text>
+<text x="28" y="299" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >ese usuario no puede emitir recibos.</text>
+</svg>

@@ -1,0 +1,299 @@
+name: CI
+
+# Corre en cada push y PR a las ramas de trabajo. Cuatro capas de defensa:
+#   1. SQL compat: grep de sintaxis Postgres-only que SQLite/PowerSync rechaza
+#      (checklist de audit de AGENTS.md, regla #1)
+#   2. Checklist de audit: los patrones de AGENTS.md que ya rompieron la app
+#      antes y NO los cazan analyze ni los tests (reglas #1b, #1d, #7, #11, #12)
+#   3. flutter analyze: errores de compilación + lints
+#   4. flutter test: unit tests (CobroCalculo, Pago, formatters, validators...)
+#
+# Objetivo: que las reglas del checklist no dependan de que un humano (o un
+# agente) se acuerde de correr el grep durante la auditoría.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  sql-compat:
+    name: SQL compatible con SQLite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Patrones Postgres-only prohibidos en lib/ (SQLite no los soporta)
+        run: |
+          set -e
+          echo "Buscando sintaxis Postgres-only en queries SQLite locales..."
+          FOUND=0
+
+          # Descarta las líneas que son SOLO comentario: la doc del código cita
+          # textualmente los patrones prohibidos ("NUNCA ANY()/ARRAY[]...") y no
+          # debe hacer fallar el CI.
+          sin_comentarios() {
+            grep -v -E '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)'
+          }
+
+          check() {
+            local pattern="$1"
+            local label="$2"
+            local hits
+            # Buscamos solo en archivos .dart (queries locales PowerSync/SQLite).
+            hits=$(grep -rn --include="*.dart" -E "$pattern" lib/ | sin_comentarios) || true
+            if [ -n "$hits" ]; then
+              echo "$hits"
+              echo "❌ Patrón prohibido encontrado: $label"
+              FOUND=1
+            fi
+          }
+
+          check 'FILTER[[:space:]]*\(WHERE' 'FILTER (WHERE ...) — usar SUM(CASE WHEN...)'
+          check '::(text|int|integer|uuid|jsonb|timestamp|boolean|numeric|date|bigint)' 'cast ::tipo — usar CAST(x AS tipo)'
+          check '\bILIKE\b' 'ILIKE — SQLite LIKE ya es case-insensitive en ASCII'
+          check '\bdate_trunc\b' 'date_trunc — usar strftime'
+          check "[^a-z_]INTERVAL[[:space:]]'" "INTERVAL '...' — usar date(x, '+N days')"
+          check '\bRETURNING\b' 'RETURNING — SQLite no lo soporta; releer la fila después del write'
+          check '\bANY[[:space:]]*\(' 'ANY(...) — usar IN (?,?,...) con placeholders dinámicos'
+          check '\bARRAY\[' 'ARRAY[...] — usar IN (?,?,...) con placeholders dinámicos'
+
+          if [ "$FOUND" -eq 1 ]; then
+            echo ""
+            echo "Hay sintaxis Postgres-only en queries que corren en SQLite local."
+            echo "Ver AGENTS.md → Checklist de audit → regla #1."
+            exit 1
+          fi
+          echo "✅ Sin sintaxis Postgres-only en queries SQLite."
+
+  checklist-audit:
+    name: Checklist de audit (1b · 1d · 7 · 11 · 12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Patrones que ya rompieron la app (AGENTS.md → Checklist de audit)
+        run: |
+          set -e
+          FOUND=0
+
+          # ── Motor de escaneo ────────────────────────────────────────────
+          # Varias reglas son MULTI-LÍNEA (el formatter de Dart parte las
+          # llamadas), así que un grep línea-a-línea no alcanza: cargamos cada
+          # archivo entero en L[1..n] y lo recorremos con contexto.
+          # `revisar(f)` la aporta cada regla; este bloque llama a revisar()
+          # cuando se termina un archivo (FNR==1 del siguiente) y al final.
+          BOILER='FNR == 1 { if (n > 0) revisar(arch); split("", L); n = 0; arch = FILENAME }
+          { L[++n] = $0 }
+          END { if (n > 0) revisar(arch) }'
+
+          # -r: si no hubiera .dart, NO corre awk sin argumentos (se quedaría
+          # esperando stdin para siempre).
+          escanear() {
+            find lib -name '*.dart' -print0 | xargs -0 -r awk "$1
+          $BOILER"
+          }
+
+          fallar() {
+            echo "$1"
+            echo ""
+            echo "$2"
+            FOUND=1
+          }
+
+          # Convención: `|| true` SOLO donde el pipeline termina en grep (grep
+          # sale 1 cuando no encontró nada y `set -e` mataría el job). En los
+          # awk puros NO se pone: así un error del script awk hace FALLAR el
+          # job en vez de pasar en verde sin haber revisado nada.
+
+          # ── Regla #1b · día local Nicaragua (UTC-6) ─────────────────────
+          # SQLite corre en UTC: `date('now')` pelado adelanta el corte del día
+          # (de noche cae en el día siguiente) → vencidas/mora/"hoy" mal
+          # contadas. Toda lógica de límite de día usa `'now','-6 hours'`.
+          # Se acepta que el `-6 hours` caiga en la línea siguiente (el
+          # formatter parte los strings largos).
+          HITS=$(escanear '
+          function revisar(f,   i, q) {
+            q = sprintf("%cnow%c", 39, 39)
+            for (i = 1; i <= n; i++) {
+              if (index(L[i], q) == 0) continue
+              if (L[i] ~ /^[[:space:]]*(\/\/|\*|\/\*)/) continue
+              if (L[i] ~ /-6 hours/) continue
+              if (i < n && L[i+1] ~ /-6 hours/) continue
+              printf "%s:%d:%s\n", f, i, L[i]
+            }
+          }')
+          if [ -n "$HITS" ]; then
+            fallar "$HITS" "❌ Regla #1b: \`'now'\` sin \`'-6 hours'\`.
+             SQLite es UTC y el negocio es Nicaragua (UTC-6, sin DST).
+             Fix: date('now','-6 hours') / julianday('now','-6 hours')."
+          fi
+
+          # ── Regla #1d · case-folding no-ASCII ───────────────────────────
+          # lower()/upper() de SQLite son ASCII-only: NO minusculizan Ñ ni
+          # vocales acentuadas → falso negativo silencioso (no encuentra al
+          # cliente y no tira error). Se pliegan ambos lados con foldSqlExpr.
+          # Exclusiones (verificadas a mano):
+          #  · busqueda_cliente.dart — es el helper que DEFINE foldSqlExpr.
+          #  · prefijo_recibo — el validador lo restringe a [A-Z0-9-] ASCII,
+          #    así que ahí upper() es correcto (justificado en el código).
+          HITS=$(grep -rn --include="*.dart" -E '(^|[^a-zA-Z_.])(lower|upper)[[:space:]]*\(' lib/ \
+            | grep -v -E '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \
+            | grep -v '^lib/data/utils/busqueda_cliente\.dart:' \
+            | grep -v 'prefijo_recibo') || true
+          if [ -n "$HITS" ]; then
+            fallar "$HITS" "❌ Regla #1d: lower()/upper() de SQLite sobre texto español.
+             Son ASCII-only: 'PEÑA' no matchea 'peña' y el registro queda invisible.
+             Fix: foldSqlExpr(col) / foldSqlTokens(col, q) de data/utils/busqueda_cliente.dart
+             (y foldBusqueda/coincideTokens del lado Dart)."
+          fi
+
+          # ── Regla #7 · showDialog como indicador de carga ────────────────
+          # Si la operación async falla y el pop no corre (o apunta al navigator
+          # equivocado con GoRouter), la barrera del diálogo queda para siempre:
+          # pantalla negra sin salida. Se detecta por el spinner adentro.
+          HITS=$(escanear '
+          function revisar(f,   i, j) {
+            for (i = 1; i <= n; i++) {
+              if (L[i] !~ /showDialog/) continue
+              if (L[i] ~ /^[[:space:]]*(\/\/|\*|\/\*)/) continue
+              for (j = i; j <= i + 12 && j <= n; j++)
+                if (L[j] ~ /CircularProgressIndicator/) {
+                  printf "%s:%d:%s\n", f, i, L[i]
+                  break
+                }
+            }
+          }')
+          if [ -n "$HITS" ]; then
+            fallar "$HITS" "❌ Regla #7: showDialog con un spinner adentro = loading dialog.
+             Si el async tira excepción, la barrera queda y el usuario se traba.
+             Fix: flag _isLoading + overlay condicional en el Stack del widget,
+             limpiado en el finally (ejemplo: mapa_screen.dart → _isCalculatingRoute)."
+          fi
+
+          # ── Regla #11 · Row con stretch dentro de un scroll ──────────────
+          # Un Row con crossAxisAlignment.stretch en altura no acotada reclama
+          # altura INFINITA y empuja todo lo que sigue a y=∞: se renderiza pero
+          # es invisible e inalcanzable. No lo cazan analyze ni los tests.
+          # Exclusión (verificada a mano): recibo_layout_editor.dart — ese Row
+          # es el body de un LayoutBuilder (altura acotada por la pantalla, dos
+          # Expanded/ListView al lado), NO vive dentro de un scroll; ahí
+          # IntrinsicHeight sería incorrecto (forzaría intrinsics sobre ListView).
+          HITS=$(escanear '
+          function comentario(s) { return (s ~ /^[[:space:]]*(\/\/|\*|\/\*)/) }
+          function revisar(f,   i, j, k, fila, ok) {
+            for (i = 1; i <= n; i++) {
+              if (L[i] !~ /CrossAxisAlignment\.stretch/) continue
+              if (comentario(L[i])) continue
+              # Hacia arriba: ¿el widget que abre es un Row? (Column/Flex/Wrap/
+              # ListView con stretch son legítimos → cortan la búsqueda).
+              fila = 0
+              for (j = i; j >= i - 4 && j >= 1; j--) {
+                if (comentario(L[j])) continue
+                if (L[j] ~ /(Column|Flex|Wrap|ListView)[[:space:]]*\(/) break
+                if (L[j] ~ /Row[[:space:]]*\(/) { fila = j; break }
+              }
+              if (fila == 0) continue
+              # ¿Lo envuelve un IntrinsicHeight? Los comentarios no cuentan: la
+              # doc del fix nombra IntrinsicHeight y taparía la violación.
+              ok = 0
+              for (k = fila; k >= fila - 4 && k >= 1; k--)
+                if (!comentario(L[k]) && L[k] ~ /IntrinsicHeight/) { ok = 1; break }
+              if (!ok) printf "%s:%d:%s\n", f, i, L[i]
+            }
+          }' | grep -v '^lib/features/admin/settings/recibo_layout_editor\.dart:') || true
+          if [ -n "$HITS" ]; then
+            fallar "$HITS" "❌ Regla #11: Row con CrossAxisAlignment.stretch sin IntrinsicHeight.
+             Dentro de un SingleChildScrollView reclama altura infinita y manda
+             al vacío todo lo que va después (invisible, sin scroll posible).
+             Fix: envolver el Row en IntrinsicHeight. Si el Row SÍ tiene altura
+             acotada (no está en un scroll), agregar la excepción acá con el porqué."
+          fi
+
+          # ── Regla #12 · push a una sección del ShellRoute admin ──────────
+          # Las pantallas del AdminShell heredan el chrome del shell. `push` NO
+          # reconstruye el shell → su matchedLocation queda en la ruta PADRE; si
+          # se pushea desde /admin (el home), _backTargetFor('/admin')=null y el
+          # usuario queda SIN botón de volver (mordió 2 veces). Las secciones se
+          # navegan con `go`; `push` queda solo para detalle/form (sub-ruta con
+          # otro segmento: /admin/clientes/:id, /admin/tickets/:id...).
+          HITS=$(escanear '
+          function revisar(f,   i, dos) {
+            for (i = 1; i <= n; i++) {
+              if (L[i] ~ /^[[:space:]]*(\/\/|\*|\/\*)/) continue
+              if (L[i] !~ /\.push[A-Za-z]*\(/) continue
+              # El formatter parte la llamada: la ruta puede caer en la línea
+              # siguiente. Se reporta igual la línea del .push.
+              dos = (i < n) ? L[i] " " L[i+1] : L[i]
+              if (dos !~ /\.push[A-Za-z]*\([[:space:]]*.\/admin[\/-]/) continue
+              # Sub-ruta (otro segmento después de la sección) = detalle/form:
+              # permitido, su back popea. Ej: /admin/clientes/$id.
+              if (dos ~ /\.push[A-Za-z]*\([[:space:]]*.\/admin[a-z-]*\/[a-zA-Z0-9_-]+\//) continue
+              printf "%s:%d:%s\n", f, i, L[i]
+            }
+          }')
+          if [ -n "$HITS" ]; then
+            fallar "$HITS" "❌ Regla #12: push a la RAÍZ de una sección del shell admin.
+             El shell no se reconstruye con push: si se abre desde /admin, la
+             pantalla queda sin botón de volver.
+             Fix: context.go('/admin/...') para secciones. push solo para
+             detalle/form (sub-ruta con id, p.ej. /admin/clientes/\$id)."
+          fi
+
+          if [ "$FOUND" -eq 1 ]; then
+            echo ""
+            echo "Reglas del checklist de audit violadas. Detalle en AGENTS.md"
+            echo "→ 'Checklist de audit obligatorio (post-implementación)'."
+            exit 1
+          fi
+          echo "✅ Checklist de audit: sin violaciones (reglas 1b · 1d · 7 · 11 · 12)."
+
+  analyze-test:
+    name: Analyze + Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Debe traer intl 0.20.2 (lo exige el pubspec). Flutter 3.24.0 fijaba
+          # intl 0.19.0 vía flutter_localizations y rompía `flutter pub get`.
+          # Mantener alineada con la versión de Flutter del equipo de desarrollo.
+          flutter-version: '3.41.9'
+          channel: stable
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: flutter analyze
+        # --no-fatal-infos: no fallar por lints informativos, solo por
+        # errores y warnings reales. Los errores de compilación SÍ fallan.
+        run: flutter analyze --no-fatal-infos
+
+      - name: Provisionar powersync-sqlite-core (tests de pagos_repo)
+        # El repo de dinero (test/data/repositories/pagos_repo_test.dart) corre
+        # contra una PowerSyncDatabase REAL, que necesita el core nativo. Viene
+        # en el pub cache de powersync_flutter_libs (misma versión que la app).
+        # OJO: en Linux dlopen NO busca en el cwd (a diferencia de Windows), así
+        # que además de copiar el .so exponemos su carpeta en LD_LIBRARY_PATH —
+        # si no, PowerSync no encuentra la extensión por nombre.
+        # Fail-soft: si no aparece, NO rompe el build — el test se auto-saltea.
+        run: |
+          set -e
+          SO=$(find "$HOME/.pub-cache" "${PUB_CACHE:-/nonexistent}" \
+                 -path '*powersync_flutter_libs*/linux/*.so' 2>/dev/null | head -1)
+          if [ -z "$SO" ]; then
+            echo "⚠️  No se encontró libpowersync*.so en el pub cache;"
+            echo "    pagos_repo_test se saltará (no rompe el build)."
+          else
+            echo "core nativo: $SO"
+            cp "$SO" "$GITHUB_WORKSPACE/libpowersync.so"
+            cp "$SO" "$GITHUB_WORKSPACE/libpowersync_x64.so"
+            # dlopen en Linux busca en LD_LIBRARY_PATH, no en el cwd.
+            echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+            ls -la "$GITHUB_WORKSPACE"/libpowersync*.so
+          fi
+
+      - name: flutter test
+        run: flutter test

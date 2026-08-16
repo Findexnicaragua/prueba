@@ -1,0 +1,9 @@
+{
+  "slug": "mairena",
+  "displayName": "Telecable Mairena S.A.",
+  "releaseName": "Telecable-Mairena-CRM",
+  "applicationId": "com.sitecsa.crm.mairena",
+  "msixIdentity": "com.sitecsa.crm.mairena",
+  "logo": "logo.png",
+  "iconStyle": "A-logo-completo"
+}

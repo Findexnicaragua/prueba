@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="342" viewBox="0 0 720 342" role="img">
+<rect width="720" height="342" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >El mapa del admin (supervisión)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Además de los chips, filtros por Cobrador, Zona y Nodo — y el chip «Ver todo»</text>
+<rect x="56" y="82" width="652" height="184" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="97" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="92" width="49" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="100" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Cobrador</text>
+<text x="80" y="117.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >Juan López</text>
+<path d="M674 111 L678 116 L682 111" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="68" y="143" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="138" width="29" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="146" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Zona</text>
+<text x="80" y="163.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >La Barrera</text>
+<path d="M674 157 L678 162 L682 157" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="68" y="189" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="184" width="29" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="192" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Nodo</text>
+<text x="80" y="209.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >—</text>
+<path d="M674 203 L678 208 L682 203" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="68" y1="261" x2="696" y2="261" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="247.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >El chip «Ver todo» (en la fila de estados) muestra también a los que están al día.</text>
+<rect x="16" y="280" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="299" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: El filtro de Cobrador incluye «Sin cobrador»: los clientes que nadie visita en ruta porque</text>
+<text x="28" y="314" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >no tienen cobrador asignado.</text>
+</svg>

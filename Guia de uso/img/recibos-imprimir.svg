@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="519" viewBox="0 0 720 519" role="img">
+<rect width="720" height="519" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >El recibo: imprimir, PDF y reimprimir</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: quien cobra; el diseño del recibo lo configura el admin en Configuración → Recibos</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Al confirmar un cobro vas directo al recibo (tal cual va a salir impreso)</text>
+<rect x="56" y="82" width="652" height="104" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="56" y1="132" x2="708" y2="132" stroke="#DADCE0" stroke-width="0.8"/>
+<path d="M78 105 L73 110 L78 115" stroke="#1F1F1F" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="96" y="114.5" font-family="Segoe UI, Arial, sans-serif" font-size="13.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Recibo</text>
+<line x1="68" y1="181" x2="696" y2="181" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="153" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >TELECABLE MAIRENA S.A. · RECIBO JL-000124</text>
+<text x="70" y="169" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >María Peña Ruíz · Cuota Junio 2026 · C$ 450 · Cobró: Juan López</text>
+<circle cx="28" cy="212" r="11" fill="#E8F0FE"/>
+<text x="28" y="216" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="216" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Imprimí en la térmica Bluetooth (sin internet) o guardá el PDF</text>
+<rect x="56" y="224" width="652" height="86" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="235" width="105" height="28" rx="14" fill="#1A73E8"/>
+<text x="120.5" y="253.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Imprimir 80mm</text>
+<rect x="183" y="235" width="123" height="28" rx="14" fill="#E8F0FE"/>
+<text x="244.5" y="253.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Guardar PDF 80mm</text>
+<rect x="316" y="235" width="147" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="389.5" y="253.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Configurar impresora</text>
+<line x1="68" y1="305" x2="696" y2="305" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="291.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >El recibo queda guardado y sincronizado aunque la impresora falle. Podés reintentar imprimir cuando quieras.</text>
+<circle cx="28" cy="336" r="11" fill="#E8F0FE"/>
+<text x="28" y="340" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="340" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Si el cliente tiene cuotas vencidas, el recibo agrega el bloque de MORA con el detalle por</text>
+<text x="56" y="355" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >mes</text>
+<circle cx="28" cy="381" r="11" fill="#E8F0FE"/>
+<text x="28" y="385" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >4</text>
+<text x="56" y="385" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >REIMPRIMIR: abrí el pago (contrato → Historial de pagos) → «Reimprimir / Ver recibo»</text>
+<rect x="56" y="393" width="652" height="50" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="404" width="165" height="28" rx="14" fill="#1A73E8"/>
+<text x="150.5" y="422.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Reimprimir / Ver recibo</text>
+<rect x="16" y="457" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="476" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Qué muestra el recibo (cédula, adeudado, descuentos, título, pie, papel 57/80 mm) se</text>
+<text x="28" y="491" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >configura en Configuración → Recibos. Un pago anulado no se reimprime.</text>
+</svg>

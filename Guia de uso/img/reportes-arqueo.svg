@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="383" viewBox="0 0 720 383" role="img">
+<rect width="720" height="383" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cuadrar la caja con el arqueo</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Generá «Arqueo / cierre de caja» del rango: el PDF desglosa POR COBRADOR lo que debe</text>
+<text x="56" y="89" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >entregar</text>
+<rect x="56" y="97" width="652" height="180" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="119" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="600" text-anchor="start" >ARQUEO — JUAN LÓPEZ · EFECTIVO (caja física)</text>
+<line x1="68" y1="164" x2="696" y2="164" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="150.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >C$ 45,300</text>
+<text x="70" y="150.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Córdobas recibidos</text>
+<line x1="68" y1="200" x2="696" y2="200" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="186.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >C$ 1,150</text>
+<text x="70" y="186.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >(−) Vuelto entregado</text>
+<line x1="68" y1="236" x2="696" y2="236" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="222.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >C$ 300</text>
+<text x="70" y="222.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >(−) Devoluciones de saldo a favor</text>
+<line x1="68" y1="272" x2="696" y2="272" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="608" y="245.0" width="88" height="18" rx="9" fill="#E6F4EA"/>
+<text x="652.0" y="257.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#188038" font-weight="500" text-anchor="middle" >lo que entrega</text>
+<text x="598" y="258.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >C$ 43,850</text>
+<text x="70" y="258.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Neto a entregar</text>
+<circle cx="28" cy="303" r="11" fill="#E8F0FE"/>
+<text x="28" y="307" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="307" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Compará el total por cobrador contra lo que cada uno entrega físicamente</text>
+<rect x="16" y="321" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="340" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Los créditos a favor APLICADOS no aparecen en el arqueo: no son plata que entró ese día</text>
+<text x="28" y="355" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >(entró cuando el cliente pagó de más). Ver módulo Saldo a favor.</text>
+</svg>

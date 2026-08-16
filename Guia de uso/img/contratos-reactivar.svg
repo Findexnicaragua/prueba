@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="453" viewBox="0 0 720 453" role="img">
+<rect width="720" height="453" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Reactivar un contrato suspendido</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >En la tarjeta «Suspensión vigente»: si debe, «Cobrar pendiente»; al día → «Reactivar»</text>
+<rect x="56" y="82" width="652" height="58" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="135" x2="696" y2="135" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="615" y="97.0" width="81" height="28" rx="14" fill="#1A73E8"/>
+<text x="655.5" y="115.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Reactivar</text>
+<text x="70" y="107" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Suspensión vigente</text>
+<text x="70" y="123" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Desde el 20/07 · Motivo: Falta de pago · Deuda: C$ 600</text>
+<circle cx="28" cy="166" r="11" fill="#E8F0FE"/>
+<text x="28" y="170" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="170" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Elegí la fecha — el diálogo explica el re-anclaje</text>
+<rect x="56" y="178" width="652" height="199" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="189" width="520" height="177" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="215" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Reactivar contrato</text>
+<text x="144.0" y="236" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >El día de pago pasa a 22. El servicio se reactiva desde esta fecha y se</text>
+<text x="144.0" y="251" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >factura hasta el fin original del contrato (sin estirar). El tiempo en pausa</text>
+<text x="144.0" y="266" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >no se cobra.</text>
+<rect x="144.0" y="276" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="295.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Fecha de reactivación — 22/08/2026</text>
+<rect x="541.0" y="322" width="81" height="28" rx="14" fill="#1A73E8"/>
+<text x="581.5" y="340.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Reactivar</text>
+<text x="497.5" y="340.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<rect x="16" y="391" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="410" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Cobrar la deuda NO reactiva solo: al saldar, la app avisa «Deuda saldada» con el botón</text>
+<text x="28" y="425" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >«Reactivar ahora». Suspendiste por error → «Revertir» ese mismo día lo deja exacto como estaba.</text>
+</svg>

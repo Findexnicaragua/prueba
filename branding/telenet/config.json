@@ -1,0 +1,9 @@
+{
+  "slug": "telenet",
+  "displayName": "Telenet",
+  "releaseName": "Telenet-CRM",
+  "applicationId": "com.sitecsa.crm.telenet",
+  "msixIdentity": "com.sitecsa.crm.telenet",
+  "logo": "logo.png",
+  "iconStyle": "A-logo-completo"
+}

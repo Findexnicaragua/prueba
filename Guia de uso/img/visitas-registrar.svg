@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="526" viewBox="0 0 720 526" role="img">
+<rect width="720" height="526" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Registrar una visita sin cobro</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: cobrador y roles de cobranza (si tu empresa tiene Visitas habilitado)</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cliente → pestaña «Visitas» → «Registrar visita»</text>
+<rect x="56" y="82" width="652" height="198" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="93" width="520" height="176" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="119" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Registrar visita</text>
+<rect x="144.0" y="135" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="154.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Resultado — Cobrado · No estaba · Sin pago · Promesa de pago · Otro</text>
+<rect x="144.0" y="179" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="198.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Notas (opcional) — Ej: promete pagar el viernes</text>
+<rect x="553.0" y="225" width="69" height="28" rx="14" fill="#1A73E8"/>
+<text x="587.5" y="243.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Guardar</text>
+<text x="509.5" y="243.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<circle cx="28" cy="306" r="11" fill="#E8F0FE"/>
+<text x="28" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Queda en el «Historial de visitas» del cliente con tu nombre y fecha</text>
+<rect x="56" y="318" width="652" height="132" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="340" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="600" text-anchor="start" >Historial de visitas (2)</text>
+<line x1="68" y1="397" x2="696" y2="397" stroke="#EEEEEE" stroke-width="0.8"/>
+<path d="M75.5 373.5 L78.7 376.5 L84.5 369.5" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="98" y="369" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Promesa de pago · Juan López</text>
+<text x="98" y="385" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >07/07/2026 · hoy — promete pagar el viernes</text>
+<line x1="68" y1="445" x2="696" y2="445" stroke="#EEEEEE" stroke-width="0.8"/>
+<circle cx="80" cy="421.0" r="6" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M80 418.0 V421.0 L82.5 422.5" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="98" y="417" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >No estaba · Juan López</text>
+<text x="98" y="433" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >01/07/2026 · hace 6 días</text>
+<rect x="16" y="464" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="483" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Sirve para demostrar la gestión («fui 3 veces y no estaba»). Si no ves la pestaña Visitas,</text>
+<text x="28" y="498" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >tu empresa no tiene la función activada. No disponible al impersonar.</text>
+</svg>

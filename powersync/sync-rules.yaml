@@ -1,0 +1,542 @@
+# PowerSync Sync Rules
+# Doc: https://docs.powersync.com/usage/sync-rules
+#
+# Limitaciones del DSL (importantes a recordar):
+#   - NO subqueries (no `WHERE x IN (SELECT ...)`)
+#   - NO JOINs en `data:`
+#   - Cada query de `data:` debe usar TODOS los parámetros del bucket
+#   - `IN (lista literal)` NO se soporta en queries de `data:` ("list not
+#     supported here"). Para varios valores → un SELECT por valor con `=`.
+#
+# Por eso `contratos`, `cuotas`, `pagos`, `recibos`, `cargos_extra` y
+# `notificaciones_mora` tienen `cobrador_id` denormalizado.
+
+bucket_definitions:
+
+  # ── Catálogo del tenant (planes + settings + geografía + red) ──────────
+  # Todos los empleados del ISP los necesitan offline. Geografía y topología
+  # de red son PER-TENANT (migraciones 0097/0098): cada miembro baja la de su
+  # tenant. (Antes geografía era un bucket global — ya no.)
+  # Nota: `modulos` / `tenant_modulos` / `tenants` se consultan vía REST
+  # desde el panel Super Admin (Sprint A2), no se sincronizan localmente.
+  catalogo_tenant:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND activo = true
+    data:
+      - SELECT * FROM planes        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM settings      WHERE tenant_id = bucket.tenant_id
+      # Catálogo de etiquetas (P5). Todos los miembros lo leen (read-only;
+      # write = admin/admin_cobranza por RLS).
+      - SELECT * FROM etiquetas     WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM departamentos WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM municipios    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM comunidades   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM red_nodos     WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM red_hubs      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM red_puertos   WHERE tenant_id = bucket.tenant_id
+      # Feature flags del tenant (gating de módulos opcionales). Read-only.
+      - SELECT id, tenant_id, modulo_codigo, habilitado
+        FROM tenant_modulos WHERE tenant_id = bucket.tenant_id
+
+  # ── Datos operativos del cobrador (#4: ve TODO el tenant) ──────────────
+  # Decisión de producto: el cobrador comparte Cobros/Mapa/Clientes con el admin
+  # y ve TODOS los clientes del tenant (su ruta sigue siendo su foco, pero puede
+  # ver y cobrar a cualquiera). Escritura limitada por RLS (no edita; cobra
+  # auto-estampándose como cobrador_id, invariante #11).
+  #
+  # Parametrizado SÓLO por tenant_id (gateado a rol='cobrador') → TODOS los
+  # cobradores del tenant COMPARTEN el mismo bucket (PowerSync lo guarda una vez,
+  # no una copia por cobrador). Trae todos los cobradores (nombres para los
+  # filtros "Cobrador"/"Ver todo"). Mantiene el filtro anulado=false en pagos/
+  # recibos (el saldo lo recalcula el trigger server; reduce volumen).
+  #
+  # ⚠️ VOLUMEN: cada dispositivo de cobrador baja TODO el tenant. Para tenants
+  # grandes (miles de clientes) esto multiplica el "Data Synced" de PowerSync por
+  # la cantidad de cobradores → monitorear y, si hace falta, evaluar self-host
+  # (ver memoria del proyecto). Deploy gradual: tenants chicos primero.
+  por_cobrador:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'cobrador' AND activo = true
+    data:
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+
+      - SELECT * FROM clientes
+        WHERE tenant_id = bucket.tenant_id
+
+      - SELECT * FROM contratos
+        WHERE tenant_id = bucket.tenant_id
+
+      - SELECT * FROM cuotas
+        WHERE tenant_id = bucket.tenant_id
+
+      - SELECT * FROM pagos
+        WHERE tenant_id = bucket.tenant_id AND anulado = false
+
+      - SELECT * FROM recibos
+        WHERE tenant_id = bucket.tenant_id AND anulado = false
+
+      - SELECT * FROM cargos_extra
+        WHERE tenant_id = bucket.tenant_id
+
+      - SELECT * FROM notificaciones_mora
+        WHERE tenant_id = bucket.tenant_id
+
+      - SELECT * FROM fotos_cliente
+        WHERE tenant_id = bucket.tenant_id
+
+      - SELECT * FROM visitas
+        WHERE tenant_id = bucket.tenant_id
+
+      - SELECT * FROM cliente_etiquetas
+        WHERE tenant_id = bucket.tenant_id
+
+      # Suspensiones: pocas filas por tenant. Necesaria para que la tarjeta de
+      # suspensión del detalle de contrato muestre fecha/motivo/deuda al
+      # cobrador que ahora ve contratos ajenos (sin esto la card sale vacía).
+      - SELECT * FROM contrato_suspensiones
+        WHERE tenant_id = bucket.tenant_id
+
+  # ── Técnico (Fase 3, módulo tickets) — móvil-first, baja SÓLO lo suyo ───
+  # El técnico NO baja todo el inventario ni todos los clientes — sólo sus
+  # tickets asignados + su contexto. Planes/settings/geografía/red/tenant_modulos
+  # los hereda de `catalogo_tenant` (su parameters NO filtra por rol → todo
+  # miembro del tenant los baja). Igual que el cobrador, es offline-first.
+  #
+  # Catálogo de tickets + cobradores del tenant (para nombres de autores en la
+  # bitácora). Parametrizado SÓLO por tenant_id (gateado a rol='tecnico'); incluye
+  # su propia fila de cobradores → la app reconoce su rol.
+  por_tecnico:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'tecnico' AND activo = true
+    data:
+      - SELECT * FROM ticket_tipos WHERE tenant_id = bucket.tenant_id
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+      # Catálogo de inventario (Fase 3C) — para nombrar/elegir el material que
+      # consume. Son DEFINICIONES (no stock); el stock de su custodia va aparte
+      # (por_tecnico_inventario). Si el tenant no tiene inventario, viene vacío.
+      - SELECT * FROM inv_categorias WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_productos  WHERE tenant_id = bucket.tenant_id
+
+  # Sus tickets asignados + bitácora + adjuntos + materiales. Bucket DINÁMICO:
+  # una instancia por ticket asignado (el parameters selecciona los ids del
+  # propio técnico). Cada query de `data:` usa AMBOS parámetros (ticket_id+tenant).
+  por_tecnico_tickets:
+    parameters: |
+      SELECT id AS ticket_id, tenant_id
+      FROM tickets
+      WHERE asignado_a = request.user_id()
+    data:
+      - SELECT * FROM tickets
+        WHERE id = bucket.ticket_id AND tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_eventos
+        WHERE ticket_id = bucket.ticket_id AND tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_adjuntos
+        WHERE ticket_id = bucket.ticket_id AND tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_materiales
+        WHERE ticket_id = bucket.ticket_id AND tenant_id = bucket.tenant_id
+
+  # Custodia de inventario del técnico (Fase 3C): su ubicación tipo='tecnico'
+  # (cobrador_id = él) + los seriales que tiene + el ledger de ESA ubicación
+  # (para derivar el stock de granel). Bucket DINÁMICO parametrizado por la
+  # ubicación de custodia. SÓLO lo suyo — NO todo el inventario del tenant.
+  por_tecnico_inventario:
+    parameters: |
+      SELECT id AS ubicacion_id, tenant_id
+      FROM inv_ubicaciones
+      WHERE cobrador_id = request.user_id() AND tipo = 'tecnico'
+    data:
+      - SELECT * FROM inv_ubicaciones
+        WHERE id = bucket.ubicacion_id AND tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_seriales
+        WHERE ubicacion_id = bucket.ubicacion_id AND tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_movimientos
+        WHERE ubicacion_destino_id = bucket.ubicacion_id AND tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_movimientos
+        WHERE ubicacion_origen_id = bucket.ubicacion_id AND tenant_id = bucket.tenant_id
+
+  # Clientes de sus tickets asignados (para el detalle + el mapa). Bucket
+  # DINÁMICO: una instancia por cliente_id distinto. SÓLO clientes — NADA de
+  # contratos/cuotas/pagos (el técnico no ve dinero).
+  por_tecnico_clientes:
+    parameters: |
+      SELECT cliente_id, tenant_id
+      FROM tickets
+      WHERE asignado_a = request.user_id() AND cliente_id IS NOT NULL
+    data:
+      - SELECT * FROM clientes
+        WHERE id = bucket.cliente_id AND tenant_id = bucket.tenant_id
+
+  # ── Admin de tickets (rol admin_tickets): TODOS los tickets del tenant +
+  # clientes (para detalle/mapa) + catálogo. SIN dinero (cuotas/pagos/recibos/
+  # cargos) ni stock de inventario — es soporte, no cobranza. El mapa degrada
+  # bien sin cuotas (clientes sin color de mora). Incluye su fila de cobradores
+  # → la app reconoce su rol.
+  por_admin_tickets:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'admin_tickets' AND activo = true
+    data:
+      - SELECT * FROM tickets           WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_tipos      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_eventos    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_adjuntos   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_materiales WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM incidentes        WHERE tenant_id = bucket.tenant_id
+      # Clientes (detalle + mapa) — SIN contratos/cuotas/pagos (no ve dinero).
+      - SELECT * FROM clientes          WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cliente_etiquetas WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM fotos_cliente     WHERE tenant_id = bucket.tenant_id
+      # Cobradores (su rol + nombres para asignar/bitácora).
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+      # Catálogo de inventario (nombrar materiales de tickets; sin stock).
+      - SELECT * FROM inv_categorias    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_productos     WHERE tenant_id = bucket.tenant_id
+      # Config (SLA, colores, empresa) + planes (nombre del plan en la ficha).
+      - SELECT * FROM settings          WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM planes            WHERE tenant_id = bucket.tenant_id
+      # Historial de cambios SCOPEADO a lo que gestiona (tickets/tipos/incidentes)
+      # — NUNCA op_log de dinero. La RLS op_log_read_admin_tickets (0182) espeja
+      # este mismo scope. 3 SELECT separados a propósito: el DSL de sync-rules NO
+      # acepta `IN (lista)` en queries de data: ("list not supported here").
+      - SELECT * FROM op_log WHERE tenant_id = bucket.tenant_id AND entidad = 'tickets'
+      - SELECT * FROM op_log WHERE tenant_id = bucket.tenant_id AND entidad = 'ticket_tipos'
+      - SELECT * FROM op_log WHERE tenant_id = bucket.tenant_id AND entidad = 'incidentes'
+
+  # ── Coordinador técnico (rol coordinador, 0207): reparte el trabajo. Ve las
+  # mismas órdenes que admin_tickets porque necesita el panorama completo para
+  # balancear carga entre técnicos, pero SOLO puede escribir `asignado_a` y
+  # `orden_cola` — lo enforza el trigger `tickets_coordinador_solo_orden`, no
+  # estas reglas (las sync rules deciden qué BAJA, no qué se puede escribir).
+  #
+  # Baja MENOS que admin_tickets a propósito: sin adjuntos, sin fotos, sin
+  # catálogo de inventario y sin op_log. Nada de eso hace falta para asignar y
+  # ordenar, y cada tabla de menos es slice que no viaja al dispositivo.
+  por_coordinador:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'coordinador' AND activo = true
+    data:
+      - SELECT * FROM tickets           WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_tipos      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_eventos    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM incidentes        WHERE tenant_id = bucket.tenant_id
+      # Clientes: nombre y dirección para saber a dónde manda a cada técnico.
+      # SIN contratos/cuotas/pagos — el coordinador no ve plata.
+      - SELECT * FROM clientes          WHERE tenant_id = bucket.tenant_id
+      # Cobradores: su propia fila (la app reconoce su rol) + los técnicos a
+      # quienes asigna.
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+      # Config (SLA para priorizar) + planes (nombre del plan en la ficha).
+      - SELECT * FROM settings          WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM planes            WHERE tenant_id = bucket.tenant_id
+
+  # ── Vista global para admin (panel web con sync opcional) ──────────────
+  todo_tenant_admin:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'admin' AND activo = true
+    data:
+      - SELECT * FROM clientes             WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contratos            WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cuotas               WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM pagos                WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM recibos              WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cargos_extra         WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contrato_suspensiones WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM notificaciones_mora  WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM fotos_cliente        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM visitas              WHERE tenant_id = bucket.tenant_id
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM op_log            WHERE tenant_id = bucket.tenant_id
+
+      # Etiquetas asignadas a clientes (P5).
+      - SELECT * FROM cliente_etiquetas WHERE tenant_id = bucket.tenant_id
+
+      # Saldos a favor del cliente (crédito por excedente, 0127). Admin-managed.
+      - SELECT * FROM saldos_favor      WHERE tenant_id = bucket.tenant_id
+
+      # Inventario (módulo opcional) — admin lo gestiona.
+      - SELECT * FROM inv_categorias    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_proveedores   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_productos      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_ubicaciones   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_seriales      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_movimientos   WHERE tenant_id = bucket.tenant_id
+
+      # Tickets (módulo opcional, Fase 3) — admin lo gestiona.
+      - SELECT * FROM ticket_tipos      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM tickets           WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_eventos    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_adjuntos   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_materiales WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM incidentes        WHERE tenant_id = bucket.tenant_id
+
+      # Cola de aprobación (Fase 3B) — admin ve y resuelve solicitudes.
+      - SELECT * FROM solicitudes_accion WHERE tenant_id = bucket.tenant_id
+
+  # ── Solo lectura (rol `lectura`, 0198): MISMO dataset que admin ────────
+  # Para los dueños del ISP: ven todo el tenant (incluida la plata) y no pueden
+  # modificar nada. Que bajen el mismo slice es deliberado — reusan las mismas
+  # pantallas sin reescribir queries.
+  #
+  # Lo de "solo lectura" NO lo garantiza este bucket (las sync rules son de
+  # DESCARGA): lo garantizan las policies `lectura_select` de 0198 (que no
+  # tienen contraparte de escritura) y el connector, que descarta la cola de
+  # subida para este rol. Ver ARQUITECTURA §3.8.
+  todo_tenant_lectura:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'lectura' AND activo = true
+    data:
+      - SELECT * FROM clientes             WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contratos            WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cuotas               WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM pagos                WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM recibos              WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cargos_extra         WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contrato_suspensiones WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM notificaciones_mora  WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM fotos_cliente        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM visitas              WHERE tenant_id = bucket.tenant_id
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM op_log            WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cliente_etiquetas WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM saldos_favor      WHERE tenant_id = bucket.tenant_id
+
+      # Inventario (módulo opcional).
+      - SELECT * FROM inv_categorias    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_proveedores   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_productos     WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_ubicaciones   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_seriales      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_movimientos   WHERE tenant_id = bucket.tenant_id
+
+      # Tickets (módulo opcional, Fase 3).
+      - SELECT * FROM ticket_tipos      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM tickets           WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_eventos    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_adjuntos   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_materiales WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM incidentes        WHERE tenant_id = bucket.tenant_id
+
+      # Cola de aprobación — la ve, no la resuelve (no tiene acciones).
+      - SELECT * FROM solicitudes_accion WHERE tenant_id = bucket.tenant_id
+
+  # ── Vista global para admin_cobranza (mismo dataset que admin) ─────────
+  # admin_cobranza ve todo pero sus permisos de escritura los limita RLS.
+  todo_tenant_admin_cobranza:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'admin_cobranza' AND activo = true
+    data:
+      - SELECT * FROM clientes             WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contratos            WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cuotas               WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM pagos                WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM recibos              WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cargos_extra         WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contrato_suspensiones WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM notificaciones_mora  WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM fotos_cliente        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM visitas              WHERE tenant_id = bucket.tenant_id
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM op_log            WHERE tenant_id = bucket.tenant_id
+
+      # Etiquetas asignadas a clientes (P5).
+      - SELECT * FROM cliente_etiquetas WHERE tenant_id = bucket.tenant_id
+
+      # Saldos a favor del cliente (crédito por excedente, 0127). Admin-managed.
+      - SELECT * FROM saldos_favor      WHERE tenant_id = bucket.tenant_id
+
+      # Inventario: admin_cobranza NO entra a /admin/inventario (el router lo
+      # bloquea con `soloAdmin`), PERO sí necesita inv_seriales/inv_movimientos
+      # + su catálogo para nombrarlos, porque el historial de EQUIPOS del cliente
+      # (HistorialClienteWidget une los seriales instalados) sí se le muestra al
+      # abrir un cliente. Por eso se sincroniza — es INTENCIONAL, no un leak (la
+      # RLS scopea por tenant). B7 del audit: NO removerlo (rompería esa vista).
+      - SELECT * FROM inv_categorias    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_proveedores   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_productos      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_ubicaciones   WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_seriales      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_movimientos   WHERE tenant_id = bucket.tenant_id
+
+      # Tickets: admin_cobranza NO entra a /admin/tickets (soloAdmin en el
+      # router), PERO el Centro de cobranza (que SÍ alcanza) lee la cola
+      # "ya cortados — falta suspender" de `tickets` con efecto=corte JOIN
+      # `ticket_tipos`. Sin estas dos tablas la cola queda VACÍA y los contratos
+      # cortados físicamente siguen facturando (audit Fable 5). Solo estas dos
+      # (no eventos/adjuntos/materiales/incidentes: eso vive en /admin/tickets).
+      - SELECT * FROM tickets      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_tipos WHERE tenant_id = bucket.tenant_id
+
+      # Cola de aprobación (Fase 3B) — admin_cobranza ve y resuelve solicitudes.
+      - SELECT * FROM solicitudes_accion WHERE tenant_id = bucket.tenant_id
+
+  # ── Admin de usuarios (Fase 3): gestión de clientes/contratos SIN dinero ──
+  # Ve clientes, contratos, cuotas (para detalle/suspensión), suspensiones,
+  # cobradores (nombres), fotos, etiquetas, op_log y notificaciones_mora
+  # (para el badge del mapa). NO baja pagos/recibos/cargos_extra/saldos_favor
+  # → aunque la UI filtrara mal, no habría datos de plata en su dispositivo.
+  # NO baja inventario ni tickets (no tiene acceso a esos módulos).
+  todo_tenant_admin_usuarios:
+    parameters: |
+      SELECT tenant_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'admin_usuarios' AND activo = true
+    data:
+      - SELECT * FROM clientes             WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contratos            WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cuotas               WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contrato_suspensiones WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM notificaciones_mora  WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM fotos_cliente        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM visitas              WHERE tenant_id = bucket.tenant_id
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM op_log               WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cliente_etiquetas    WHERE tenant_id = bucket.tenant_id
+
+      # Cola de aprobación (Fase 3B) — admin_usuarios ve sus solicitudes.
+      - SELECT * FROM solicitudes_accion WHERE tenant_id = bucket.tenant_id
+
+      # Bandeja "Por verificar" (0209): SOLO las instalaciones cerradas que
+      # esperan su firma, no el historial de tickets. El comentario de arriba
+      # decía "NO baja tickets" y sigue siendo cierto en espíritu: baja la cola
+      # de trabajo, que son unas pocas filas, y cada una desaparece de su
+      # dispositivo apenas la verifica.
+      - SELECT * FROM tickets      WHERE tenant_id = bucket.tenant_id AND verificacion_estado = 'pendiente'
+      - SELECT * FROM ticket_tipos WHERE tenant_id = bucket.tenant_id
+
+  # ⚠️ TRANSITORIO (2026-07-26): `cobradores.dashboard_pin` sigue en los buckets
+  # de arriba SOLO por compatibilidad con v0.27.0, que está instalada en los
+  # tenants y lee el PIN de esa columna. Si se saca antes de que todos
+  # actualicen, a esos admins el Resumen les queda pidiendo "Configurá tu PIN"
+  # en loop (el valor local queda vacío y su app no conoce `dashboard_pins`).
+  # QUITARLA en el release siguiente, cuando ya no queden v0.27.0 en campo.
+  #
+  # ── El PIN del Resumen: SOLO el propio ────────────────────────────────
+  # Tabla aparte (0202) justamente para que esto sea inequívoco: el bucket trae
+  # una sola fila —la del usuario— así que el PIN de otro nunca llega al device.
+  # Antes viajaba como columna de `cobradores` tenant-wide y cada admin tenía en
+  # su SQLite el PIN en claro de sus pares. Lo que sí viaja tenant-wide es
+  # `cobradores.dashboard_pin_configurado` (booleana), para que Personal muestre
+  # "tiene PIN" sin exponer el valor.
+  mi_pin_dashboard:
+    parameters: |
+      SELECT id AS user_id
+      FROM cobradores
+      WHERE id = request.user_id() AND activo = true
+    data:
+      - SELECT * FROM dashboard_pins WHERE id = bucket.user_id
+
+  # ── Super admin: su propia fila para que la app reconozca el rol ──────
+  # El super_admin vive en el tenant 'System' (00000000-...). No tiene
+  # datos operativos propios — sólo necesita su fila de cobradores para
+  # que el cliente sepa que tiene rol 'super_admin' y muestre el menú
+  # admin. El acceso cross-tenant (gestión de tenants/módulos) se hará
+  # vía RPCs o vista server-side en Sprint A2, no por sync local.
+  super_admin_self:
+    parameters: |
+      SELECT id AS user_id
+      FROM cobradores
+      WHERE id = request.user_id() AND rol = 'super_admin'
+    data:
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE id = bucket.user_id
+
+      # Impersonation row: si el super_admin tiene una row activa,
+      # la bajamos al SQLite local para que el provider la detecte.
+      # user_id es el PK en Postgres pero PowerSync espera `id` — lo
+      # aliaseamos. Cuando no hay row, no se baja nada.
+      - SELECT user_id AS id, user_id, tenant_id, started_at
+        FROM super_admin_impersonation
+        WHERE user_id = bucket.user_id
+
+  # ── Impersonación de tenant por super_admin ──────────────────────────
+  # Cuando el super_admin tiene una row en super_admin_impersonation,
+  # este bucket entrega TODA la data del tenant impersonado (mismos
+  # queries que todo_tenant_admin + catalogo_tenant).
+  #
+  # Cuando no hay impersonación activa, el parameters query retorna 0
+  # rows → el bucket está vacío → no descarga nada extra.
+  #
+  # Al cambiar de tenant (UPDATE impersonation row + disconnect/reconnect
+  # PowerSync), el bucket se re-evalúa y entrega la data del nuevo tenant.
+  impersonated_tenant:
+    parameters: |
+      SELECT tenant_id
+      FROM super_admin_impersonation
+      WHERE user_id = request.user_id()
+    data:
+      - SELECT * FROM planes             WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM settings           WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM departamentos      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM municipios         WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM comunidades        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM red_nodos          WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM red_hubs           WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM red_puertos        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM clientes           WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contratos          WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cuotas             WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM pagos              WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM recibos            WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cargos_extra       WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM contrato_suspensiones WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM notificaciones_mora WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM fotos_cliente      WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM visitas            WHERE tenant_id = bucket.tenant_id
+      - SELECT id, tenant_id, nombre, telefono, rol, prefijo_recibo, activo, puede_cambiar_fecha, dashboard_pin, dashboard_pin_configurado
+        FROM cobradores
+        WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM op_log             WHERE tenant_id = bucket.tenant_id
+      # Etiquetas (P5) — catálogo + asignaciones (impersonación no hereda
+      # catalogo_tenant del tenant impersonado).
+      - SELECT * FROM etiquetas          WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM cliente_etiquetas  WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM saldos_favor       WHERE tenant_id = bucket.tenant_id
+      - SELECT id, tenant_id, modulo_codigo, habilitado
+        FROM tenant_modulos WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_categorias     WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_proveedores    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_productos       WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_ubicaciones    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_seriales       WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM inv_movimientos    WHERE tenant_id = bucket.tenant_id
+      # Tickets (Fase 3) — super_admin impersonando los gestiona.
+      - SELECT * FROM ticket_tipos       WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM tickets            WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_eventos     WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_adjuntos    WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM ticket_materiales  WHERE tenant_id = bucket.tenant_id
+      - SELECT * FROM incidentes         WHERE tenant_id = bucket.tenant_id
+      # Cola de aprobación (Fase 3B).
+      - SELECT * FROM solicitudes_accion WHERE tenant_id = bucket.tenant_id

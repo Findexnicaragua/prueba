@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="604" viewBox="0 0 720 604" role="img">
+<rect width="720" height="604" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >El detalle del cliente: acciones, fotos e historial</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: todos los roles lo ven; las acciones según permiso</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >El encabezado: código y nombre + botones «Llamar» y «Navegar» (abre el GPS)</text>
+<rect x="56" y="82" width="652" height="124" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="135" x2="696" y2="135" stroke="#EEEEEE" stroke-width="0.8"/>
+<circle cx="82" cy="111.0" r="13" fill="#E8F0FE"/>
+<text x="82" y="114.8" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >MP</text>
+<text x="102" y="107" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >CL0102</text>
+<text x="102" y="123" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >María Peña Ruíz</text>
+<rect x="68" y="141" width="63" height="28" rx="14" fill="#E8F0FE"/>
+<text x="99.5" y="159.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Llamar</text>
+<rect x="141" y="141" width="69" height="28" rx="14" fill="#E8F0FE"/>
+<text x="175.5" y="159.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Navegar</text>
+<text x="70" y="192" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="600" text-anchor="start" >PESTAÑAS: DETALLE · CONTRATOS · EQUIPOS · VISITAS</text>
+<circle cx="28" cy="232" r="11" fill="#E8F0FE"/>
+<text x="28" y="236" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="236" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Fotos de la casa / instalación: tarjeta «Fotos» → «Agregar» (cámara o galería)</text>
+<rect x="56" y="244" width="652" height="58" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="297" x2="696" y2="297" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="74.5" y="270.0" width="11" height="8" rx="2" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="80" cy="274.0" r="2.2" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="98" y="269" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Cuadrícula de miniaturas + casilla «Agregar»</text>
+<text x="98" y="285" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Tocá una foto para verla en grande; el alta y la baja quedan en el historial</text>
+<circle cx="28" cy="328" r="11" fill="#E8F0FE"/>
+<text x="28" y="332" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="332" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Historial de cambios (ícono del reloj): quién cambió qué y cuándo — ediciones, etiquetas,</text>
+<text x="56" y="347" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >fotos, visitas</text>
+<rect x="56" y="355" width="652" height="106" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="408" x2="696" y2="408" stroke="#EEEEEE" stroke-width="0.8"/>
+<circle cx="80" cy="384.0" r="6" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M80 381.0 V384.0 L82.5 385.5" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="98" y="380" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Teléfono: 8836-0218 → 8899-4455</text>
+<text x="98" y="396" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >12 jun 2026 · Admin</text>
+<line x1="68" y1="456" x2="696" y2="456" stroke="#EEEEEE" stroke-width="0.8"/>
+<circle cx="80" cy="432.0" r="6" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M80 429.0 V432.0 L82.5 433.5" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="98" y="428" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Visita registrada: Promesa de pago</text>
+<text x="98" y="444" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >10 jun 2026 · Juan López</text>
+<circle cx="28" cy="487" r="11" fill="#E8F0FE"/>
+<text x="28" y="491" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >4</text>
+<text x="56" y="491" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >PDF del historial de pagos: ícono PDF del encabezado → elegí el período</text>
+<rect x="56" y="499" width="652" height="83" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="510" width="520" height="61" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="536" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Historial de pagos</text>
+<text x="144.0" y="557" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Últimos 12 meses · Este año (2026) · Año pasado (2025)</text>
+</svg>

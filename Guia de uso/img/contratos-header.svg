@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="572" viewBox="0 0 720 572" role="img">
+<rect width="720" height="572" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Leer el detalle del contrato</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: todos los roles</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >La tarjeta de arriba: plan + estado, datos y el panel de plata</text>
+<rect x="56" y="82" width="652" height="266" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="56" y1="132" x2="708" y2="132" stroke="#DADCE0" stroke-width="0.8"/>
+<path d="M78 105 L73 110 L78 115" stroke="#1F1F1F" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="96" y="114.5" font-family="Segoe UI, Arial, sans-serif" font-size="13.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Detalle del contrato</text>
+<circle cx="680" cy="110" r="6" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M680 107 V110 L682.5 111.5" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="68" y1="169" x2="696" y2="169" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="649" y="142.0" width="47" height="18" rx="9" fill="#E8F0FE"/>
+<text x="672.5" y="154.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >Activo</text>
+<text x="70" y="155.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Básico 10 Mbps</text>
+<line x1="68" y1="205" x2="696" y2="205" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="191.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >CT0088 · María Peña Ruíz · C$ 450 / mes · Duración: 1 año · Instalación: 15/06/2026</text>
+<rect x="68" y="215" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="210" width="79" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="218" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Total contrato</text>
+<text x="80" y="235.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >C$ 5,400</text>
+<rect x="68" y="261" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="256" width="54" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="264" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Recaudado</text>
+<text x="80" y="281.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >C$ 1,350</text>
+<rect x="68" y="307" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="302" width="54" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Pendiente</text>
+<text x="80" y="327.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >C$ 4,050</text>
+<circle cx="28" cy="374" r="11" fill="#E8F0FE"/>
+<text x="28" y="378" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="378" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Las acciones del contrato</text>
+<rect x="56" y="386" width="652" height="50" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="397" width="57" height="28" rx="14" fill="#1A73E8"/>
+<text x="96.5" y="415.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Pagar</text>
+<rect x="135" y="397" width="105" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="187.5" y="415.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cambiar fecha</text>
+<rect x="250" y="397" width="135" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="317.5" y="415.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Suspender contrato</text>
+<rect x="395" y="397" width="99" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="444.5" y="415.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cambiar plan</text>
+<circle cx="28" cy="462" r="11" fill="#E8F0FE"/>
+<text x="28" y="466" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="466" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Abajo: las cuotas (tocá una para cargos/descuentos), el historial de pagos y el documento</text>
+<text x="56" y="481" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >adjunto</text>
+<rect x="16" y="495" width="688" height="59" rx="8" fill="#E8F0FE"/>
+<text x="28" y="514" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: El «Total contrato» es la suma REAL de las cuotas vivas (si hubo suspensión o cambio de</text>
+<text x="28" y="529" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >plan, se ajusta solo). En contratos indefinidos solo se muestra «Total recaudado» — no hay</text>
+<text x="28" y="544" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >«pendiente» porque no hay fin.</text>
+</svg>

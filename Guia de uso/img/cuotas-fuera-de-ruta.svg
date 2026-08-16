@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="608" viewBox="0 0 720 608" role="img">
+<rect width="720" height="608" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cobrar deuda de suspendidos o cancelados («Fuera de ruta»)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: cobrador · admin / admin de cobranza</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >En «Por cobrar», activá el chip «Fuera de ruta»</text>
+<rect x="56" y="82" width="652" height="50" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="94" width="95" height="26" rx="8" fill="#E8F0FE"/>
+<path d="M77.5 107.5 L80.7 110.5 L86.5 103.5" stroke="#1A73E8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="92" y="111" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#1A73E8" font-weight="500" text-anchor="start" >Pendientes</text>
+<rect x="171" y="94" width="112" height="26" rx="8" fill="#E8F0FE"/>
+<path d="M180.5 107.5 L183.7 110.5 L189.5 103.5" stroke="#1A73E8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="195" y="111" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#1A73E8" font-weight="500" text-anchor="start" >Fuera de ruta</text>
+<circle cx="28" cy="158" r="11" fill="#E8F0FE"/>
+<text x="28" y="162" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="162" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Aparece la sección «Recuperación · fuera de ruta» con esa deuda congelada</text>
+<rect x="56" y="170" width="652" height="184" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="192" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="600" text-anchor="start" >RECUPERACIÓN · FUERA DE RUTA — 2 · C$ 1,050</text>
+<rect x="68" y="206" width="628" height="64" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="206" width="5" height="64" rx="2" fill="#B06000"/>
+<text x="84" y="227" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#1F1F1F" font-weight="600" text-anchor="start" >CL0034 · Pedro Vega</text>
+<text x="84" y="245" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Julio · deuda al suspender</text>
+<rect x="84" y="251" width="68" height="18" rx="9" fill="#FEF7E0"/>
+<text x="118.0" y="263.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#B06000" font-weight="500" text-anchor="middle" >Suspendido</text>
+<text x="684" y="228" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="700" text-anchor="end" >C$ 600</text>
+<rect x="627" y="235" width="57" height="28" rx="14" fill="#1A73E8"/>
+<text x="655.5" y="253.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Pagar</text>
+<rect x="68" y="280" width="628" height="64" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="280" width="5" height="64" rx="2" fill="#C5221F"/>
+<text x="84" y="301" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#1F1F1F" font-weight="600" text-anchor="start" >CL0090 · Rosa Díaz</text>
+<text x="84" y="319" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Junio · deuda al cancelar</text>
+<rect x="84" y="325" width="62" height="18" rx="9" fill="#FCE8E6"/>
+<text x="115.0" y="337.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#C5221F" font-weight="500" text-anchor="middle" >Cancelado</text>
+<text x="684" y="302" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="700" text-anchor="end" >C$ 450</text>
+<rect x="627" y="309" width="57" height="28" rx="14" fill="#1A73E8"/>
+<text x="655.5" y="327.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Pagar</text>
+<circle cx="28" cy="380" r="11" fill="#E8F0FE"/>
+<text x="28" y="384" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="384" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Se cobra igual que siempre. Si un SUSPENDIDO salda todo, la app avisa</text>
+<rect x="56" y="392" width="652" height="140" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="403" width="520" height="118" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="429" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Deuda saldada</text>
+<text x="144.0" y="450" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >La deuda de Pedro Vega quedó en cero, pero su contrato sigue SUSPENDIDO.</text>
+<text x="144.0" y="465" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Pagar no reactiva el servicio.</text>
+<rect x="505.0" y="477" width="117" height="28" rx="14" fill="#1A73E8"/>
+<text x="563.5" y="495.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Reactivar ahora</text>
+<text x="458.5" y="495.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Entendido</text>
+<rect x="16" y="546" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="565" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Un cancelado nunca se reactiva (su deuda solo se recupera). El chip queda apagado por</text>
+<text x="28" y="580" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >defecto para no ensuciar la ruta del día.</text>
+</svg>

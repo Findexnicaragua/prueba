@@ -1,0 +1,7 @@
+{
+  "version": "0.17.2",
+  "release_notes": "v0.16.0\n\n- La lista de Clientes ahora carga al instante, aunque el tenant tenga miles de clientes (antes podia tardar y mostrar 'Sin clientes' mientras calculaba). Ademas el encabezado muestra el numero REAL de clientes del filtro, no '60+'.\n- El Mapa carga al instante: por defecto muestra solo los clientes con pago para hoy (los cobrables), y un boton 'Ver todo' trae el resto. Los pines y colores son los mismos de siempre, solo que mucho mas rapido.\n- El color de cada pin (mora/gracia/al dia) ahora se calcula a partir de un dato precalculado, asi que el mapa abre rapido hasta en telefonos. Al cobrar sin internet el pin cambia de color al toque.",
+  "download_url_windows": "https://github.com/rubenmaltez/sitecsa-updates/releases/latest/download/SITECSA-CRM.msix",
+  "download_url_android": "https://github.com/rubenmaltez/sitecsa-updates/releases/latest/download/SITECSA-CRM.apk",
+  "download_url": "https://github.com/rubenmaltez/sitecsa-updates/releases/latest/download/SITECSA-CRM.msix"
+}

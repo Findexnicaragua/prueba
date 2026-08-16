@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="870" viewBox="0 0 720 870" role="img">
+<rect width="720" height="870" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Configurar la impresora de la computadora (USB)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: cada persona en SU computadora — estos ajustes no viajan a los otros equipos</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Perfil → «Impresora térmica»: la lista muestra las impresoras que Windows tiene instaladas.</text>
+<text x="56" y="89" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Elegí la tuya («Usar como predeterminada») y probala</text>
+<rect x="56" y="97" width="652" height="104" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="56" y1="147" x2="708" y2="147" stroke="#DADCE0" stroke-width="0.8"/>
+<path d="M78 120 L73 125 L78 130" stroke="#1F1F1F" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="96" y="129.5" font-family="Segoe UI, Arial, sans-serif" font-size="13.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Impresora</text>
+<line x1="68" y1="196" x2="696" y2="196" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="75" y="170.0" width="10" height="6" rx="1" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M77 170.0 V166.5 H83 V170.0 M77 174.0 H83 V178.0 H77 Z" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="579" y="158.0" width="117" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="637.5" y="176.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Imprimir prueba</text>
+<text x="98" y="168" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >3nStar RPT004</text>
+<text x="98" y="184" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Predeterminada del sistema</text>
+<circle cx="28" cy="227" r="11" fill="#E8F0FE"/>
+<text x="28" y="231" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="231" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Modo de impresión»: con cuál sale el recibo</text>
+<rect x="56" y="239" width="652" height="154" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="292" x2="696" y2="292" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="644" y="259.0" width="52" height="18" rx="9" fill="#E8F0FE"/>
+<text x="670.0" y="271.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >elegido</text>
+<text x="70" y="264" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Imagen (recomendado)</text>
+<text x="70" y="280" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Sale igual que la vista previa: mismo diseño, tamaños y logo</text>
+<line x1="68" y1="340" x2="696" y2="340" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="312" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Texto nativo</text>
+<text x="70" y="328" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Letra pareja de la impresora, liviano y SIEMPRE completo (nunca pierde el pie)</text>
+<line x1="68" y1="388" x2="696" y2="388" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="360" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Por driver de Windows</text>
+<text x="70" y="376" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >El camino anterior. Solo si la impresora no entiende los otros dos</text>
+<circle cx="28" cy="419" r="11" fill="#E8F0FE"/>
+<text x="28" y="423" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="423" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Imprimir regla de ancho» MIDE tu impresora (modo texto): imprime líneas numeradas en los</text>
+<text x="56" y="438" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >dos extremos y el número más alto que salga COMPLETO va al «Ancho de línea»</text>
+<rect x="56" y="446" width="652" height="134" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="487" x2="696" y2="487" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="473.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >42 caracteres</text>
+<text x="70" y="473.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Ancho de línea</text>
+<rect x="68" y="493" width="165" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="150.5" y="511.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Imprimir regla de ancho</text>
+<line x1="68" y1="575" x2="696" y2="575" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="547" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >REGLA DE ANCHO</text>
+<text x="70" y="563" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Anote el número más alto que aparezca a la IZQUIERDA y a la DERECHA de la MISMA línea</text>
+<circle cx="28" cy="606" r="11" fill="#E8F0FE"/>
+<text x="28" y="610" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >4</text>
+<text x="56" y="610" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Los ajustes que arreglan lo que se ve mal en el papel</text>
+<rect x="56" y="618" width="652" height="176" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="644" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Impresión lenta   (modo imagen)</text>
+<text x="70" y="661" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#5F6368" font-weight="400" text-anchor="start" >Si en recibos largos —con lista de mora— el final sale en blanco o cortado</text>
+<rect x="660" y="639.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="648.0" r="7" fill="#FFFFFF"/>
+<line x1="68" y1="721" x2="696" y2="721" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="693" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >6 líneas</text>
+<text x="70" y="693" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Avance antes del corte</text>
+<text x="70" y="709" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Si el slogan del pie sale cortado o aparece arriba del recibo siguiente, subilo</text>
+<text x="70" y="738" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="600" text-anchor="start" >TILDES (ACENTOS) — solo en modo texto</text>
+<rect x="70" y="754" width="342" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="70" y="754" width="105" height="28" rx="14" fill="#E8F0FE"/>
+<path d="M81.5 768.5 L84.7 771.5 L90.5 764.5" stroke="#1A73E8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="130.5" y="772" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Sin tildes</text>
+<text x="210.5" y="772" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1F1F1F" font-weight="400" text-anchor="middle" >Acentos</text>
+<text x="284.5" y="772" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1F1F1F" font-weight="400" text-anchor="middle" >Estándar</text>
+<text x="367.5" y="772" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1F1F1F" font-weight="400" text-anchor="middle" >Occidental</text>
+<rect x="16" y="808" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="827" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Son ajustes de ESA computadora: no afectan a los celulares ni a las otras PC. En el</text>
+<text x="28" y="842" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >celular la impresora es Bluetooth y su pantalla tiene solo modo, tildes y envío lento.</text>
+</svg>

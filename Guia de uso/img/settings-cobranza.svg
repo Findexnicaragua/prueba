@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="573" viewBox="0 0 720 573" role="img">
+<rect width="720" height="573" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Configuración → Cobranza (reglas, permisos, colores y mensajes)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: solo admin</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Reglas de cobro»</text>
+<rect x="56" y="82" width="652" height="82" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="123" x2="696" y2="123" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="535" y="96.0" width="161" height="18" rx="9" fill="#E8F0FE"/>
+<text x="615.5" y="108.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >afecta: mora, Avisos, badges</text>
+<text x="525" y="109.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >10</text>
+<text x="70" y="109.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Días de gracia</text>
+<line x1="68" y1="159" x2="696" y2="159" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="556" y="132.0" width="140" height="18" rx="9" fill="#E8F0FE"/>
+<text x="626.0" y="144.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >afecta: Por cobrar, mapa</text>
+<text x="546" y="145.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >5</text>
+<text x="70" y="145.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Días de cuotas próximas</text>
+<circle cx="28" cy="190" r="11" fill="#E8F0FE"/>
+<text x="28" y="194" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="194" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Permisos»</text>
+<rect x="56" y="202" width="652" height="82" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="229.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Cobrador puede editar fecha</text>
+<rect x="660" y="216.0" width="34" height="18" rx="9" fill="#BDC1C6"/>
+<circle cx="669" cy="225.0" r="7" fill="#FFFFFF"/>
+<text x="70" y="265.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Admin cobranza ve historial de cambios</text>
+<rect x="660" y="252.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="261.0" r="7" fill="#FFFFFF"/>
+<circle cx="28" cy="310" r="11" fill="#E8F0FE"/>
+<text x="28" y="314" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="314" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Colores de estados de cuota» — «Se aplican en el mapa y en los badges de cuotas» (En mora ·</text>
+<text x="56" y="329" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >En gracia · Vence hoy · Próxima)</text>
+<circle cx="28" cy="355" r="11" fill="#E8F0FE"/>
+<text x="28" y="359" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >4</text>
+<text x="56" y="359" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Mensajes de WhatsApp (Avisos)»: editor con variables y vista previa</text>
+<rect x="56" y="367" width="652" height="184" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="378" width="520" height="162" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="404" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Editar mensaje</text>
+<text x="144.0" y="425" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Variables: Nombre {nombre} · Monto {monto} · Días {dias} · Empresa {empresa}</text>
+<text x="144.0" y="440" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >— con vista previa del WhatsApp y «Restaurar mensaje por defecto».</text>
+<rect x="144.0" y="450" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="469.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Mensaje — Hola {nombre}, su cuota ({monto}) está vencida hace {dias} días…</text>
+<rect x="553.0" y="496" width="69" height="28" rx="14" fill="#1A73E8"/>
+<text x="587.5" y="514.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Guardar</text>
+</svg>

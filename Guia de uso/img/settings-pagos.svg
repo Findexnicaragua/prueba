@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="442" viewBox="0 0 720 442" role="img">
+<rect width="720" height="442" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Configuración → Pagos (métodos y dólar)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: solo admin (la tasa también la puede editar el admin de cobranza)</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Métodos de pago» — el efectivo es fijo; transferencia y tarjeta se prenden acá</text>
+<rect x="56" y="82" width="652" height="118" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="109.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Aceptar efectivo   (método por defecto, siempre activo)</text>
+<rect x="660" y="96.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="105.0" r="7" fill="#FFFFFF"/>
+<text x="70" y="145.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Aceptar transferencia</text>
+<rect x="660" y="132.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="141.0" r="7" fill="#FFFFFF"/>
+<text x="70" y="181.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Aceptar tarjeta</text>
+<rect x="660" y="168.0" width="34" height="18" rx="9" fill="#BDC1C6"/>
+<circle cx="669" cy="177.0" r="7" fill="#FFFFFF"/>
+<circle cx="28" cy="226" r="11" fill="#E8F0FE"/>
+<text x="28" y="230" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="230" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Dólares»: el toggle revela la tasa</text>
+<rect x="56" y="238" width="652" height="128" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="265.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Aceptar pagos en USD</text>
+<rect x="660" y="252.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="261.0" r="7" fill="#FFFFFF"/>
+<rect x="68" y="289" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="284" width="74" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="292" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Tasa USD → C$</text>
+<text x="80" y="309.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >36.50</text>
+<line x1="68" y1="361" x2="696" y2="361" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="519" y="334.0" width="177" height="18" rx="9" fill="#E8F0FE"/>
+<text x="607.5" y="346.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >afecta: cobro, recibo, reportes</text>
+<text x="70" y="347.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Cada cobro en USD guarda la tasa vigente en ese momento</text>
+<rect x="16" y="380" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="399" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Actualizá la tasa con regularidad: la tasa del momento queda para siempre en el recibo y</text>
+<text x="28" y="414" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >los reportes de ese pago.</text>
+</svg>

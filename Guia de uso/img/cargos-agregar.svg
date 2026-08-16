@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="455" viewBox="0 0 720 455" role="img">
+<rect width="720" height="455" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Agregar un cargo a una cuota (reconexión u otro)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Contrato → tocá la cuota → «Cargo extra»: elegí tipo, monto y descripción</text>
+<rect x="56" y="82" width="652" height="213" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="93" width="520" height="191" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="119" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cargo extra</text>
+<text x="144.0" y="140" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Reconexión | Otro cargo</text>
+<rect x="144.0" y="150" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="169.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Monto (C$) — 100</text>
+<rect x="144.0" y="194" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="213.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Descripción * — Ej. Cambio de equipo, instalación, etc.</text>
+<rect x="517.0" y="240" width="105" height="28" rx="14" fill="#1A73E8"/>
+<text x="569.5" y="258.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Aplicar cargo</text>
+<text x="473.5" y="258.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<circle cx="28" cy="321" r="11" fill="#E8F0FE"/>
+<text x="28" y="325" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="325" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >El recuadro «Resultado» muestra el saldo nuevo antes de confirmar</text>
+<rect x="56" y="333" width="652" height="46" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="374" x2="696" y2="374" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="360.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >Saldo: C$ 450 → C$ 550</text>
+<text x="70" y="360.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Cargo: +C$ 100</text>
+<rect x="16" y="393" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="412" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Si tu empresa tiene la reconexión automática activada, el cargo se agrega solo al cobrar a</text>
+<text x="28" y="427" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >un cliente que estuvo suspendido (el cobro lo muestra como tarjeta).</text>
+</svg>

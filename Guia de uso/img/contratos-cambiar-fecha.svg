@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="649" viewBox="0 0 720 649" role="img">
+<rect width="720" height="649" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cambiar el día de pago (cobra el «puente» en el momento)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza · cobrador solo si el dueño del sistema lo habilitó</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Detalle del contrato → «Cambiar fecha»</text>
+<rect x="56" y="82" width="652" height="155" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="93" width="520" height="133" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="119" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cambiar fecha de pago</text>
+<text x="144.0" y="140" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Cobrás el «puente» (los días entre la fecha vieja y la nueva) más lo que</text>
+<text x="144.0" y="155" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >esté vencido; desde ahí la cuota vence el día que elijas. Abajo ves el</text>
+<text x="144.0" y="170" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >total.</text>
+<text x="584.5" y="200.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<circle cx="28" cy="263" r="11" fill="#E8F0FE"/>
+<text x="28" y="267" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="267" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Elegí el nuevo día — la app te muestra el total a cobrar YA</text>
+<rect x="56" y="275" width="652" height="164" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="290" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="285" width="93" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="293" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Nuevo día de pago</text>
+<text x="80" y="310.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >Día 1   (actual: día 15)</text>
+<line x1="68" y1="362" x2="696" y2="362" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="348.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >C$ 255</text>
+<text x="70" y="348.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Puente: 17 días</text>
+<line x1="68" y1="398" x2="696" y2="398" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="608" y="371.0" width="88" height="18" rx="9" fill="#FEF7E0"/>
+<text x="652.0" y="383.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#B06000" font-weight="500" text-anchor="middle" >se cobra ahora</text>
+<text x="598" y="384.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >C$ 255</text>
+<text x="70" y="384.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Total a cobrar</text>
+<line x1="68" y1="434" x2="696" y2="434" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="420.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Desde ahí, las cuotas vencen el día 1 de cada mes.</text>
+<circle cx="28" cy="465" r="11" fill="#E8F0FE"/>
+<text x="28" y="469" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="469" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Ingresá lo entregado y confirmá — es un cobro normal (con vuelto y recibo)</text>
+<rect x="56" y="477" width="652" height="96" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="492" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="487" width="108" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="495" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Monto entregado (C$)</text>
+<text x="80" y="512.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >300</text>
+<rect x="68" y="534" width="75" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="105.5" y="552.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<rect x="153" y="534" width="159" height="28" rx="14" fill="#1A73E8"/>
+<text x="232.5" y="552.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Cobrar y cambiar fecha</text>
+<rect x="16" y="587" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="606" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Así el cliente nunca paga dos veces el mismo período ni queda con días gratis. Si tiene</text>
+<text x="28" y="621" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >cuotas vencidas, la app pide cobrar los atrasados antes de cambiar la fecha.</text>
+</svg>

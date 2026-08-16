@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="633" viewBox="0 0 720 633" role="img">
+<rect width="720" height="633" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Configuración → Recibos (el diseñador del comprobante)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: solo admin — con vista previa en vivo</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Ajustes generales»: papel, título y pie</text>
+<rect x="56" y="82" width="652" height="148" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="97" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="92" width="79" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="100" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Ancho de papel</text>
+<text x="80" y="117.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >80 mm (estándar) · 58 mm</text>
+<rect x="68" y="143" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="138" width="93" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="146" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Título del recibo</text>
+<text x="80" y="163.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >RECIBO, COBRO…</text>
+<rect x="68" y="189" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="184" width="79" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="192" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Pie del recibo</text>
+<text x="80" y="209.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >¡Gracias por su pago!</text>
+<circle cx="28" cy="256" r="11" fill="#E8F0FE"/>
+<text x="28" y="260" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="260" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Los bloques se arrastran entre ENCABEZADO · CUERPO · PIE, con tamaño y visibilidad por</text>
+<text x="56" y="275" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >bloque</text>
+<rect x="56" y="283" width="652" height="82" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="310.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Logo · Datos de la empresa · Cliente · Montos de la cuota…</text>
+<rect x="660" y="297.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="306.0" r="7" fill="#FFFFFF"/>
+<line x1="68" y1="360" x2="696" y2="360" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="582" y="333.0" width="114" height="18" rx="9" fill="#FFFFFF"/>
+<text x="639.0" y="345.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#5F6368" font-weight="500" text-anchor="middle" >no se puede ocultar</text>
+<text x="70" y="346.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >«Totales (cobrado / vuelto / pagado)»</text>
+<circle cx="28" cy="391" r="11" fill="#E8F0FE"/>
+<text x="28" y="395" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="395" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Sub-opciones del contenido</text>
+<rect x="56" y="403" width="652" height="154" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="430.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Mostrar cédula</text>
+<rect x="660" y="417.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="426.0" r="7" fill="#FFFFFF"/>
+<text x="70" y="466.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Mostrar saldo pendiente</text>
+<rect x="660" y="453.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="462.0" r="7" fill="#FFFFFF"/>
+<text x="70" y="502.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Mostrar descuentos y cargos</text>
+<rect x="660" y="489.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="685" cy="498.0" r="7" fill="#FFFFFF"/>
+<text x="70" y="538.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Mostrar motivos</text>
+<rect x="660" y="525.0" width="34" height="18" rx="9" fill="#BDC1C6"/>
+<circle cx="669" cy="534.0" r="7" fill="#FFFFFF"/>
+<rect x="16" y="571" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="590" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Afecta a TODOS los recibos desde ese momento (los ya emitidos no cambian). «Restaurar</text>
+<text x="28" y="605" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >layout por defecto» vuelve al diseño original.</text>
+</svg>

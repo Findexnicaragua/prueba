@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="584" viewBox="0 0 720 584" role="img">
+<rect width="720" height="584" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Etiquetas: crear el catálogo y etiquetar clientes</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: catálogo: solo admin · asignar: admin / admin de cobranza</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >El catálogo vive en Administración → Etiquetas (nombre + color + ícono)</text>
+<rect x="56" y="82" width="652" height="184" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="93" width="520" height="162" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="119" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Nueva etiqueta</text>
+<text x="144.0" y="140" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Nombre + selector de color (paleta) + ícono (cuadrícula), con vista previa</text>
+<text x="144.0" y="155" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >del chip.</text>
+<rect x="144.0" y="165" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="184.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Nombre — VIP</text>
+<rect x="553.0" y="211" width="69" height="28" rx="14" fill="#1A73E8"/>
+<text x="587.5" y="229.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Guardar</text>
+<text x="509.5" y="229.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<circle cx="28" cy="292" r="11" fill="#E8F0FE"/>
+<text x="28" y="296" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="296" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >En el detalle del cliente: sección «Etiquetas» → «Asignar» (o «Editar» si ya tiene)</text>
+<rect x="56" y="304" width="652" height="108" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="70" y="326" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="600" text-anchor="start" >ETIQUETAS DEL CLIENTE</text>
+<line x1="68" y1="371" x2="696" y2="371" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="639" y="344.0" width="57" height="18" rx="9" fill="#E8F0FE"/>
+<text x="667.5" y="356.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >asignada</text>
+<text x="70" y="357.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >VIP</text>
+<line x1="68" y1="407" x2="696" y2="407" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="393.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Promesa de pago</text>
+<circle cx="28" cy="438" r="11" fill="#E8F0FE"/>
+<text x="28" y="442" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="442" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Se ven como chips en la lista de clientes, el mapa y el cobro</text>
+<rect x="56" y="450" width="652" height="58" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="503" x2="696" y2="503" stroke="#EEEEEE" stroke-width="0.8"/>
+<circle cx="82" cy="479.0" r="13" fill="#E8F0FE"/>
+<text x="82" y="482.8" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >MP</text>
+<rect x="665" y="470.0" width="31" height="18" rx="9" fill="#E8F0FE"/>
+<text x="680.5" y="482.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >VIP</text>
+<text x="102" y="475" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >CL0102 · María Peña Ruíz</text>
+<text x="102" y="491" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >La Barrera · Somotillo</text>
+<rect x="16" y="522" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="541" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Si el nombre ya existe, avisa «Ya existe una etiqueta». Asignar o quitar queda registrado</text>
+<text x="28" y="556" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >en el historial del cliente.</text>
+</svg>

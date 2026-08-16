@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="685" viewBox="0 0 720 685" role="img">
+<rect width="720" height="685" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Pedir aprobación: suspender, cancelar o reactivar (admin de usuarios)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: pide: admin de usuarios · aprueba: admin</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >En el detalle del contrato, el admin de usuarios ve «Solicitar…» donde los demás tienen el</text>
+<text x="56" y="89" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >botón que ejecuta</text>
+<rect x="56" y="97" width="652" height="50" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="108" width="147" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="141.5" y="126.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Solicitar suspensión</text>
+<rect x="225" y="108" width="153" height="28" rx="14" fill="#C5221F"/>
+<text x="301.5" y="126.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Solicitar cancelación</text>
+<circle cx="28" cy="173" r="11" fill="#E8F0FE"/>
+<text x="28" y="177" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="177" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >El diálogo pide MOTIVO (lista) y NOTAS — los dos obligatorios: sin notas el botón no envía</text>
+<rect x="56" y="185" width="652" height="228" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="196" width="520" height="206" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="222" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Solicitar: Suspender contrato</text>
+<text x="144.0" y="243" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Esta acción requiere aprobación de un administrador. Cliente: María Peña</text>
+<text x="144.0" y="258" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Ruíz. El motivo y las notas son obligatorios.</text>
+<rect x="144.0" y="268" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="287.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Motivo — Solicitud del cliente · Falta de pago · Mudanza / cambio de domicilio · Otro</text>
+<rect x="144.0" y="312" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="331.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Notas — Explicá el motivo…</text>
+<rect x="499.0" y="358" width="123" height="28" rx="14" fill="#1A73E8"/>
+<text x="560.5" y="376.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Enviar solicitud</text>
+<text x="455.5" y="376.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<circle cx="28" cy="439" r="11" fill="#E8F0FE"/>
+<text x="28" y="443" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="443" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >La solicitud cae en Solicitudes: quien la pidió la sigue en «Mis solicitudes»; el admin la</text>
+<text x="56" y="458" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >resuelve en «Pendientes», con el motivo a la vista</text>
+<rect x="56" y="466" width="652" height="98" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="519" x2="696" y2="519" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="634" y="486.0" width="62" height="18" rx="9" fill="#FEF7E0"/>
+<text x="665.0" y="498.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#B06000" font-weight="500" text-anchor="middle" >Pendiente</text>
+<text x="70" y="491" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Suspender contrato</text>
+<text x="70" y="507" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Solicitó: Ana Gestora · Motivo: Falta de pago — 3 meses sin pagar, ya se le avisó</text>
+<rect x="68" y="525" width="75" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="105.5" y="543.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Rechazar</text>
+<rect x="153" y="525" width="69" height="28" rx="14" fill="#1A73E8"/>
+<text x="187.5" y="543.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Aprobar</text>
+<circle cx="28" cy="590" r="11" fill="#E8F0FE"/>
+<text x="28" y="594" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >4</text>
+<text x="56" y="594" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Aprobar» ejecuta la suspensión de verdad CON ese motivo y esas notas (así queda en el</text>
+<text x="56" y="609" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >historial del contrato). «Rechazar» pide su propio motivo y no toca nada</text>
+<rect x="16" y="623" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="642" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: El admin de usuarios pide, no ejecuta: no suspende, no cancela y no cobra. Las solicitudes</text>
+<text x="28" y="657" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >viejas (anteriores al motivo obligatorio) siguen visibles, sin ese recuadro.</text>
+</svg>

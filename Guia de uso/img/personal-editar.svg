@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="805" viewBox="0 0 720 805" role="img">
+<rect width="720" height="805" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Editar un miembro, forzarle contraseña o desactivarlo</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: solo admin (forzar contraseña: nunca sobre uno mismo)</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >En la fila del miembro: lápiz «Editar»</text>
+<rect x="56" y="82" width="652" height="394" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="93" width="520" height="372" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="119" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Editar cobrador</text>
+<rect x="142.0" y="135" width="480" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="152.0" y="130" width="39" height="10" rx="2" fill="#FFFFFF"/>
+<text x="156.0" y="138" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Nombre</text>
+<text x="154.0" y="155.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >Juan López</text>
+<rect x="142.0" y="181" width="480" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="152.0" y="176" width="49" height="10" rx="2" fill="#FFFFFF"/>
+<text x="156.0" y="184" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Teléfono</text>
+<text x="154.0" y="201.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >8877-1122</text>
+<rect x="142.0" y="227" width="480" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="152.0" y="222" width="24" height="10" rx="2" fill="#FFFFFF"/>
+<text x="156.0" y="230" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Rol</text>
+<text x="154.0" y="247.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >Cobrador</text>
+<path d="M600.0 241 L604.0 246 L608.0 241" stroke="#5F6368" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="142.0" y="273" width="480" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="152.0" y="268" width="93" height="10" rx="2" fill="#FFFFFF"/>
+<text x="156.0" y="276" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Prefijo de recibo</text>
+<text x="154.0" y="293.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >JL</text>
+<text x="154.0" y="317" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Para roles que cobran (cobrador / admin / cobranza). Único por empresa.</text>
+<text x="144.0" y="345.5" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Activo</text>
+<rect x="586.0" y="332.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="611.0" cy="341.0" r="7" fill="#FFFFFF"/>
+<text x="144.0" y="380" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Puede cambiar fecha de pago</text>
+<text x="144.0" y="397" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#5F6368" font-weight="400" text-anchor="start" >Cobra los días puente y mueve la fecha de pago del cliente</text>
+<rect x="586.0" y="375.0" width="34" height="18" rx="9" fill="#1A73E8"/>
+<circle cx="611.0" cy="384.0" r="7" fill="#FFFFFF"/>
+<rect x="553.0" y="421" width="69" height="28" rx="14" fill="#1A73E8"/>
+<text x="587.5" y="439.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Guardar</text>
+<text x="509.5" y="439.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<text x="401.5" y="439.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Forzar contraseña</text>
+<circle cx="28" cy="502" r="11" fill="#E8F0FE"/>
+<text x="28" y="506" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="506" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >El ROL solo lo puede cambiar el dueño del sistema; el interruptor «Puede cambiar fecha de</text>
+<text x="56" y="521" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >pago» aparece solo para cobrador / admin de cobranza y si tu empresa tiene esa función</text>
+<text x="56" y="536" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >activa</text>
+<circle cx="28" cy="562" r="11" fill="#E8F0FE"/>
+<text x="28" y="566" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="566" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Forzar contraseña» genera una nueva (visible una sola vez); el usuario queda deslogueado y</text>
+<text x="56" y="581" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >entra con esa</text>
+<rect x="56" y="589" width="652" height="140" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="600" width="520" height="118" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="626" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Contraseña de Juan López</text>
+<text x="144.0" y="647" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Contraseña forzada. Pasale email + contraseña por canal seguro — el usuario</text>
+<text x="144.0" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >quedó deslogueado y debe entrar con esta nueva.</text>
+<rect x="493.0" y="674" width="129" height="28" rx="14" fill="#1A73E8"/>
+<text x="557.5" y="692.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Copiar contraseña</text>
+<text x="422.5" y="692.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cerrar sin copiar</text>
+<rect x="16" y="743" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="762" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Desactivar NO borra su historial: deja de poder entrar, pero sus cobros, recibos y visitas</text>
+<text x="28" y="777" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >quedan intactos. Cambios sensibles piden confirmación extra.</text>
+</svg>

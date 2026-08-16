@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="324" viewBox="0 0 720 324" role="img">
+<rect width="720" height="324" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Transferencia o tarjeta: referencia y foto del comprobante</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: los métodos disponibles los define tu empresa</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Elegí el método — transferencia/tarjeta piden el comprobante</text>
+<rect x="56" y="82" width="652" height="96" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="94" width="69" height="26" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="102.5" y="111" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#1F1F1F" font-weight="400" text-anchor="middle" >Efectivo</text>
+<rect x="145" y="94" width="112" height="26" rx="8" fill="#E8F0FE"/>
+<path d="M154.5 107.5 L157.7 110.5 L163.5 103.5" stroke="#1A73E8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="169" y="111" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#1A73E8" font-weight="500" text-anchor="start" >Transferencia</text>
+<rect x="265" y="94" width="64" height="26" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="297.0" y="111" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#1F1F1F" font-weight="400" text-anchor="middle" >Tarjeta</text>
+<rect x="68" y="137" width="628" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="78" y="132" width="182" height="10" rx="2" fill="#FFFFFF"/>
+<text x="82" y="140" font-family="Segoe UI, Arial, sans-serif" font-size="9.5" fill="#5F6368" font-weight="400" text-anchor="start" >Número de referencia / confirmación</text>
+<text x="80" y="157.5" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="400" text-anchor="start" >BANPRO-778812</text>
+<circle cx="28" cy="204" r="11" fill="#E8F0FE"/>
+<text x="28" y="208" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="208" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >O adjuntá la foto (vale como referencia)</text>
+<rect x="56" y="216" width="652" height="86" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="227" width="201" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="168.5" y="245.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Adjuntar foto del comprobante</text>
+<line x1="68" y1="297" x2="696" y2="297" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="70" y="283.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Si no hay ni referencia ni foto, la app avisa: «Ingresá referencia o adjuntá foto»</text>
+</svg>

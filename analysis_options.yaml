@@ -1,0 +1,25 @@
+# Reglas de análisis del proyecto.
+#
+# `flutter_lints` estaba en pubspec desde siempre pero este archivo NO existía,
+# así que las reglas nunca corrieron: `flutter analyze` venía usando solo los
+# defaults del SDK. Se agrega para que el chequeo del proyecto sea el que el
+# propio pubspec declara.
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # El repo usa comillas simples de forma consistente.
+    prefer_single_quotes: true
+
+analyzer:
+  errors:
+    # Los `TODO` no rompen el análisis: el backlog vive en BITACORA.md.
+    todo: ignore
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**

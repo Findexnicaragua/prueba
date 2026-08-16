@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="619" viewBox="0 0 720 619" role="img">
+<rect width="720" height="619" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Avisar por WhatsApp a los clientes en gracia o mora</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza (si tu empresa tiene Avisos habilitado)</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cobranza → Avisos: dos secciones — «Próximos a corte — en gracia» y «En mora — corte»</text>
+<rect x="56" y="82" width="652" height="198" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68.0" y="93" width="308.0" height="64" rx="8" fill="#F1F3F4"/>
+<text x="80.0" y="109" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#5F6368" font-weight="600" text-anchor="start" >PRÓXIMOS A CORTE</text>
+<text x="80.0" y="128" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#1F1F1F" font-weight="700" text-anchor="start" >C$ 3,150</text>
+<text x="80.0" y="144" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >7 clientes</text>
+<rect x="388.0" y="93" width="308.0" height="64" rx="8" fill="#FCE8E6"/>
+<text x="400.0" y="109" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#5F6368" font-weight="600" text-anchor="start" >EN MORA</text>
+<text x="400.0" y="128" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#C5221F" font-weight="700" text-anchor="start" >C$ 38,200</text>
+<text x="400.0" y="144" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >23 clientes</text>
+<line x1="68" y1="201" x2="696" y2="201" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="537" y="169.0" width="159" height="28" rx="14" fill="#188038"/>
+<text x="616.5" y="187.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Notificar a todos (23)</text>
+<text x="70" y="187.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >En mora — corte</text>
+<rect x="68" y="206" width="628" height="64" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="206" width="5" height="64" rx="2" fill="#C5221F"/>
+<text x="84" y="227" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#1F1F1F" font-weight="600" text-anchor="start" >CL0102 · María Peña Ruíz</text>
+<text x="84" y="245" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >La Barrera · Somotillo · 8836-0218</text>
+<rect x="84" y="251" width="130" height="18" rx="9" fill="#FCE8E6"/>
+<text x="149.0" y="263.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#C5221F" font-weight="500" text-anchor="middle" >en mora hace 12 día(s)</text>
+<text x="684" y="228" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="700" text-anchor="end" >C$ 450</text>
+<rect x="609" y="235" width="75" height="28" rx="14" fill="#188038"/>
+<text x="646.5" y="253.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >WhatsApp</text>
+<rect x="490" y="235" width="111" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="545.5" y="253.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Orden de corte</text>
+<circle cx="28" cy="306" r="11" fill="#E8F0FE"/>
+<text x="28" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«WhatsApp» abre el chat con el mensaje YA escrito (tu plantilla con nombre y monto) — solo</text>
+<text x="56" y="325" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >tocás enviar. En mora además: «Orden de corte» (crea el ticket precargado)</text>
+<rect x="56" y="333" width="652" height="86" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="374" x2="696" y2="374" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="587" y="347.0" width="109" height="18" rx="9" fill="#E8F0FE"/>
+<text x="641.5" y="359.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#1A73E8" font-weight="500" text-anchor="middle" >plantilla editable</text>
+<text x="70" y="360.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >«Hola María, su cuota de junio (C$ 450) está vencida hace 12 días…»</text>
+<rect x="68" y="380" width="111" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="123.5" y="398.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Orden de corte</text>
+<circle cx="28" cy="445" r="11" fill="#E8F0FE"/>
+<text x="28" y="449" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="449" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Notificar a todos» te guía uno por uno</text>
+<rect x="56" y="457" width="652" height="86" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="498" x2="696" y2="498" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="483" y="466.0" width="213" height="28" rx="14" fill="#188038"/>
+<text x="589.5" y="484.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Enviar por WhatsApp y siguiente</text>
+<text x="70" y="484.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Cliente 1 de 23</text>
+<text x="138.5" y="522.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Saltar este cliente</text>
+<rect x="16" y="557" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="576" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: El envío es manual y gratis. Las plantillas (gracia y mora) se editan en Configuración →</text>
+<text x="28" y="591" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Cobranza → «Mensajes de WhatsApp (Avisos)» con variables de nombre, monto, días y empresa.</text>
+</svg>

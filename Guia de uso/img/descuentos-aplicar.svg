@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="526" viewBox="0 0 720 526" role="img">
+<rect width="720" height="526" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Aplicar un descuento a una cuota (y quitarlo)</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza (si el dueño del sistema habilitó los ajustes) — el cobrador NO descuenta</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Contrato → tocá la cuota → «Descontar cuota»: 3 pasos guiados</text>
+<rect x="56" y="82" width="652" height="199" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="93" width="520" height="177" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="119" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Descontar cuota</text>
+<text x="144.0" y="140" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Paso 1 · ¿Qué tipo de descuento? — Ajuste (corrección puntual: días sin</text>
+<text x="144.0" y="155" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >servicio, error, acuerdo) | Promo (beneficio comercial). Paso 2 · ¿Cuánto? —</text>
+<text x="144.0" y="170" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Monto C$ | Porcentaje %. Paso 3 · ¿Por qué?</text>
+<rect x="144.0" y="180" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="199.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Motivo * — Ej. Sin servicio 5 días</text>
+<rect x="493.0" y="226" width="129" height="28" rx="14" fill="#1A73E8"/>
+<text x="557.5" y="244.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Aplicar descuento</text>
+<text x="449.5" y="244.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<circle cx="28" cy="307" r="11" fill="#E8F0FE"/>
+<text x="28" y="311" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="311" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Con chips rápidos de motivo y el resultado a la vista</text>
+<rect x="56" y="319" width="652" height="86" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="68" y="331" width="106" height="26" rx="8" fill="#E8F0FE"/>
+<path d="M77.5 344.5 L80.7 347.5 L86.5 340.5" stroke="#1A73E8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="92" y="348" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#1A73E8" font-weight="500" text-anchor="start" >Sin servicio</text>
+<rect x="182" y="331" width="109" height="26" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="236.5" y="348" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#1F1F1F" font-weight="400" text-anchor="middle" >Promesa de pago</text>
+<rect x="299" y="331" width="149" height="26" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="373.5" y="348" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#1F1F1F" font-weight="400" text-anchor="middle" >Acuerdo con el cliente</text>
+<line x1="68" y1="400" x2="696" y2="400" stroke="#EEEEEE" stroke-width="0.8"/>
+<text x="696" y="386.2" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#1F1F1F" font-weight="600" text-anchor="end" >Saldo: C$ 450 → C$ 400</text>
+<text x="70" y="386.2" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >Descuento: −C$ 50</text>
+<circle cx="28" cy="431" r="11" fill="#E8F0FE"/>
+<text x="28" y="435" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="435" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Para QUITAR un cargo/descuento: el ícono de basura junto a él en la cuota. El «Crédito</text>
+<text x="56" y="450" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >aplicado» tiene candado y NO se quita (ver Saldo a favor)</text>
+<rect x="16" y="464" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="483" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Hay topes configurados por empresa (% o monto máximo) y el descuento no puede exceder el</text>
+<text x="28" y="498" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >saldo. Todo queda en el historial de la cuota.</text>
+</svg>

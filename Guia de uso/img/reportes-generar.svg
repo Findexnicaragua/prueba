@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="561" viewBox="0 0 720 561" role="img">
+<rect width="720" height="561" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Generar y descargar un reporte</text>
+<text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: admin / admin de cobranza</text>
+<circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
+<text x="28" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >1</text>
+<text x="56" y="74" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Reportes → dos filtros arriba: el rango («Filtra por fecha de cobro») y los cobradores</text>
+<rect x="56" y="82" width="652" height="106" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<line x1="68" y1="135" x2="696" y2="135" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="627" y="97.0" width="69" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="661.5" y="115.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cambiar</text>
+<text x="70" y="107" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Rango de reportes descargables</text>
+<text x="70" y="123" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Este mes · 01/07/2026 – 31/07/2026</text>
+<line x1="68" y1="183" x2="696" y2="183" stroke="#EEEEEE" stroke-width="0.8"/>
+<rect x="627" y="145.0" width="69" height="28" rx="14" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="661.5" y="163.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cambiar</text>
+<text x="70" y="155" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="500" text-anchor="start" >Cobradores en los reportes</text>
+<text x="70" y="171" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Todos los cobradores · Filtra por quién cobró.</text>
+<circle cx="28" cy="214" r="11" fill="#E8F0FE"/>
+<text x="28" y="218" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >2</text>
+<text x="56" y="218" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >«Generar reporte» → elegí tipo y formato</text>
+<rect x="56" y="226" width="652" height="214" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<rect x="122.0" y="237" width="520" height="192" rx="16" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="144.0" y="263" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >Generar reporte</text>
+<text x="144.0" y="284" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Tipo: Reporte de cobranza · Cobros del período · Cobros por cobrador ·</text>
+<text x="144.0" y="299" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Arqueo / cierre de caja · Fiscal / contable · Eficiencia por cobrador ·</text>
+<text x="144.0" y="314" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Anulaciones · Mora · Estado de clientes · Clientes inactivos · Padrón de</text>
+<text x="144.0" y="329" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >clientes</text>
+<rect x="144.0" y="339" width="476" height="32" rx="8" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
+<text x="154.0" y="358.5" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" font-style="italic">Formato — Excel | PDF</text>
+<rect x="553.0" y="385" width="69" height="28" rx="14" fill="#1A73E8"/>
+<text x="587.5" y="403.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Generar</text>
+<text x="509.5" y="403.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Cancelar</text>
+<circle cx="28" cy="466" r="11" fill="#E8F0FE"/>
+<text x="28" y="470" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="600" text-anchor="middle" >3</text>
+<text x="56" y="470" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="600" text-anchor="start" >El «Reporte de cobranza» (Excel) lista cada pago: ID, cliente, cobrador, mes, FECHA DE</text>
+<text x="56" y="485" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#1F1F1F" font-weight="400" text-anchor="start" >COBRO, recibo y montos C$/US$ con totales</text>
+<rect x="16" y="499" width="688" height="44" rx="8" fill="#E8F0FE"/>
+<text x="28" y="518" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Presets del rango: Hoy · Ayer · Este mes · Mes pasado · Personalizado. Los tipos</text>
+<text x="28" y="533" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >detallados aparecen si tu empresa los tiene activados; el de cobranza está siempre.</text>
+</svg>

@@ -1,0 +1,101 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# Env / secrets — NUNCA committear
+.env
+.env.local
+.env.*.local
+.env.json
+*.pem
+*.key
+
+# Supabase CLI
+supabase/.branches/
+supabase/.temp/
+
+# PowerSync SQLite local cache
+*.db
+!assets/rutas_nicaragua.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Core nativo de PowerSync (powersync-sqlite-core) en la raíz: lo usan los
+# tests de repo (pagos_repo_test.dart) en Windows. Las DLLs SÍ van al repo
+# (decisión 2026-06-09: setup de PC nueva sin pasos manuales — ver
+# Install Steps/0-Setup-PC-desarrollo.md). Variantes Linux/macOS siguen
+# locales (CI baja la suya).
+libpowersync.so
+libpowersync.dylib
+libpowersync_x64.so
+libpowersync_aarch64.so
+
+# Instaladores y artefactos de release (los genera build-release.ps1, no se committean)
+CRM.msix
+CRM.apk
+CRM-v*.msix
+CRM-v*.apk
+# White-label (Opción B): instaladores y canal de update por tenant (transitorios)
+CRM-*.msix
+CRM-*.apk
+# Instaladores branded por ISP (config.releaseName, desde v0.18.3) — patrón general
+# para cualquier tenant (Telecable-Mairena-CRM-v*.msix, Telenet-CRM-v*.apk, etc.).
+*.msix
+*.apk
+version-*.json
+# Ícono cuadrado de preview que genera tool/aplicar_branding.dart --preview
+branding/*/icon_preview.png
+# Archivo historico de instaladores versionados (se apila local, no al repo)
+Releases/
+# Certificados: ignorados en general, EXCEPTO el público de SITECSA (lo
+# instalan las PCs cliente para confiar el MSIX; no es secreto → va al repo).
+*.cer
+!CRM.cer
+# Keystore de firma del APK + sus passwords: SECRETOS — jamás al repo
+# (quien los tenga puede firmar updates). A PC nueva van por canal seguro
+# junto con .env.json (ver Install Steps/0-Setup-PC-desarrollo.md).
+*.jks
+*.keystore
+android/key.properties
+version.json.bak
+
+# Platform-specific
+android/.gradle/
+android/local.properties
+android/captures/
+android/app/release/
+android/app/profile/
+android/app/debug/
+ios/Pods/
+ios/.symlinks/
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/flutter/ephemeral/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Archivos WASM regenerados por 'dart run powersync:setup_web'
+web/sqlite3.wasm
+web/powersync_db.worker.js
+web/powersync_sync.worker.js
+
+# Archivos WASM regenerados por 'dart run powersync:setup_web'
+web/sqlite3.wasm
+web/powersync_db.worker.js
+web/powersync_sync.worker.js
+.claude/
+backups/
+__pycache__/
