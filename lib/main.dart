@@ -138,6 +138,7 @@ Future<void> _bootstrap() async {
     switch (data.event) {
       case AuthChangeEvent.initialSession:
       case AuthChangeEvent.signedIn:
+      case AuthChangeEvent.tokenRefreshed:
         if (session != null) {
           debugPrint('[SYNC-DIAG] ${data.event.name} for user ${session.user.id}');
           container

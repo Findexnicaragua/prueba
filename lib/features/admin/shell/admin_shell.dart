@@ -451,7 +451,7 @@ const _adminMenu = [
   _MenuItem(Icons.settings, 'Configuración', '/admin/settings',
       color: Color(0xFF5F5E5A), adminOnly: true),
   _MenuItem(Icons.shield, 'Tenants', '/super/tenants',
-      color: Color(0xFF534AB7), superAdminOnly: true),
+      color: Color(0xFF534AB7), adminOnly: true, superAdminOnly: false),
 ];
 
 class _MenuItem {

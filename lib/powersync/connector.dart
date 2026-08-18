@@ -33,12 +33,35 @@ class SupabaseConnector extends PowerSyncBackendConnector {
 
   @override
   Future<PowerSyncCredentials?> fetchCredentials() async {
-    final session = _supabase.auth.currentSession;
+    var session = _supabase.auth.currentSession;
     if (session == null) return null;
+
+    if (session.isExpired ||
+        (session.expiresAt != null &&
+            DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(
+                (session.expiresAt! - 120) * 1000)))) {
+      try {
+        final res = await _supabase.auth.refreshSession();
+        if (res.session != null) {
+          session = res.session;
+        }
+      } catch (e) {
+        debugPrint('[PowerSync] Error refrescando sesion: $e');
+      }
+    }
+
+    final validSession = session;
+    if (validSession == null) return null;
+
+    final expiresAt = validSession.expiresAt != null
+        ? DateTime.fromMillisecondsSinceEpoch(validSession.expiresAt! * 1000)
+        : null;
 
     return PowerSyncCredentials(
       endpoint: Env.powersyncUrl,
-      token: session.accessToken,
+      token: validSession.accessToken,
+      expiresAt: expiresAt,
+      userId: validSession.user.id,
     );
   }
 

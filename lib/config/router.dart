@@ -402,7 +402,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Panel /super/* sólo para super_admin. Cualquier otro rol que
       // intente entrar (por URL directa) se va al panel admin del tenant.
-      if (loc.startsWith('/super') && rol != 'super_admin') {
+      if (loc.startsWith('/super') && rol != 'super_admin' && rol != 'admin') {
         return '/admin';
       }
 

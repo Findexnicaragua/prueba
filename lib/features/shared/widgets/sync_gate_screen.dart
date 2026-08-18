@@ -263,6 +263,11 @@ class _SyncGateScreenState extends ConsumerState<SyncGateScreen> {
                             : 'Reintentar'),
                         onPressed: _reconnecting ? null : _reintentar,
                       ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: _volverAlLogin,
+                        child: const Text('Volver al login'),
+                      ),
                     ] else if (_showSlowHint) ...[
                       const SizedBox(height: 12),
                       Text(
