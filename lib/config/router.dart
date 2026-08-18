@@ -14,6 +14,11 @@ import '../features/admin/rutas/rutas_screen.dart';
 import '../features/admin/contratos/contratos_admin_screen.dart';
 import '../features/contratos/contrato_detail_screen.dart';
 import '../features/admin/dashboard/dashboard_admin_screen.dart';
+import '../features/admin/dashboard/dashboard_cartera_screen.dart';
+import '../features/admin/reportes/reporte_desembolsos_screen.dart';
+import '../features/admin/reportes/reporte_indicadores_screen.dart';
+import '../features/admin/reportes/reporte_resumen_mensual_screen.dart';
+import '../features/admin/operaciones/cierre_dia_screen.dart';
 import '../features/admin/geografia/geografia_admin_screen.dart';
 import '../features/admin/incidentes/incidente_detail_screen.dart';
 import '../features/admin/incidentes/incidentes_screen.dart';
@@ -502,6 +507,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(path: '/admin',
               pageBuilder: (_, s) => _fadePage(s, _titled('Panel admin', const MenuGaleriaScreen()))),
+                    GoRoute(path: '/admin/cartera',
+              pageBuilder: (_, s) => _fadePage(s, _titled('Cartera & Liquidez', const DashboardCarteraScreen()))),
+          GoRoute(path: '/admin/desembolsos',
+              pageBuilder: (_, s) => _fadePage(s, _titled('Desembolsos', const ReporteDesembolsosScreen()))),
+          GoRoute(path: '/admin/indicadores',
+              pageBuilder: (_, s) => _fadePage(s, _titled('Indicadores', const ReporteIndicadoresScreen()))),
+          GoRoute(path: '/admin/resumen-mensual',
+              pageBuilder: (_, s) => _fadePage(s, _titled('Resumen Mensual', const ReporteResumenMensualScreen()))),
+          GoRoute(path: '/admin/cierre-dia',
+              pageBuilder: (_, s) => _fadePage(s, _titled('Cierre de Día', const CierreDiaScreen()))),
           GoRoute(path: '/admin/resumen',
               pageBuilder: (_, s) => _fadePage(s, _titled('Resumen', const DashboardPinGate()))),
           GoRoute(path: '/admin/cobranza',

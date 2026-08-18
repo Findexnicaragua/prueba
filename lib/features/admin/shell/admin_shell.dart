@@ -184,6 +184,11 @@ String? _tituloFor(String loc) {
   const exact = <String, String>{
     '/admin': 'Panel admin',
     '/admin/resumen': 'Resumen',
+    '/admin/cartera': 'Cartera & Liquidez',
+    '/admin/desembolsos': 'Desembolsos',
+    '/admin/indicadores': 'Indicadores',
+    '/admin/resumen-mensual': 'Resumen Mensual',
+    '/admin/cierre-dia': 'Cierre de Día',
     '/admin/cobranza': 'Cobranza',
     '/admin/administracion': 'Administración',
     '/admin/cobros': 'Cobros',
