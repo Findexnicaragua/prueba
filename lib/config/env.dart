@@ -1,5 +1,5 @@
 // Lee las variables de entorno pasadas con --dart-define o --dart-define-from-file.
-// Configuración base para Findex con defaults directos para build nativo.
+// ConfiguraciÃ³n base para Findex con defaults directos para build nativo.
 class Env {
   static const supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
@@ -7,7 +7,7 @@ class Env {
   );
   static const supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: 'sb_publishable_l8o4VaOAZoEF0fwkamxwvw_YhqUZw2_',
+    defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvd2poY2VrZnRvZ3B1dWNvb3JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MjYwMTEsImV4cCI6MjEwMjQwMjAxMX0.5sLl9wybIVXRIlMzF2pWXb5aLc0m76PSo4T9TSf8cG0',
   );
   static const powersyncUrl = String.fromEnvironment(
     'POWERSYNC_URL',
