@@ -1,4 +1,4 @@
-﻿// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: use_build_context_synchronously
 //
 // Los avisos de este archivo son FALSA ALARMA, verificados uno por uno: el
 // `context` se pasa a `guardarPdfConAviso`, que chequea `context.mounted` ADENTRO antes
@@ -1223,7 +1223,7 @@ class _GenerarReporteCard extends ConsumerWidget {
       }
 
       final (:headers, :filas) =
-          await _extraerDatos(tipo, rango, cobradores);
+          await _extraerDatos(tipo, rango, cobradores, ref.read(tenantIdProvider));
 
       final doc = DocxBuilder();
       doc.addReportHeader(
