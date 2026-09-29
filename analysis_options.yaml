@@ -15,3 +15,11 @@ analyzer:
   errors:
     # Los `TODO` no rompen el análisis: el backlog vive en BITACORA.md.
     todo: ignore
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
