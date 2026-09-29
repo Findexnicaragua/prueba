@@ -1,0 +1,10 @@
+{
+  "slug": "test",
+  "displayName": "CRM TEST",
+  "releaseName": "CRM-TEST",
+  "applicationId": "com.sitecsa.crm.test",
+  "msixIdentity": "com.sitecsa.crm.test",
+  "logo": "logo.png",
+  "iconStyle": "A-logo-completo",
+  "soloPrueba": true
+}

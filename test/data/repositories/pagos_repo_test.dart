@@ -47,6 +47,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:isp_billing/data/models/pago.dart';
 import 'package:isp_billing/data/repositories/contratos_repo.dart';
 import 'package:isp_billing/data/repositories/cuotas_repo.dart';
@@ -99,6 +100,14 @@ void main() {
   const prefijo = 'A';
   const planId = 'plan-test';
   const clienteId = 'cli-test';
+
+  // El rótulo que 0262 congela en el recibo sale de `DateFormat(..., 'es_NI')`,
+  // que sin los datos del locale LANZA. En la app real se inicializa al
+  // arrancar; acá hay que hacerlo a mano o `periodo_label` saldría siempre null
+  // (el helper atrapa la excepción a propósito, para no romper un cobro).
+  setUpAll(() async {
+    await initializeDateFormatting('es_NI', null);
+  });
 
   setUp(() async {
     // SharedPreferences en memoria y LIMPIO por test: el high-water mark del
@@ -2204,6 +2213,282 @@ void main() {
   });
 
   // ── ContratosRepo.cambiarPlan (feature contract-new-feature, modo Próximo ciclo)
+  // ── Cancelar NO deja deuda (regla del dueño, 2026-08-24) ────────────────
+  //
+  // El reclamo que la originó: un contrato CANCELADO seguía apareciendo con
+  // deuda pendiente. Antes cancelar dejaba intactos los meses cumplidos y
+  // prorrateaba el mes en curso — o sea que hacía casi lo mismo que suspender.
+  // Ahora se separan: SUSPENDER conserva la deuda (y es reversible), CANCELAR
+  // la condona.
+  group('ContratosRepo.cancelarContrato — no deja deuda', () {
+    test('deja TODO en cero: mora previa, mes en curso y futuras', () async {
+      final repo = ContratosRepo(db: db);
+      final contratoId = await seedContrato(diaPago: 20, duracionMeses: 12);
+      // Mismo escenario que el test de suspensión, para poder contrastarlos.
+      final abr = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-04-01',
+          fechaVencimiento: '2026-04-20');          // mora previa
+      final may = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-05-01',
+          fechaVencimiento: '2026-05-20', estado: 'pagada', montoPagado: 900);
+      final jun = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-06-01',
+          fechaVencimiento: '2026-06-20');          // mes en curso
+      final jul = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-07-01',
+          fechaVencimiento: '2026-07-20');          // futura
+
+      await repo.cancelarContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        motivo: 'Solicitud del cliente',
+      );
+
+      expect((await db.getAll('SELECT estado FROM contratos WHERE id = ?',
+              [contratoId])).first['estado'],
+          'cancelado');
+
+      // Las tres SIN pagar quedan anuladas — incluida la mora previa, que es
+      // lo que cambió: antes seguía cobrándose.
+      for (final id in [abr, jun, jul]) {
+        final q = await getCuota(id);
+        expect(q['estado'], 'anulada',
+            reason: 'cancelar no puede dejar ninguna cuota con saldo');
+        expect(q['motivo_anulacion'], 'Cancelación de contrato');
+      }
+      // La pagada NO se toca: su plata ya entró.
+      final m = await getCuota(may);
+      expect(m['estado'], 'pagada');
+      expect(num2(m['monto']), 900);
+
+      // Y el saldo del contrato queda en CERO, que es el reclamo original.
+      final saldo = await db.getAll(
+        'SELECT COALESCE(SUM(monto + COALESCE(cargos_neto,0) - '
+        'COALESCE(monto_pagado,0)), 0) AS s FROM cuotas '
+        "WHERE contrato_id = ? AND estado != 'anulada'",
+        [contratoId],
+      );
+      expect(num2(saldo.first['s']), 0);
+    });
+
+    test('la cuota con abono NO se anula: baja a lo pagado y queda saldada',
+        () async {
+      // Es la regla inviolable: anular una cuota con plata dispara
+      // `cuotas_anular_pagos_asociados_trg`, que anula EN CASCADA sus pagos y
+      // recibos — borraría plata cobrada y un comprobante que el cliente tiene.
+      final repo = ContratosRepo(db: db);
+      final contratoId = await seedContrato(diaPago: 20, duracionMeses: 12);
+      final parcial = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-04-01',
+          fechaVencimiento: '2026-04-20', estado: 'parcial', montoPagado: 350);
+
+      await repo.cancelarContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        motivo: 'Solicitud del cliente',
+      );
+
+      final q = await getCuota(parcial);
+      expect(q['estado'], 'pagada', reason: 'saldada, NO anulada');
+      expect(num2(q['monto']), 350, reason: 'el monto baja a lo ya cobrado');
+      expect(num2(q['monto_pagado']), 350, reason: 'la plata no se toca');
+      expect(num2(q['monto']) + num2(q['cargos_neto']) - num2(q['monto_pagado']),
+          0, reason: 'saldo en cero');
+    });
+
+    test('un cargo extra no puede resucitar la deuda', () async {
+      // `cargos_neto` entra en el saldo canónico (#10): si quedara un cargo
+      // vivo, la cuota volvería a las listas de cobro con saldo > 0 aunque el
+      // monto estuviera en cero.
+      final repo = ContratosRepo(db: db);
+      final contratoId = await seedContrato(diaPago: 20, duracionMeses: 12);
+      final conCargo = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-04-01',
+          fechaVencimiento: '2026-04-20', estado: 'parcial', montoPagado: 200,
+          cargosNeto: 150);
+
+      await repo.cancelarContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        motivo: 'Solicitud del cliente',
+      );
+
+      final q = await getCuota(conCargo);
+      expect(num2(q['cargos_neto']), 0, reason: 'el cargo se lleva a cero');
+      expect(num2(q['monto']) + num2(q['cargos_neto']) - num2(q['monto_pagado']),
+          0);
+    });
+
+    test('un contrato ya SUSPENDIDO también queda en cero al cancelarlo',
+        () async {
+      // Lo que sobrevivió a la suspensión ES la deuda. Antes se salteaba para
+      // no re-prorratear con una fecha posterior (le subía el monto al
+      // cliente); sin prorrateo ese riesgo no existe y la deuda se condona.
+      final repo = ContratosRepo(db: db);
+      final contratoId = await seedContrato(diaPago: 20, duracionMeses: 12);
+      final abr = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-04-01',
+          fechaVencimiento: '2026-04-20');
+
+      await repo.suspenderContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        fechaSuspension: DateTime(2026, 6, 10), precioMensual: 900,
+        motivo: 'Falta de pago', notas: null,
+      );
+      // Tras suspender la mora previa sigue viva: ESA es la diferencia.
+      expect((await getCuota(abr))['estado'], 'pendiente');
+
+      await repo.cancelarContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        motivo: 'No volvió a pagar',
+      );
+      expect((await getCuota(abr))['estado'], 'anulada');
+    });
+
+    test('el snapshot guarda lo condonado, para poder revertir', () async {
+      final repo = ContratosRepo(db: db);
+      final contratoId = await seedContrato(diaPago: 20, duracionMeses: 12);
+      await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-04-01',
+          fechaVencimiento: '2026-04-20');
+
+      await repo.cancelarContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        motivo: 'Solicitud del cliente',
+      );
+
+      final row = (await db.getAll(
+          'SELECT cancelacion_deuda_snapshot AS s FROM contratos WHERE id = ?',
+          [contratoId])).first;
+      final snap = jsonDecode(row['s'] as String) as Map<String, dynamic>;
+      // `cuotas_previas` es lo que permite devolver cada cuota a su estado
+      // exacto si la cancelación fue un error.
+      expect(snap['cuotas_previas'], isNotEmpty);
+      expect((snap['cuotas_previas'] as List).first['estado'], 'pendiente');
+      // El `total` del snapshot es el número que se imprime en el documento del
+      // cliente y en la tarjeta del contrato. El test se llamaba "guarda lo
+      // condonado" y NUNCA lo miraba: hasta el 2026-08-26 guardaba el cálculo de
+      // SUSPENSIÓN, que descarta futuras y prorratea la en curso, así que el
+      // papel declaraba un monto menor al que se puso en cero.
+      expect(snap['total'], 900);
+      expect(snap['cuotas'], hasLength(1));
+    });
+
+    test('el snapshot cuenta TODAS las cuotas vivas: vencidas, en curso y '
+        'futuras, sin prorratear (la mutación no clasifica por ventana)',
+        () async {
+      final repo = ContratosRepo(db: db);
+      final contratoId = await seedContrato(diaPago: 20, duracionMeses: 12);
+      // Una vencida, una cuyo ciclo está EN CURSO y una que todavía no vence.
+      // El cálculo de suspensión mostraría solo la vencida + un prorrateo de la
+      // en curso; cancelar pone en cero las tres, enteras.
+      await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-04-01',
+          fechaVencimiento: '2026-04-20');
+      await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-05-01',
+          fechaVencimiento: '2026-05-20');
+      await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-06-01',
+          fechaVencimiento: '2026-06-20');
+
+      final preview =
+          await repo.previewDeudaCancelacion(contratoId: contratoId);
+      expect(preview.total, 2700);
+      expect(preview.cuotas, hasLength(3));
+      // Ninguna fila se marca "en curso": sin prorrateo, la línea
+      // "prorrateado N/M días" no debe poder aparecer nunca al cancelar.
+      expect(preview.cuotas.every((c) => c['en_curso'] == false), isTrue);
+
+      await repo.cancelarContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        motivo: 'Solicitud del cliente',
+      );
+
+      // Lo que el preview prometió es EXACTAMENTE lo que se puso en cero.
+      final vivas = await db.getAll(
+          'SELECT COALESCE(SUM(monto + COALESCE(cargos_neto,0) - '
+          'COALESCE(monto_pagado,0)), 0) AS saldo FROM cuotas '
+          "WHERE contrato_id = ? AND estado IN ('pendiente','parcial')",
+          [contratoId]);
+      expect((vivas.first['saldo'] as num).toDouble(), 0);
+
+      final row2 = (await db.getAll(
+          'SELECT cancelacion_deuda_snapshot AS s FROM contratos WHERE id = ?',
+          [contratoId])).first;
+      final snap2 = jsonDecode(row2['s'] as String) as Map<String, dynamic>;
+      expect(snap2['total'], 2700);
+    });
+
+    // Regla 2026-08-29 (migración 0265): desactivar a un cliente EXIGE que no
+    // le quede ningún contrato vivo —activo ni suspendido—. El preview dejó de
+    // ser "cuánto se va a condonar" (eso era la cascada de 0260, retirada) y
+    // pasó a ser la LISTA DE PENDIENTES que la pantalla muestra para que el
+    // usuario sepa qué le falta cerrar en vez de chocarse con un rechazo.
+    //
+    // Los ya cancelados siguen afuera: no bloquean la baja ni tienen deuda.
+    test('previewBajaCliente suma los contratos vivos —activo y suspendido— y '
+        'deja afuera los ya cancelados', () async {
+      final repo = ContratosRepo(db: db);
+      final activo = await seedContrato(diaPago: 20, duracionMeses: 12);
+      final suspendido = await seedContrato(diaPago: 20, duracionMeses: 12);
+      final yaCancelado = await seedContrato(diaPago: 20, duracionMeses: 12);
+      await db.execute(
+          "UPDATE contratos SET estado = 'suspendido' WHERE id = ?", [suspendido]);
+      await db.execute(
+          "UPDATE contratos SET estado = 'cancelado' WHERE id = ?", [yaCancelado]);
+
+      await seedCuota(
+          contratoId: activo, monto: 900, periodo: '2026-04-01',
+          fechaVencimiento: '2026-04-20');
+      await seedCuota(
+          contratoId: suspendido, monto: 600, periodo: '2026-05-01',
+          fechaVencimiento: '2026-05-20');
+      // Esta NO entra: el gate por fecha de 0259 no toca contratos que ya
+      // estaban cancelados, así que prometerla condonada sería mentir.
+      await seedCuota(
+          contratoId: yaCancelado, monto: 750, periodo: '2026-06-01',
+          fechaVencimiento: '2026-06-20');
+
+      final prev = await repo.previewBajaCliente(clienteId: clienteId);
+      expect(prev.total, 1500); // 900 + 600, sin los 750 del ya cancelado
+      expect(prev.contratos, 2);
+      expect(prev.cuotas, hasLength(2));
+
+      // El desglose POR CONTRATO es lo que la pantalla de bloqueo necesita:
+      // sin él podría decir "tenés 2 contratos" sin poder decir cuáles ni
+      // cuánto debe cada uno, y el usuario tendría que salir a buscarlos.
+      expect(prev.vivos, hasLength(2));
+      expect(prev.vivos.map((c) => c['id']),
+          containsAll(<String>[activo, suspendido]));
+      expect(prev.vivos.map((c) => c['id']), isNot(contains(yaCancelado)));
+
+      // Los ACTIVOS primero: son los que hay que resolver sí o sí. El
+      // suspendido admite además la salida de cobrarle la deuda, así que se
+      // muestra después.
+      expect(prev.vivos.first['estado'], 'activo');
+      expect(prev.vivos.first['deuda'], 900);
+      expect(prev.vivos.last['estado'], 'suspendido');
+      expect(prev.vivos.last['deuda'], 600);
+    });
+
+    // Un cliente sin nada vivo es el ÚNICO caso que el server deja desactivar
+    // (`zz_clientes_guard_desactivar`). Que la lista venga vacía es lo que hace
+    // que la pantalla muestre la confirmación normal en vez del bloqueo.
+    test('previewBajaCliente sin contratos vivos devuelve la lista vacía',
+        () async {
+      final repo = ContratosRepo(db: db);
+      final cancelado = await seedContrato(diaPago: 20, duracionMeses: 12);
+      await db.execute(
+          "UPDATE contratos SET estado = 'cancelado' WHERE id = ?", [cancelado]);
+      await seedCuota(
+          contratoId: cancelado, monto: 750, periodo: '2026-06-01',
+          fechaVencimiento: '2026-06-20');
+
+      final prev = await repo.previewBajaCliente(clienteId: clienteId);
+      expect(prev.contratos, 0);
+      expect(prev.vivos, isEmpty);
+      expect(prev.total, 0);
+    });
+  });
+
   group('ContratosRepo.cambiarPlan', () {
     Future<String> seedPlan(double precio) async {
       final id = uuid.v4();
@@ -2673,7 +2958,6 @@ void main() {
           fechaVencimiento: '2026-07-20');
       await repo.cancelarContrato(
         tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
-        fechaCancelacion: DateTime(2026, 6, 10), precioMensual: 900,
         motivo: 'Error',
       );
       expect((await getCuota(jul))['estado'], 'anulada');
@@ -2776,7 +3060,6 @@ void main() {
           fechaVencimiento: '2026-07-20');
       await repo.cancelarContrato(
         tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
-        fechaCancelacion: DateTime(2026, 6, 10), precioMensual: 900,
         motivo: 'Error',
       );
       // Simular el round-trip de la columna jsonb: el snapshot vuelve como
@@ -3246,6 +3529,201 @@ void main() {
 
       final recibo = await getReciboDePago(res.pagoId);
       expect(recibo['anulado'], 0);
+    });
+  });
+
+  // ── Cancelar un contrato YA SUSPENDIDO ──────────────────────────────────
+  group('ContratosRepo.cancelarContrato sobre un suspendido', () {
+    // Este test cambió con la regla del 2026-08-24. ANTES afirmaba que
+    // cancelar un suspendido NO tocaba las cuotas, porque re-prorratear con
+    // una fecha posterior le SUBÍA el monto al cliente por tiempo en que el
+    // servicio ya estaba cortado. Ahora cancelar no prorratea nada: pone todo
+    // en cero. El peligro original desapareció, pero la garantía que lo
+    // motivaba —el monto NUNCA sube— se sigue verificando abajo, porque es la
+    // que protege al cliente.
+    test('pone la deuda en cero, y el monto de una cuota nunca SUBE', () async {
+      final repo = ContratosRepo(db: db);
+      final contratoId = await seedContrato(diaPago: 20, duracionMeses: 12);
+      final abr = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-04-01',
+          fechaVencimiento: '2026-04-20');
+      final jun = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-06-01',
+          fechaVencimiento: '2026-06-20');
+      final jul = await seedCuota(
+          contratoId: contratoId, monto: 900, periodo: '2026-07-01',
+          fechaVencimiento: '2026-07-20');
+
+      await repo.suspenderContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        fechaSuspension: DateTime(2026, 6, 10), precioMensual: 900,
+        motivo: 'Mora', notas: '',
+      );
+
+      // Foto tras suspender: junio prorrateado a los 21 días servidos, abril
+      // (mora previa) VIVA — suspender conserva la deuda, esa es su razón de
+      // ser frente a cancelar.
+      final junTrasSusp = await getCuota(jun);
+      expect(junTrasSusp['estado'], 'pendiente');
+      expect((await getCuota(abr))['estado'], 'pendiente');
+      expect((await getCuota(jul))['estado'], 'anulada');
+
+      // Se cancela 5 días después, con el ciclo de junio TODAVÍA EN CURSO (su
+      // ventana es 20-may→20-jun). Es la fecha que hacía visible el bug viejo.
+      await repo.cancelarContrato(
+        tenantId: tenantId, contratoId: contratoId, cobradorId: cobradorId,
+        motivo: 'Baja definitiva',
+      );
+
+      expect((await db.getAll('SELECT estado FROM contratos WHERE id = ?',
+              [contratoId])).first['estado'],
+          'cancelado');
+
+      // La deuda que sobrevivió a la suspensión ahora se condona.
+      expect((await getCuota(abr))['estado'], 'anulada',
+          reason: 'cancelar no deja mora previa');
+      expect((await getCuota(jun))['estado'], 'anulada');
+      expect((await getCuota(jul))['estado'], 'anulada');
+
+      // LA GARANTÍA QUE SE CONSERVA: el monto de junio no subió. Si algún día
+      // se reintrodujera un prorrateo acá, 26 días darían más que 21 y este
+      // expect lo cazaría.
+      expect(num2((await getCuota(jun))['monto']),
+          lessThanOrEqualTo(num2(junTrasSusp['monto'])),
+          reason: 'cancelar nunca puede subirle el monto a una cuota');
+
+      // Y el contrato queda en cero.
+      final saldo = await db.getAll(
+        'SELECT COALESCE(SUM(monto + COALESCE(cargos_neto,0) - '
+        'COALESCE(monto_pagado,0)), 0) AS s FROM cuotas '
+        "WHERE contrato_id = ? AND estado != 'anulada'",
+        [contratoId],
+      );
+      expect(num2(saldo.first['s']), 0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // 0262 — el recibo CONGELA el mes que imprime.
+  //
+  // Nació de un caso real: el recibo HL-00230 de Telecable Mairena está en
+  // manos del cliente diciendo "Julio 2026" y la app muestra "Junio 2026" para
+  // ese MISMO recibo. Causa: el mes no se guardaba, se recalculaba en cada
+  // impresión, y la regla del rótulo cambió 3+ veces en 2026.
+  // ─────────────────────────────────────────────────────────────────────────
+  group('recibo congela el período (0262)', () {
+    test('registrarCobro guarda el mes de SERVICIO, no el del período',
+        () async {
+      // día de pago 7 + cuota de julio → el servicio es JUNIO (regla ≤14).
+      // Es exactamente la forma del caso HL-00230.
+      final contratoId = await seedContrato(diaPago: 7);
+      final cuotaId = await seedCuota(
+        contratoId: contratoId,
+        monto: 513,
+        periodo: '2026-07-01',
+        fechaVencimiento: '2026-07-07',
+      );
+
+      final res = await repo.registrarCobro(
+        tenantId: tenantId,
+        cobradorId: cobradorId,
+        prefijoRecibo: prefijo,
+        cuotaId: cuotaId,
+        montoCordobas: 513,
+        vueltoCordobas: 0,
+        moneda: Moneda.nio,
+        montoOriginal: 513,
+        tasaConversion: 1,
+        metodo: MetodoPago.efectivo,
+      );
+
+      final recibo = await getReciboDePago(res.pagoId);
+      expect(recibo['periodo_label'], 'Junio 2026',
+          reason: 'el recibo tiene que guardar lo que IMPRIME, y para día 7 '
+              'una cuota de julio cubre el servicio de junio');
+    });
+
+    test('día 15+ NO corre el mes: se congela el del período', () async {
+      final contratoId = await seedContrato(diaPago: 20);
+      final cuotaId = await seedCuota(
+        contratoId: contratoId,
+        monto: 500,
+        periodo: '2026-07-01',
+        fechaVencimiento: '2026-07-20',
+      );
+
+      final res = await repo.registrarCobro(
+        tenantId: tenantId,
+        cobradorId: cobradorId,
+        prefijoRecibo: prefijo,
+        cuotaId: cuotaId,
+        montoCordobas: 500,
+        vueltoCordobas: 0,
+        moneda: Moneda.nio,
+        montoOriginal: 500,
+        tasaConversion: 1,
+        metodo: MetodoPago.efectivo,
+      );
+
+      expect((await getReciboDePago(res.pagoId))['periodo_label'], 'Julio 2026');
+    });
+
+    test('cruza el año: período enero + día ≤14 → diciembre del año previo',
+        () async {
+      final contratoId = await seedContrato(diaPago: 3);
+      final cuotaId = await seedCuota(
+        contratoId: contratoId,
+        monto: 500,
+        periodo: '2026-01-01',
+        fechaVencimiento: '2026-01-03',
+      );
+
+      final res = await repo.registrarCobro(
+        tenantId: tenantId,
+        cobradorId: cobradorId,
+        prefijoRecibo: prefijo,
+        cuotaId: cuotaId,
+        montoCordobas: 500,
+        vueltoCordobas: 0,
+        moneda: Moneda.nio,
+        montoOriginal: 500,
+        tasaConversion: 1,
+        metodo: MetodoPago.efectivo,
+      );
+
+      expect((await getReciboDePago(res.pagoId))['periodo_label'],
+          'Diciembre 2025');
+    });
+
+    test('un período impagable NO rompe el cobro: label null y la plata entra',
+        () async {
+      // El helper corre DENTRO del writeTransaction del cobro. Si tirara
+      // excepción, el cobrador no podría cobrar. `seedCuota` siembra el
+      // período como 'YYYY-MM', que `DateTime.parse` NO acepta: es el caso
+      // exacto que tiene que degradar a null en vez de reventar.
+      final contratoId = await seedContrato(diaPago: 7);
+      final cuotaId = await seedCuota(
+        contratoId: contratoId, monto: 500, periodo: '2026-06');
+
+      final res = await repo.registrarCobro(
+        tenantId: tenantId,
+        cobradorId: cobradorId,
+        prefijoRecibo: prefijo,
+        cuotaId: cuotaId,
+        montoCordobas: 500,
+        vueltoCordobas: 0,
+        moneda: Moneda.nio,
+        montoOriginal: 500,
+        tasaConversion: 1,
+        metodo: MetodoPago.efectivo,
+      );
+
+      final recibo = await getReciboDePago(res.pagoId);
+      expect(recibo['periodo_label'], isNull,
+          reason: 'ante un período no parseable se degrada a null');
+      expect(num2((await getPago(res.pagoId))['monto_cordobas']), 500,
+          reason: 'LA PLATA ENTRA IGUAL — el rótulo es cosmético');
+      expect((await getCuota(cuotaId))['estado'], 'pagada');
     });
   });
 }

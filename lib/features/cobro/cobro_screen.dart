@@ -19,7 +19,9 @@ import '../../data/utils/formatters.dart';
 import '../../data/utils/montos.dart';
 import '../../powersync/db.dart' as ps;
 import '../contratos/suspension_dialogs.dart' show ReactivarContratoDialog;
-import '../recibo/recibo_cargos.dart' show cargoEtiquetaRecibo;
+import '../recibo/recibo_cargos.dart'
+    show cargoEtiquetaRecibo, cargoLineaDetalle, planDeLaMensualidad;
+import '../shared/widgets/hoja_cargos_cuota.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/selector_fecha_rapido.dart';
 import '../shared/widgets/impersonation_banner.dart';
@@ -252,79 +254,28 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
     super.dispose();
   }
 
-  /// Sheet de REFERENCIA (solo lectura, rediseño 2026-06-12): muestra los
-  /// descuentos/cargos que la cuota ya tiene aplicados (con su motivo) y
-  /// los automáticos que se van a aplicar al confirmar este cobro. Acá no
-  /// se crea nada — descuentos y cargos los gestiona el admin desde el
-  /// detalle del contrato.
+  /// La hoja de descuentos y cargos. Es la MISMA que la del detalle del
+  /// contrato ([HojaCargosCuota]) — acá sin los botones de gestionar, porque
+  /// en el cobro no se crea ni se quita nada.
+  ///
+  /// Antes eran dos hojas distintas con el mismo título y textos que ya
+  /// habían divergido (2026-09-02). Un solo widget es lo único que impide que
+  /// vuelvan a decir cosas distintas de la misma fila.
   void _verCargosCuota() {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (sheetCtx) {
-        final scheme = Theme.of(sheetCtx).colorScheme;
-        Widget linea(String etiqueta, double monto, bool esDescuento,
-            {String? nota}) {
-          return ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              esDescuento ? Icons.discount : Icons.add_circle_outline,
-              size: 20,
-              color: scheme.primary,
-            ),
-            title: Text(
-              '$etiqueta  ${esDescuento ? '−' : '+'}${Fmt.cordobas(monto)}',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: nota == null ? null : Text(nota),
-          );
-        }
-
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Descuentos y cargos de la cuota',
-                    style: Theme.of(sheetCtx).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                Text(
-                  'Referencia de lo aplicado al cliente. Los descuentos y '
-                  'cargos los gestiona el admin desde el contrato.',
-                  style: Theme.of(sheetCtx)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: scheme.outline),
-                ),
-                const SizedBox(height: 8),
-                if (_cargosExistentes.isEmpty && _cargosAuto.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Text('Sin descuentos ni cargos.',
-                        style: TextStyle(color: scheme.outline)),
-                  ),
-                for (final c in _cargosExistentes)
-                  linea(
-                    cargoEtiquetaRecibo(c, conMotivo: true),
-                    (c['monto'] as num? ?? 0).toDouble(),
-                    (c['tipo'] as String? ?? '').startsWith('descuento'),
-                  ),
-                for (final c in _cargosAuto)
-                  linea(
-                    c.descripcion,
-                    c.monto,
-                    c.tipo.startsWith('descuento'),
-                    nota: 'Se aplica al confirmar este cobro',
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (_) => HojaCargosCuota(
+        cargos: _cargosExistentes,
+        cargosAuto: [
+          for (final c in _cargosAuto)
+            CargoPendiente(
+                descripcion: c.descripcion,
+                monto: c.monto,
+                esDescuento: c.tipo.startsWith('descuento')),
+        ],
+      ),
     );
   }
 
@@ -776,7 +727,9 @@ class _CobroScreenState extends ConsumerState<CobroScreen> {
                 cliente: _clienteRow,
                 cuota: cuota,
                 totalACobrar: _totalesACobrar.first,
-                diaPago: _diasPago.first),
+                diaPago: _diasPago.first,
+                cargos: _cargosExistentes,
+                cargosAuto: _cargosAuto),
           // Cargos automáticos que ESTE cobro va a insertar al confirmar
           // (reconexión / pronto pago).
           if (_cargosAuto.isNotEmpty) ...[
@@ -1034,13 +987,107 @@ class _ClienteCuotaCard extends StatelessWidget {
     required this.cuota,
     required this.totalACobrar,
     required this.diaPago,
+    this.cargos = const [],
+    this.cargosAuto = const [],
   });
 
   final Map<String, dynamic>? cliente;
   final Cuota cuota;
   final double totalACobrar;
+
+  /// Los cargos YA persistidos de la cuota, para el desglose del encabezado.
+  final List<Map<String, dynamic>> cargos;
+
+  /// Los que este cobro va a insertar al confirmar (reconexión / pronto pago).
+  /// Cambian lo que hay que cobrar, así que entran en el desglose con su
+  /// aclaración.
+  final List<_CargoAutoPreview> cargosAuto;
   // Día de pago del contrato — para el mes de servicio. null = manual.
   final int? diaPago;
+
+  /// El DESGLOSE de la cuota: de qué se compone el total que se va a cobrar.
+  ///
+  /// Rubén, probando un cambio de plan (2026-09-02): *"sale que la cuota es
+  /// 500 y con descuentos/cargos 846,67, siento que está muy mal explicada"*.
+  /// Y de hecho leyó el 846,67 como el prorrateo, cuando el prorrateo son
+  /// 346,67 y el 846,67 es el total.
+  ///
+  /// Espeja el bloque "QUÉ CAMBIA" del diálogo de cambio de plan —que él
+  /// aprobó— para que el cobrador vea lo mismo que vio el admin al aplicarlo:
+  /// la base con SU plan, el ajuste con sus días, y el total.
+  Widget _desgloseCuota(ColorScheme scheme) {
+    final cargos = this.cargos
+        .where((c) => c['cuota_id'] == null || c['cuota_id'] == cuota.id)
+        .toList();
+    // La base se facturó con el plan VIEJO — el cargo sólo agrega la
+    // diferencia. Nombrarlo evita leer los 500 como del plan nuevo.
+    final planBase = planDeLaMensualidad(cargos);
+    final autos =
+        cargosAuto.where((c) => c.cuotaId == cuota.id).toList();
+
+    Widget linea(String rotulo, String? apoyo, double monto,
+        {bool resta = false, bool total = false}) {
+      final estilo = TextStyle(
+        fontSize: 13,
+        fontWeight: total ? FontWeight.w600 : FontWeight.w400,
+        color: total ? scheme.onSurface : scheme.onSurfaceVariant,
+      );
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                // Un solo Expanded y a la izquierda (regla #15): las cifras
+                // forman columna sin importar cuánto mida el rótulo.
+                Expanded(child: Text(rotulo, style: estilo)),
+                const SizedBox(width: 12),
+                Text('${resta ? '− ' : total ? '' : '+ '}'
+                    '${Fmt.cordobas(monto)}',
+                    style: estilo),
+              ],
+            ),
+            if (apoyo != null)
+              Text(apoyo,
+                  style: TextStyle(fontSize: 11.5, color: scheme.outline)),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 36, top: 8),
+      child: Container(
+        padding: const EdgeInsets.only(left: 10),
+        decoration: BoxDecoration(
+          border: Border(
+              left: BorderSide(color: scheme.outlineVariant, width: 2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            linea(planBase == null ? 'Mensualidad' : 'Mensualidad $planBase',
+                null, cuota.monto),
+            for (final c in cargos)
+              linea(
+                  cargoEtiquetaRecibo(c, conMotivo: true),
+                  cargoLineaDetalle(c),
+                  ((c['monto'] as num?) ?? 0).toDouble(),
+                  resta: (c['tipo'] as String? ?? '').startsWith('descuento')),
+            // Los AUTOMÁTICOS todavía no existen en la base: se crean al
+            // confirmar. Se muestran igual —cambian lo que hay que cobrar— y
+            // se aclara que entran con el cobro.
+            for (final a in autos)
+              linea(a.descripcion, 'se aplica al confirmar el cobro', a.monto,
+                  resta: a.tipo.startsWith('descuento')),
+            const Divider(height: 12),
+            linea('Total a cobrar', null, totalACobrar, total: true),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1076,7 +1123,18 @@ class _ClienteCuotaCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(Fmt.cordobas(cuota.monto),
+                // 🔴 EL TOTAL, no la base (2026-09-02). Antes acá iba
+                // `cuota.monto` —los 500 de la mensualidad— y el total real
+                // quedaba abajo, en gris, bajo el rotulo generico "Con
+                // descuentos/cargos". Rubén lo reportó probando un cambio de
+                // plan y leyó el 846,67 como "la cantidad del prorrateo"
+                // cuando es el TOTAL: el prorrateo son 346,67.
+                //
+                // Con un DESCUENTO el error se da vuelta y es peor: el numero
+                // grande seria MAYOR que lo que hay que cobrar, y el cobrador
+                // pediria de mas. El numero grande tiene que ser el que se
+                // cobra; la composicion va abajo.
+                Text(Fmt.cordobas(totalACobrar),
                     style: const TextStyle(
                         fontSize: 22, fontWeight: FontWeight.w700)),
               ],
@@ -1098,21 +1156,10 @@ class _ClienteCuotaCard extends StatelessWidget {
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 15),
                 ),
               ),
-            if (totalACobrar != cuota.monto) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const SizedBox(width: 36),
-                  Expanded(
-                    child: Text(
-                      'Con descuentos/cargos: ${Fmt.cordobas(totalACobrar)}',
-                      style:
-                          TextStyle(color: scheme.onSurfaceVariant, fontSize: 15),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            // EL DESGLOSE. Sólo cuando el total difiere de la base: en una
+            // cuota sin ajustes seria repetir el mismo numero dos veces.
+            if (totalACobrar != cuota.monto)
+              _desgloseCuota(scheme),
             if (cuota.montoPagado > 0) ...[
               const SizedBox(height: 4),
               Row(

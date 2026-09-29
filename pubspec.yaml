@@ -1,7 +1,7 @@
 name: isp_billing
 description: App de gestión de clientes y cobros para ISP (Nicaragua) — offline-first con PowerSync.
 publish_to: 'none'
-version: 0.32.0+252
+version: 0.45.0+332
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -122,6 +122,10 @@ dependencies:
   # abre al hacer zoom; renderiza solo lo visible). Compatible con flutter_map 7.
   # Ver lib/features/mapa/mapa_screen.dart (MarkerClusterLayerWidget).
   flutter_map_marker_cluster: ^1.4.0
+
+  # Sincronización continua en segundo plano y mantener pantalla encendida (SyncGate)
+  wakelock_plus: ^1.3.3
+  flutter_foreground_task: ^10.0.0
 
 dev_dependencies:
   flutter_test:

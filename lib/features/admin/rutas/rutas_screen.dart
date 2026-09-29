@@ -77,8 +77,12 @@ class _RutasScreenState extends ConsumerState<RutasScreen> {
     _comunidades = ps.db.watch(_comunidadesSql);
     // Todos los cobradores (incluso inactivos) para resolver el nombre del
     // cobrador actual aunque alguno se haya desactivado sin reasignar.
-    _cobradores =
-        ps.db.watch('SELECT id, nombre, activo FROM cobradores ORDER BY nombre');
+    // Filtrado por empresa: el device del super_admin tiene además su propia
+    // fila (tenant System) y el residuo de la empresa impersonada anterior.
+    _cobradores = ps.db.watch(
+        'SELECT id, nombre, activo FROM cobradores WHERE tenant_id = ? '
+        'ORDER BY nombre',
+        parameters: [ref.read(tenantIdProvider)]);
   }
 
   void _limpiar() {
@@ -404,6 +408,10 @@ class _RutasScreenState extends ConsumerState<RutasScreen> {
   @override
   Widget build(BuildContext context) {
     ref.listen(dbEpochProvider, (_, __) => setState(_rebuild));
+    // El tenant llega por stream: en el primer frame puede ser null (la lista
+    // saldría vacía) y cambia al entrar/salir de una empresa impersonada. Sin
+    // este listen el stream quedaba congelado con el valor viejo.
+    ref.listen(tenantIdProvider, (_, __) => setState(_rebuild));
     final scheme = Theme.of(context).colorScheme;
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _cobradores,

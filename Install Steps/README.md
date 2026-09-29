@@ -19,6 +19,9 @@ instala en los dispositivos. Si dudás del orden, mirá acá — no la memoria.
    + publica el GitHub Release).
 2. **`2-Instalar-en-PC.md`** — instalar/actualizar la APP en una PC Windows.
 3. **`3-Instalar-en-Android.md`** — instalar/actualizar en un teléfono.
+4. **`4-Build-de-prueba-Android.md`** — la app **CRM TEST**: cómo publicarla al
+   canal PRIVADO sin mover el `latest` de producción, y qué aísla y qué no
+   (spoiler: la base de datos NO).
 
 ## Cómo queda organizado todo (orden absoluto)
 

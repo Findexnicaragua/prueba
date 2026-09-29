@@ -271,6 +271,14 @@ const kReciboBloquesCatalogo = <ReciboBloqueInfo>[
       espacioAntes: ReciboEspacio.amplio),
   ReciboBloqueInfo('servicio', 'Servicio y período', ReciboZona.body,
       espacioAntes: ReciboEspacio.chico),
+  // Cambio de plan (0268). VISIBLE POR DEFECTO, a diferencia de 'cuota':
+  // el desglose de la cuota es rutina y se puede apagar, pero acá se le está
+  // cobrando al cliente una diferencia que NO puede deducir del total. Un
+  // cargo que el cliente no puede entender es un reclamo. Solo se dibuja
+  // cuando esa cuota REALMENTE viene de un cambio de plan (el cargo trae
+  // `detalle`), así que en un recibo normal no ocupa ni una línea.
+  ReciboBloqueInfo('cambio_plan', 'Cambio de plan (transición)', ReciboZona.body,
+      espacioAntes: ReciboEspacio.normal),
   // ── C: pago (Monto → letras → método). 'cuota' oculto por defecto ──
   ReciboBloqueInfo('cuota', 'Montos de la cuota (desglose)', ReciboZona.body,
       espacioAntes: ReciboEspacio.chico, visibleDefault: false),
@@ -374,6 +382,14 @@ class ReciboLayout {
       // (igual que porDefecto y el fallback de fromJson) — un bloque nuevo
       // aparece con su default pensado, no con 'visible+normal' ciego.
       if (!vistos.contains(info.id)) {
+        // Van DESPUÉS de los pedidos de su zona, a propósito: el orden que el
+        // tenant guardó manda, y lo que nunca eligió se completa al final.
+        // Es una decisión tomada y con test que la fija
+        // (`recibo_layout_test.dart` — "los faltantes van después de los
+        // pedidos de su zona"). Consecuencia a tener en cuenta al agregar un
+        // bloque al catálogo: en los tenants que ya tienen layout guardado va
+        // a aparecer al FINAL de su zona, no en la posición del catálogo. Si
+        // esa posición importa, se mueve desde el editor del recibo.
         out.add(ReciboBloque(
             id: info.id,
             visible: info.visibleDefault,

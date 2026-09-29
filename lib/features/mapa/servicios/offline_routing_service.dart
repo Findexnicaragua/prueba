@@ -78,17 +78,35 @@ class OfflineRoutingService {
   _RouteNode? _findNearestNode(double lat, double lng) {
     if (_db == null) return null;
 
-    // Proximidad rápida: ordenamos por distancia euclidiana al cuadrado (suficiente para distancias cortas)
-    final stmt = _db!.prepare('''
+    // Primero intentamos una ventana geográfica acotada (±0.08° ~ 9 km) para usar el índice `idx_nodos_geo`
+    var stmt = _db!.prepare('''
       SELECT id, latitud, longitud 
         FROM nodos 
+       WHERE latitud BETWEEN ? AND ? 
+         AND longitud BETWEEN ? AND ?
        ORDER BY ((latitud - ?) * (latitud - ?) + (longitud - ?) * (longitud - ?)) ASC 
        LIMIT 1
     ''');
 
     try {
-      final rows = stmt.select([lat, lat, lng, lng]);
-      if (rows.isEmpty) return null;
+      var rows = stmt.select([
+        lat - 0.08, lat + 0.08,
+        lng - 0.08, lng + 0.08,
+        lat, lat, lng, lng,
+      ]);
+
+      if (rows.isEmpty) {
+        stmt.dispose();
+        // Si no hay nodos en 9 km, búsqueda global como salvaguarda
+        stmt = _db!.prepare('''
+          SELECT id, latitud, longitud 
+            FROM nodos 
+           ORDER BY ((latitud - ?) * (latitud - ?) + (longitud - ?) * (longitud - ?)) ASC 
+           LIMIT 1
+        ''');
+        rows = stmt.select([lat, lat, lng, lng]);
+        if (rows.isEmpty) return null;
+      }
 
       final row = rows.first;
       return _RouteNode(
@@ -156,7 +174,7 @@ class OfflineRoutingService {
 
   /// Calcula la ruta óptima entre el Punto A y el Punto B de forma 100% offline.
   /// Devuelve un listado de coordenadas LatLng para dibujar la Polyline y la distancia en metros.
-  Future<({List<LatLng> path, double distanceMetres})?> findRoute(
+  Future<({List<LatLng> path, double distanceMetres, bool isFallback})?> findRoute(
     LatLng start,
     LatLng end,
   ) async {
@@ -169,7 +187,14 @@ class OfflineRoutingService {
 
     if (startNode == null || endNode == null) return null;
     if (startNode.id == endNode.id) {
-      return (path: [start, end], distanceMetres: _haversineDistance(start.latitude, start.longitude, end.latitude, end.longitude));
+      final nodeCoord = LatLng(startNode.lat, startNode.lng);
+      final dist = _haversineDistance(start.latitude, start.longitude, nodeCoord.latitude, nodeCoord.longitude) +
+          _haversineDistance(nodeCoord.latitude, nodeCoord.longitude, end.latitude, end.longitude);
+      return (
+        path: [start, nodeCoord, end],
+        distanceMetres: dist,
+        isFallback: false,
+      );
     }
 
     // Inicializar el algoritmo A*
@@ -184,14 +209,23 @@ class OfflineRoutingService {
 
     final closedSet = <int>{};
     _RouteNode? targetNodeReached;
+    _RouteNode closestNodeToTarget = startNode;
+    double minDistanceToTarget = startNode.fScore;
 
-    // Máximo de iteraciones de salvaguarda para evitar loops infinitos o búsquedas eternas
+    // Máximo de iteraciones de salvaguarda
     int iterations = 0;
     const maxIterations = 8000;
 
     while (openSet.isNotEmpty && iterations < maxIterations) {
       iterations++;
       final current = openSet.removeFirst();
+
+      // Guardar el nodo más cercano al destino final alcanzado hasta el momento
+      final distToTarget = _haversineDistance(current.lat, current.lng, endNode.lat, endNode.lng);
+      if (distToTarget < minDistanceToTarget) {
+        minDistanceToTarget = distToTarget;
+        closestNodeToTarget = current;
+      }
 
       if (current.id == endNode.id) {
         targetNodeReached = current;
@@ -204,7 +238,6 @@ class OfflineRoutingService {
       for (final neighborData in neighbors) {
         if (closedSet.contains(neighborData.id)) continue;
 
-        // gScore es la distancia desde el inicio hasta el vecino pasando por current
         final tentativeGScore = current.gScore + neighborData.distancia;
 
         var neighbor = allNodes[neighborData.id];
@@ -218,10 +251,8 @@ class OfflineRoutingService {
         }
 
         if (tentativeGScore < neighbor.gScore) {
-          // Este es el mejor camino encontrado hasta ahora hacia este vecino
           neighbor.parent = current;
           neighbor.gScore = tentativeGScore;
-          // fScore = gScore + heurística (línea recta al destino final de ruteo)
           neighbor.fScore = tentativeGScore + _haversineDistance(neighbor.lat, neighbor.lng, endNode.lat, endNode.lng);
 
           if (!openSet.contains(neighbor)) {
@@ -231,17 +262,21 @@ class OfflineRoutingService {
       }
     }
 
-    if (targetNodeReached == null) {
-      // Si el grafo no está conectado, hacemos fallback a una línea recta directa
-      return (
-        path: [start, end],
-        distanceMetres: _haversineDistance(start.latitude, start.longitude, end.latitude, end.longitude)
-      );
+    bool isFallback = false;
+    _RouteNode finalNodeToTrace;
+
+    if (targetNodeReached != null) {
+      finalNodeToTrace = targetNodeReached;
+    } else {
+      // Si el grafo no conecta 100% hasta el nodo final, trazamos por las vías viales
+      // hasta el nodo más cercano alcanzado por calles, y de ahí conectamos al destino.
+      isFallback = true;
+      finalNodeToTrace = closestNodeToTarget;
     }
 
     // Reconstruir el camino óptimo hacia atrás
     final List<int> nodePath = [];
-    _RouteNode? curr = targetNodeReached;
+    _RouteNode? curr = finalNodeToTrace;
     while (curr != null) {
       nodePath.insert(0, curr.id);
       curr = curr.parent;
@@ -290,6 +325,6 @@ class OfflineRoutingService {
       );
     }
 
-    return (path: detailedPath, distanceMetres: totalDistance);
+    return (path: detailedPath, distanceMetres: totalDistance, isFallback: isFallback);
   }
 }

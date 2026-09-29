@@ -17,6 +17,7 @@ import 'data/providers/foto_comprobante_provider.dart';
 import 'data/services/logo_cache_service.dart';
 import 'data/services/map_tile_cache.dart';
 import 'features/auth/auth_flow_provider.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:powersync/powersync.dart' show SyncStatus;
 
 import 'data/providers/db_epoch_provider.dart';
@@ -52,6 +53,11 @@ Future<void> main() async {
 
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // En Android, inicializa el puerto de comunicación del foreground task
+  if (!kIsWeb && Platform.isAndroid) {
+    FlutterForegroundTask.initCommunicationPort();
+  }
 
   // Path URL strategy en web: URLs limpias (`/admin` en vez de `/#/admin`).
   // Necesario para que Supabase pueda redirigir invitaciones/recuperaciones

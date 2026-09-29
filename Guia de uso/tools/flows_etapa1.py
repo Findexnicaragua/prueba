@@ -80,11 +80,20 @@ FLOWS = [
             {"n": 3, "titulo": "Para dar de baja: sección «Estado» → apagá el interruptor",
              "mock": [
                  {"t": "switchrow", "text": "Cliente activo", "on": False},
-                 {"t": "row", "text": "El cliente se oculta del cobrador y NO se generan nuevas cuotas."},
+                 {"t": "row", "text": "Da por terminada la relación: sus contratos vivos se CANCELAN y la deuda se CONDONA."},
+             ]},
+            {"n": 4, "titulo": "La app te muestra cuánto se condona y te pide el motivo",
+             "mock": [
+                 {"t": "dialog", "title": "¿Desactivar a María Peña Ruíz?",
+                  "body": "Sus contratos vivos pasan a CANCELADO y toda la deuda pendiente se CONDONA. Lo ya pagado queda como histórico. Si le vas a seguir cobrando, dejalo activo y suspendé el contrato.",
+                  "field": "Motivo (obligatorio) — Ej. se mudó, ya no es cliente",
+                  "actions": [("Volver", "neutral"), ("Desactivar", "danger")]},
              ]},
         ],
-        "nota": "Desactivar NO borra nada: la deuda que tuviera sigue viva y se cobra con «Fuera de "
-                "ruta» (ver Cuotas y cobros). Todo cambio queda en el historial (ícono del reloj).",
+        "nota": "Desactivar es una decisión de plata, así que salvo el admin todos la SOLICITAN y "
+                "el admin la aprueba (ve el mismo monto antes de decidir). Lo ya pagado nunca se "
+                "toca: queda como histórico. Reactivar sí es directo. Todo queda en el historial "
+                "(ícono del reloj).",
     },
     {
         "id": "clientes-cobrador",
@@ -354,14 +363,14 @@ FLOWS = [
             {"n": 1, "titulo": "Badge de estado del contrato → «Cancelado» (o desde el flujo de suspensión)",
              "mock": [
                  {"t": "dialog", "title": "¿Cancelar este contrato?",
-                  "body": "Es PERMANENTE: el servicio termina y el contrato NO se puede reactivar. La deuda real (meses cumplidos + lo consumido del mes en curso) queda COBRABLE; los meses futuros se anulan. Se imprime un documento con la deuda.",
+                  "body": "Es PERMANENTE: el servicio termina, el contrato NO se puede reactivar y TODA la deuda pendiente se CONDONA — incluidos los meses atrasados. Antes de confirmar ves cuánto se va a condonar. Si el cliente se va debiendo y le vas a seguir cobrando, usá SUSPENDER.",
                   "field": "Motivo de la cancelación (obligatorio) — Ej. Mudanza, insatisfacción del servicio",
                   "actions": [("Volver", "neutral"), ("Cancelar contrato", "danger")]},
              ]},
-            {"n": 2, "titulo": "El contrato queda con su tarjeta de cancelación (la deuda sigue cobrable «fuera de ruta»)",
+            {"n": 2, "titulo": "El contrato queda con su tarjeta de cancelación (la deuda quedó en cero)",
              "mock": [
                  {"t": "row", "text": "Contrato cancelado · 20/07/2026",
-                  "sub": "Motivo: Mudanza · Deuda al cancelar (cobrable): C$ 600",
+                  "sub": "Motivo: Mudanza · Deuda condonada al cancelar: C$ 600",
                   "btn": ("Revertir cancelación", "neutral")},
              ]},
         ],
@@ -497,7 +506,8 @@ FLOWS = [
                   "sub": "Julio · deuda al suspender", "badge": ("Suspendido", "warn"),
                   "saldo": "C$ 600", "btns": [("Pagar", "primary")]},
                  {"t": "cardrow", "texto": "CL0090 · Rosa Díaz", "color": "danger",
-                  "sub": "Junio · deuda al cancelar", "badge": ("Cancelado", "danger"),
+                  "sub": "Junio · baja anterior a la regla nueva",
+                  "badge": ("Cancelado", "danger"),
                   "saldo": "C$ 450", "btns": [("Pagar", "primary")]},
              ]},
             {"n": 3, "titulo": "Se cobra igual que siempre. Si un SUSPENDIDO salda todo, la app avisa",
@@ -507,8 +517,9 @@ FLOWS = [
                   "actions": [("Entendido", "neutral"), ("Reactivar ahora", "primary")]},
              ]},
         ],
-        "nota": "Un cancelado nunca se reactiva (su deuda solo se recupera). El chip queda apagado "
-                "por defecto para no ensuciar la ruta del día.",
+        "nota": "Acá aparecen sobre todo los SUSPENDIDOS: desde la regla del 24/08/2026 cancelar "
+                "condona la deuda, así que un cancelado solo puede figurar si su baja es anterior "
+                "a esa fecha. El chip queda apagado por defecto para no ensuciar la ruta del día.",
     },
     {
         "id": "cuotas-anular-recobrar",

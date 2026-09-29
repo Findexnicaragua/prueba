@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../powersync/db.dart' as ps;
+import '../utils/op_log.dart';
 import 'foto_local_storage.dart';
 import 'imagen_compresion.dart';
 
@@ -217,9 +218,44 @@ class FotoComprobanteService {
     }
   }
 
+  /// Borra la referencia a la foto Y deja constancia en el historial de la
+  /// cuota. Un comprobante que desaparece sin rastro es exactamente el tipo
+  /// de silencio que el audit de logs (2026-08-18) vino a cerrar.
+  Future<void> _limpiarFotoConRastro(
+    String pagoId,
+    String? cuotaId,
+    String tenantId, {
+    required String motivo,
+  }) async {
+    final uid = _supabase.auth.currentUser?.id;
+    await ps.dbW.writeTransaction((tx) async {
+      await tx.execute(
+        'UPDATE pagos SET foto_comprobante_path = NULL '
+        "WHERE id = ? AND foto_comprobante_path LIKE 'local://%'",
+        [pagoId],
+      );
+      if (uid == null || cuotaId == null) return;
+      await OpLog.escribir(
+        tx,
+        tenantId: tenantId,
+        opId: OpLog.nuevoOpId(),
+        tipoOp: 'foto_comprobante_baja',
+        entidad: 'cuotas',
+        entidadId: cuotaId,
+        accion: 'update',
+        diff: {
+          'campos': const [],
+          'resumen': {'motivo': motivo},
+        },
+        actor: await OpLog.actorDeUsuario(ps.db, uid),
+        ocurridoEn: DateTime.now().toUtc(),
+      );
+    });
+  }
+
   Future<int> _sincronizarImpl() async {
     final pendientes = await ps.db.getAll(
-      'SELECT id, tenant_id, foto_comprobante_path '
+      'SELECT id, tenant_id, cuota_id, foto_comprobante_path '
       'FROM pagos '
       "WHERE foto_comprobante_path LIKE 'local://%' AND anulado = 0",
     );
@@ -251,6 +287,7 @@ class FotoComprobanteService {
     for (final row in pendientes) {
       final pagoId = row['id'] as String;
       final tenantId = row['tenant_id'] as String;
+      final cuotaId = row['cuota_id'] as String?;
       final pathLocal = row['foto_comprobante_path'] as String;
       final nombre = pathLocal.substring(_prefijoLocal.length);
 
@@ -261,10 +298,8 @@ class FotoComprobanteService {
         // lectura, 0198) se perdería como error async no manejado y cortaría
         // el barrido de las fotos que sí se pueden subir.
         try {
-          await ps.dbW.execute(
-            'UPDATE pagos SET foto_comprobante_path = NULL WHERE id = ?',
-            [pagoId],
-          );
+          await _limpiarFotoConRastro(pagoId, cuotaId, tenantId,
+              motivo: 'Referencia inválida: la ruta de la foto no era segura');
         } catch (_) {}
         continue;
       }
@@ -273,12 +308,10 @@ class FotoComprobanteService {
         final bytes = await FotoLocalStorage.read(nombre);
         if (bytes == null) {
           // El archivo local desapareció (otro dispositivo, reinstall, etc.).
-          // Limpiar referencia.
-          await ps.dbW.execute(
-            'UPDATE pagos SET foto_comprobante_path = NULL '
-            "WHERE id = ? AND foto_comprobante_path LIKE 'local://%'",
-            [pagoId],
-          );
+          // Limpiar referencia — CON rastro (audit de logs 2026-08-18):
+          // evidencia de pago que desaparece sin historia era invisible.
+          await _limpiarFotoConRastro(pagoId, cuotaId, tenantId,
+              motivo: 'El archivo local se perdió antes de poder subirse');
           continue;
         }
 

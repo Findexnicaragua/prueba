@@ -10,6 +10,34 @@ import '../utils/cuota_estado.dart';
 import '../utils/formatters.dart';
 import '../utils/op_log.dart';
 
+/// Los cargos que NO se pueden quitar con la papelera, por `origen`.
+///
+/// **Una sola lista para la UI y para el repo.** Antes el criterio estaba
+/// escrito dos veces —el `quitable` de `contrato_detail_cuotas` y el `NOT IN`
+/// de [CuotasRepo.quitarCargo]— y el 2026-09-02 se vio para qué sirve tenerlo
+/// duplicado: al agregar `origen='cambio_plan'` (migración 0267) no se
+/// extendió ninguna de las dos, y el cargo del cambio de plan quedó borrable.
+///
+/// Qué tienen en común los cuatro: **los genera una OPERACIÓN, no una
+/// persona**, y borrar la fila deja la cuota corta sin deshacer la operación
+/// que la creó.
+///
+/// · `credito` — está ligado a una fila de `saldos_favor`; borrarlo dejaba el
+///   libro huérfano y el cliente perdía su saldo (audit 2026-07-04).
+/// · `liquidacion` — cierre de contrato.
+/// · `cambio_plan` — la cuota volvería al precio viejo mientras el contrato y
+///   las cuotas futuras quedan en el plan nuevo: el cambio deshecho a medias.
+/// · `puente` — el prorrateo del cambio de fecha de pago. Mismo caso: la
+///   cuota queda sin cubrir los días que el puente pagaba.
+///
+/// Para revertirlos hay que deshacer SU operación, no borrar el cargo.
+const kOrigenesNoQuitables = ['liquidacion', 'credito', 'cambio_plan', 'puente'];
+
+/// Los mismos, listos para un `IN (...)` de SQL. Se arma DESDE la lista para
+/// que no puedan separarse.
+final kOrigenesNoQuitablesSql =
+    kOrigenesNoQuitables.map((o) => "'$o'").join(', ');
+
 class CuotasRepo {
   /// [db] permite inyectar una `PowerSyncDatabase` para tests (mismo patrón
   /// que PagosRepo). En producción queda null y usa la global `ps.db`.
@@ -186,6 +214,10 @@ class CuotasRepo {
       '''
       SELECT ce.id, ce.tipo, ce.monto, ce.porcentaje, ce.descripcion,
              ce.origen, ce.pago_id, ce.ocurrido_en, ce.aplicado_en,
+             -- `detalle` (0267): el contexto que el cargo congelo al nacer.
+             -- Lo usa la pantalla de cobro para decir "26 dias, del 03/09 al
+             -- 28/09" en vez de un "Cargo" pelado.
+             ce.detalle,
              co.nombre AS aplicado_por_nombre
         FROM cargos_extra ce
    LEFT JOIN cobradores co ON co.id = ce.aplicado_por
@@ -390,15 +422,13 @@ class CuotasRepo {
   }) async {
     final ocurridoEn = DateTime.now().toUtc().toIso8601String();
     await _dbWOrGlobal.writeTransaction((tx) async {
-      // PROTEGIDO (audit 2026-07-04, crítico $): se excluye origen='credito' —
-      // un crédito aplicado está ligado a una fila '-' de saldos_favor (FK
-      // cargo_id ON DELETE SET NULL, NO cascade); borrar solo el cargo dejaba
-      // el libro huérfano marcando el crédito consumido y des-descontaba la
-      // cuota → el cliente perdía el saldo a favor (invariante #4/#15). El
-      // crédito se revierte por su flujo dedicado que compensa saldos_favor.
+      // PROTEGIDOS: los de [kOrigenesNoQuitables] — ver el porqué de cada uno
+      // en su doc. La lista es COMPARTIDA con la UI a propósito: el criterio
+      // estaba escrito dos veces y por eso `cambio_plan` quedó borrable.
       final rows = await tx.getAll(
         'SELECT cuota_id, tenant_id, tipo, monto, descripcion FROM cargos_extra '
-        "WHERE id = ? AND pago_id IS NULL AND origen NOT IN ('liquidacion', 'credito')",
+        'WHERE id = ? AND pago_id IS NULL '
+        "AND COALESCE(origen, '') NOT IN ($kOrigenesNoQuitablesSql)",
         [cargoId],
       );
       if (rows.isEmpty) return; // ya quitado o protegido: no-op idempotente
@@ -419,6 +449,44 @@ class CuotasRepo {
       final saldoAntes = montoCuota +
           ((antesCuota['cargos_neto'] as num?)?.toDouble() ?? 0.0) -
           pagado;
+
+      // GUARD DE SOBREPAGO (audit 2026-08-13). Quitar un cargo BAJA el total de
+      // la cuota; si ya se cobró, puede dejarla con más plata aplicada de la que
+      // cuesta. Ejemplo real: cuota de 480 + reconexión de 250, se cobran los
+      // 730, después se quita la reconexión -> 730 pagados sobre 480. El cliente
+      // queda con 250 a favor que el sistema no registra en ningún lado, y se
+      // viola INV4 (`invariantes_dinero.sql`).
+      //
+      // Era el único de los cuatro caminos que bajan el total sin tope:
+      // `aplicarAjuste` topea contra el saldo, `aplicarCargo` exige
+      // pendiente/parcial y `editarPago` topea el monto editado. Éste miraba
+      // solo `pago_id` y el origen, nunca el estado ni lo ya cobrado.
+      //
+      // Se proyecta el `cargos_neto` que quedaría (misma expresión que
+      // `_recalcularCuotaLocal`, excluyendo este cargo) en vez de restar a mano:
+      // así no hay dos convenciones de signo que puedan divergir.
+      final proyRows = await tx.getAll(
+        '''
+        SELECT
+          COALESCE(SUM(CASE WHEN tipo IN ('reconexion','otro')
+                            THEN monto ELSE 0 END), 0) AS sumar,
+          COALESCE(SUM(CASE WHEN tipo IN ('descuento_monto','descuento_porcentaje','credito_aplicado')
+                            THEN monto ELSE 0 END), 0) AS restar
+          FROM cargos_extra WHERE cuota_id = ? AND id <> ?
+        ''',
+        [cuotaId, cargoId],
+      );
+      final totalProyectado = montoCuota +
+          (proyRows.first['sumar'] as num).toDouble() -
+          (proyRows.first['restar'] as num).toDouble();
+      if (pagado > totalProyectado + 0.009) {
+        throw Exception(
+          'Esta cuota ya tiene ${pagado.toStringAsFixed(2)} cobrados y sin este '
+          'cargo costaría ${totalProyectado.toStringAsFixed(2)}. '
+          'Anulá el pago primero, o dejá el cargo y registrá la diferencia como '
+          'saldo a favor del cliente.',
+        );
+      }
 
       await tx.execute('DELETE FROM cargos_extra WHERE id = ?', [cargoId]);
       await _recalcularCuotaLocal(tx, cuotaId, ocurridoEn: ocurridoEn);

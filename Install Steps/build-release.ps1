@@ -22,7 +22,7 @@
 
   Requisitos: flutter, gh (logueado), .env.json + android/key.properties.
 #>
-param([string]$Tenant = "", [switch]$AllTenants, [switch]$NoRelease, [string]$Tag = "", [string]$Notes = "", [string]$Repo = "")
+param([string]$Tenant = "", [switch]$AllTenants, [switch]$NoRelease, [string]$Tag = "", [string]$Notes = "", [string]$Repo = "", [switch]$PreRelease)
 $ErrorActionPreference = "Stop"
 
 # Rutas relativas a la RAÍZ del repo (el script vive en Install Steps/).
@@ -56,8 +56,18 @@ function Invoke-Native {
   try {
     $exe  = $Cmd[0]
     $argv = @(); if ($Cmd.Count -gt 1) { $argv = $Cmd[1..($Cmd.Count-1)] }
-    & $exe @argv
-    if ($LASTEXITCODE -ne 0) { throw "FALLO: $Label (exit $LASTEXITCODE)" }
+    # `Tee-Object`: muestra la salida EN VIVO (el progreso de flutter se sigue
+    # viendo) y ademas la guarda, para poder pegarla en el error.
+    #
+    # Sin esto, un fallo decia solo "FALLO: gh release create (exit 1)" y habia
+    # que reproducir el comando a mano para enterarse de por que. Paso el
+    # 2026-08-28 publicando la build de prueba: el script aborto sin una linea
+    # de gh, y el reintento a mano funciono sin cambiar nada.
+    & $exe @argv 2>&1 | Tee-Object -Variable salida
+    if ($LASTEXITCODE -ne 0) {
+      $ultimas = if ($salida) { ($salida | Select-Object -Last 8) -join "`n  " } else { "(sin salida)" }
+      throw "FALLO: $Label (exit $LASTEXITCODE)`n  $ultimas"
+    }
   } finally { $global:ErrorActionPreference = $prev }
 }
 
@@ -77,6 +87,26 @@ if (-not (Test-Path ".env.json")) { throw ".env.json no existe en la raiz (confi
 if (-not (Test-Path "android/key.properties")) { throw "android/key.properties no existe -> el APK se firmaria con la DEBUG key y NO actualizaria las apps instaladas." }
 if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) { throw "flutter no esta en el PATH." }
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "gh (GitHub CLI) no esta en el PATH." }
+
+# El bump TIENE que estar commiteado, y esto lo valida en vez de confiar en que
+# se leyo el encabezado. Por que importa, y por que el sintoma seria dificil de
+# ver: `$ver` se lee UNA sola vez (abajo) y despues, al terminar CADA tenant, el
+# paso 6 hace `git checkout -- pubspec.yaml ...` para deshacer el branding — y
+# eso revierte tambien la linea `version`. Con -AllTenants y el bump SIN
+# commitear, el primer tenant sale bien y el SEGUNDO se buildea con la version
+# VIEJA adentro pero con el nombre de archivo y el manifest de la nueva. El
+# instalador diria vX.Y.Z, la app mostraria la anterior, y el auto-update se
+# quedaria ofreciendo para siempre una version que "ya esta instalada".
+# El mismo razonamiento vale para cualquier otro archivo que el paso 6 restaura.
+$sucios = @(git status --porcelain -- pubspec.yaml android/app/build.gradle.kts `
+  android/app/src/main/AndroidManifest.xml windows/runner/main.cpp windows/runner/Runner.rc) |
+  Where-Object { $_ -and $_.Trim() }
+if ($sucios) {
+  throw ("Hay cambios SIN COMMITEAR en archivos que el script restaura con git checkout:`n  " +
+         ($sucios -join "`n  ") +
+         "`nCommitealos antes de buildear. Si no, el segundo tenant sale con la version vieja " +
+         "adentro y el nombre de la nueva (ver el comentario de este pre-check).")
+}
 
 $ver = ((Select-String -Path pubspec.yaml -Pattern '^version:\s*(\S+)').Matches.Groups[1].Value).Split('+')[0]
 if ([string]::IsNullOrWhiteSpace($Tag)) { $Tag = "v$ver" }
@@ -132,12 +162,18 @@ function Build-One {
     # carpetas separadas en %APPDATA% → sesión/DB/prefs aisladas por app.
     Patch-File "windows/runner/Runner.rc"                 '"ProductName", "[^"]*"'  "`"ProductName`", `"$base`""
     $vjName = "version-$Slug.json"
-    $define = @("--dart-define=TENANT=$Slug")
+    # `UPDATE_REPO` HORNEADO = el repo en el que se publica.
+    #
+    # Antes salia solo de `.env.json`, asi que un build con `-Repo` (canal de
+    # prueba, staging, traspaso) se publicaba en un lado y se auto-actualizaba
+    # desde OTRO. Para produccion no cambia nada —`$repo` ya es el valor del
+    # .env.json o el default—; para cualquier otro canal lo vuelve coherente.
+    $define = @("--dart-define=TENANT=$Slug", "--dart-define=UPDATE_REPO=$repo")
   } else {
     Write-Host "`n--- Generico  ->  CRM ---" -ForegroundColor Cyan
     $base   = "CRM"
     $vjName = "version.json"
-    $define = @()
+    $define = @("--dart-define=UPDATE_REPO=$repo")
   }
 
   # 3) Build Windows (con env) + MSIX (sin re-buildear) + APK (con env)
@@ -226,10 +262,28 @@ function Build-One {
 
 # ¿Qué buildear?
 if ($AllTenants) {
-  $slugs = Get-ChildItem branding -Directory -ErrorAction SilentlyContinue |
-    Where-Object { Test-Path (Join-Path $_.FullName "config.json") } |
-    ForEach-Object { $_.Name }
-  if (-not $slugs) { throw "No hay tenants con config.json en branding/." }
+  # `soloPrueba: true` en el config = tenant que NO va al canal oficial.
+  #
+  # Nacio del 2026-08-30: al agregar `branding/test/` para la build de prueba de
+  # Android, `-AllTenants` empezo a incluirlo sin que nadie lo notara, y el
+  # release oficial se armo con `CRM-TEST-vX.Y.Z.msix/apk` + `version-test.json`
+  # entre sus assets. No llego a publicarse por otro fallo, pero iba camino al
+  # canal que leen los 12 equipos productivos.
+  #
+  # Se marca en el CONFIG y no por nombre a proposito: un `-ne "test"` hardcodea
+  # un slug y el proximo tenant de prueba —con cualquier otro nombre— volveria a
+  # colarse. Para buildear el de prueba: `-Tenant test`, que es explicito.
+  $todos = Get-ChildItem branding -Directory -ErrorAction SilentlyContinue |
+    Where-Object { Test-Path (Join-Path $_.FullName "config.json") }
+  $slugs = @(); $saltados = @()
+  foreach ($d in $todos) {
+    $cfg = Get-Content (Join-Path $d.FullName "config.json") -Raw | ConvertFrom-Json
+    if ($cfg.soloPrueba -eq $true) { $saltados += $d.Name } else { $slugs += $d.Name }
+  }
+  if (-not $slugs) { throw "No hay tenants publicables con config.json en branding/." }
+  if ($saltados) {
+    Write-Host "Saltados (soloPrueba): $($saltados -join ', ')" -ForegroundColor Yellow
+  }
   Write-Host "Tenants a buildear: $($slugs -join ', ')" -ForegroundColor Cyan
   foreach ($s in $slugs) { Build-One -Slug $s }
 } elseif ($Tenant -ne "") {
@@ -248,13 +302,46 @@ if ($NoRelease) {
 }
 
 $assetArgs = $uploads.ToArray()
-$releaseCheck = & gh release view $Tag --repo $repo 2>&1
+# Este check ESPERA exit!=0 cuando el release no existe: su stderr ("release
+# not found") no es un error del script. Mismo guard que Invoke-Native — sin
+# el, PS 5.1 + ErrorActionPreference=Stop convierte ese stderr en fatal y
+# aborta ANTES de crear el release (paso con v0.35.0: builds OK, sin publicar).
+$prevEap = $ErrorActionPreference
+$global:ErrorActionPreference = "Continue"
+& gh release view $Tag --repo $repo *> $null
+$global:ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -eq 0) {
   Write-Host "`n==> Release $Tag ya existe -> reemplazando assets..." -ForegroundColor Cyan
   Invoke-Native "gh release upload" gh release upload $Tag @assetArgs --repo $repo --clobber
 } else {
   Write-Host "`n==> Creando release $Tag..." -ForegroundColor Cyan
-  Invoke-Native "gh release create" gh release create $Tag @assetArgs --repo $repo --title $Tag --notes "Release $Tag de CRM."
+  # ── DIAGNOSTICO DEL FALLO RECURRENTE DE `gh release create` ───────────────
+  # Este comando fallo 4 veces (2026-08-28/29 x2/30) con `no matches found for
+  # ''` -- gh diciendo que recibio un patron de asset VACIO -- y las 4 veces el
+  # mismo comando reproducido a mano funciono. Lo que YA se descarto, para no
+  # volver a probarlo: no es `Invoke-Native` (se replico entera y anda), no son
+  # los argumentos (se espiaron los 18 y ninguno viene vacio), no es el splat de
+  # `@preArgs` vacio (probado: no agrega nada) y no es `gh` (create con assets
+  # posicionales anda suelto). Queda como sospecha el estado que el script
+  # acumula durante los ~25 min de builds.
+  #
+  # Estas dos lineas no arreglan nada: hacen que la PROXIMA falla se explique
+  # sola en el log, en vez de costar otra sesion de bisecar a ciegas.
+  Write-Host "    CWD: $PWD" -ForegroundColor DarkGray
+  for ($i = 0; $i -lt $assetArgs.Count; $i++) {
+    $a = $assetArgs[$i]
+    $marca = if ([string]::IsNullOrWhiteSpace($a)) { "  <<< VACIO" }
+             elseif (-not (Test-Path $a)) { "  <<< NO EXISTE" } else { "" }
+    Write-Host "    asset[$i] len=$($a.Length) '$a'$marca" -ForegroundColor DarkGray
+  }
+  # `--prerelease`: GitHub lo EXCLUYE de `releases/latest`. Es la red de
+  # seguridad de las builds de prueba — aunque una se publicara por error en el
+  # repo de produccion, las apps oficiales seguirian viendo el ultimo estable.
+  if ($PreRelease) {
+    Invoke-Native "gh release create" gh release create $Tag --repo $repo --title $Tag --notes "Release $Tag de CRM." --prerelease @assetArgs
+  } else {
+    Invoke-Native "gh release create" gh release create $Tag --repo $repo --title $Tag --notes "Release $Tag de CRM." @assetArgs
+  }
 }
 
 Write-Host "`n=== LISTO ===" -ForegroundColor Green

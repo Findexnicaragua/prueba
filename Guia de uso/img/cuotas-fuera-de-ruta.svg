@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="608" viewBox="0 0 720 608" role="img">
-<rect width="720" height="608" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="623" viewBox="0 0 720 623" role="img">
+<rect width="720" height="623" fill="#F8F9FA" rx="10" stroke="#DADCE0"/>
 <text x="16" y="26" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#1F1F1F" font-weight="600" text-anchor="start" >Cobrar deuda de suspendidos o cancelados («Fuera de ruta»)</text>
 <text x="16" y="46" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#5F6368" font-weight="400" text-anchor="start" >Quién puede: cobrador · admin / admin de cobranza</text>
 <circle cx="28" cy="70" r="11" fill="#E8F0FE"/>
@@ -29,7 +29,7 @@
 <rect x="68" y="280" width="628" height="64" rx="10" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1"/>
 <rect x="68" y="280" width="5" height="64" rx="2" fill="#C5221F"/>
 <text x="84" y="301" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#1F1F1F" font-weight="600" text-anchor="start" >CL0090 · Rosa Díaz</text>
-<text x="84" y="319" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Junio · deuda al cancelar</text>
+<text x="84" y="319" font-family="Segoe UI, Arial, sans-serif" font-size="10.5" fill="#5F6368" font-weight="400" text-anchor="start" >Junio · baja anterior a la regla nueva</text>
 <rect x="84" y="325" width="62" height="18" rx="9" fill="#FCE8E6"/>
 <text x="115.0" y="337.7" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#C5221F" font-weight="500" text-anchor="middle" >Cancelado</text>
 <text x="684" y="302" font-family="Segoe UI, Arial, sans-serif" font-size="14.5" fill="#1F1F1F" font-weight="700" text-anchor="end" >C$ 450</text>
@@ -46,7 +46,8 @@
 <rect x="505.0" y="477" width="117" height="28" rx="14" fill="#1A73E8"/>
 <text x="563.5" y="495.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#FFFFFF" font-weight="500" text-anchor="middle" >Reactivar ahora</text>
 <text x="458.5" y="495.5" font-family="Segoe UI, Arial, sans-serif" font-size="11.5" fill="#1A73E8" font-weight="500" text-anchor="middle" >Entendido</text>
-<rect x="16" y="546" width="688" height="44" rx="8" fill="#E8F0FE"/>
-<text x="28" y="565" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Un cancelado nunca se reactiva (su deuda solo se recupera). El chip queda apagado por</text>
-<text x="28" y="580" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >defecto para no ensuciar la ruta del día.</text>
+<rect x="16" y="546" width="688" height="59" rx="8" fill="#E8F0FE"/>
+<text x="28" y="565" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >Nota: Acá aparecen sobre todo los SUSPENDIDOS: desde la regla del 24/08/2026 cancelar condona la</text>
+<text x="28" y="580" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >deuda, así que un cancelado solo puede figurar si su baja es anterior a esa fecha. El chip queda</text>
+<text x="28" y="595" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#174EA6" font-weight="400" text-anchor="start" >apagado por defecto para no ensuciar la ruta del día.</text>
 </svg>

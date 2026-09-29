@@ -9,7 +9,24 @@
 -- CÓMO USARLO:
 --   1. Pegar todo este archivo en Supabase SQL Editor.
 --   2. Run. El resultado es UNA tabla con una fila por invariante.
---   3. Columna `violaciones` debe ser 0 en TODAS las filas.
+--   3. Columna `violaciones` debe ser 0 en TODAS las filas, MENOS el baseline.
+--
+-- BASELINE ACEPTADO (no son bugs; estan documentados en BITACORA):
+--   INV11 = 3   ·   INV20 = 1   (INV19 volvio a 0 el 2026-08-26)
+--
+-- (INV25 estuvo en 6 el 2026-08-23, entre 0255 y 0257: eran 11 cuotas por
+--  C$10.257 de doble facturación — 5 clientes que recontrataron y a los que el
+--  contrato viejo les seguía facturando el mismo mes que el nuevo. Se anularon
+--  con `super_admin_cuota_estado_impl` (preview, motivo, respaldo y triple
+--  registro) y 0257 repuso la fecha de baja desde `op_log`. Volvió a 0.)
+-- La regla real es: **tu fix no puede AUMENTAR ningun contador** ni sumar
+-- invariantes nuevos a la lista. Corre el script ANTES de tocar y compara.
+--
+-- ALCANCE (leer antes de decir "la plata esta verificada"): estos chequeos
+-- verifican COHERENCIA entre tablas, no CORRECCION del calculo. Un monto
+-- prorrateado mal, un plan facturado a precio equivocado o una fecha de
+-- vencimiento mal derivada CIERRAN igual y NO aparecen aca. Para eso estan
+-- los tests de `prorrateo.dart` y el testing manual.
 --   4. Si alguna > 0, la columna `ejemplo_ids` muestra los registros
 --      ofensivos para investigar.
 --
@@ -69,13 +86,20 @@ inv3 AS (
   FROM (
     SELECT id
     FROM public.cuotas
+    -- CANON DEL TRIGGER (0255). La banda de +-0.01 que habia aca NO es la de
+    -- `cuotas_forzar_derivados`, el BEFORE UPDATE que decide el estado de
+    -- verdad y gana siempre. Como la plata es numeric(10,2), el hueco mas chico
+    -- posible es exactamente 0.01 - y ahi los dos canon se contradecian: el
+    -- trigger dejaba 'parcial' y este chequeo lo marcaba como violacion. Una
+    -- cuota a un centavo del total ES parcial para el server y para el cliente
+    -- (`cuota_estado.dart`). Ademas el corrector no podia arreglarla (el
+    -- trigger revertia su UPDATE), asi que la bandera quedaba inapagable.
     WHERE estado <> 'anulada'
-      AND (
-        (estado = 'pagada'    AND monto_pagado < (monto + COALESCE(cargos_neto,0)) - 0.01)
-        OR (estado = 'pendiente' AND monto_pagado > 0.01)
-        OR (estado = 'parcial'  AND (monto_pagado <= 0.01
-              OR monto_pagado >= (monto + COALESCE(cargos_neto,0)) - 0.01))
-      )
+      AND estado IS DISTINCT FROM (CASE
+            WHEN (monto + COALESCE(cargos_neto,0)) <= 0 THEN 'pagada'
+            WHEN monto_pagado <= 0 THEN 'pendiente'
+            WHEN monto_pagado < (monto + COALESCE(cargos_neto,0)) THEN 'parcial'
+            ELSE 'pagada' END)
   ) t
 ),
 
@@ -443,6 +467,394 @@ inv12 AS (
   ) t
 )
 
+-- ============================================================================
+-- INV 21: oldest-first (invariante #11 de AGENTS). La ÚNICA regla de dinero
+-- que no tenía red: por DECISIÓN de producto NO hay trigger server, solo el
+-- guard del cliente (`pagos_repo._validarOldestFirst`), que es ciego al
+-- multi-device offline. `k` = (fecha_vencimiento, período) = el MISMO criterio
+-- de orden que usa `keyDe` en el guard. Una violación por CUOTA SALTADA.
+-- SOLO cuenta la que NUNCA vio plata (`pendiente` + monto_pagado <= 0.01):
+-- incluir 'parcial' da 1 falso positivo (una cuota pagada completa que después
+-- recibe un cargo vuelve a 'parcial' sin que nadie viole el orden).
+-- ============================================================================
+,of_regs AS (
+  SELECT cu.id, cu.contrato_id, cu.estado, cu.monto_pagado, cu.monto, cu.cargos_neto,
+         to_char(cu.fecha_vencimiento,'YYYYMMDD') || to_char(cu.periodo,'YYYYMMDD') AS k
+  FROM public.cuotas cu
+  WHERE cu.contrato_id IS NOT NULL
+    AND cu.tipo_cargo_manual IS NULL
+    AND cu.estado <> 'anulada'
+)
+,of_tope AS (
+  SELECT contrato_id, max(k) AS k_max
+  FROM of_regs WHERE monto_pagado > 0.01 GROUP BY contrato_id
+)
+,inv21 AS (
+  SELECT 'INV21: ninguna cuota vieja saltada por un cobro posterior (#11 oldest-first)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT r.id
+    FROM of_regs r
+    JOIN of_tope t ON t.contrato_id = r.contrato_id
+    WHERE r.estado = 'pendiente'
+      AND r.monto_pagado <= 0.01
+      AND (r.monto + COALESCE(r.cargos_neto,0)) > 0.01
+      AND r.k < t.k_max
+  ) t
+)
+
+-- ============================================================================
+-- INV 22: INV5 es unidireccional (pago vivo -> recibo). Este es el reverso.
+-- Un recibo vivo sin pago vivo detrás es un comprobante con número fiscal
+-- circulando sin plata en caja.
+-- ============================================================================
+,inv22 AS (
+  SELECT 'INV22: todo recibo vivo cuelga de un pago vivo (reverso de INV5)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT r.id
+    FROM public.recibos r
+    LEFT JOIN public.pagos p ON p.id = r.pago_id
+    WHERE COALESCE(r.anulado, false) = false
+      AND (r.pago_id IS NULL OR p.id IS NULL OR p.anulado = true)
+  ) t
+)
+
+-- ============================================================================
+-- INV 23: INV5 se satisface con un recibo ANULADO (solo pregunta NOT EXISTS).
+-- Este exige EXACTAMENTE UNO vivo: caza el cobro sin comprobante válido Y el
+-- duplicado que quema un correlativo. SUBSUME a INV5; se dejan los dos porque
+-- si divergen (INV5=0, INV23=N) el par te dice que el problema son recibos
+-- anulados y no recibos faltantes.
+-- ============================================================================
+,inv23 AS (
+  SELECT 'INV23: todo pago vivo tiene EXACTAMENTE un recibo vivo (refuerza INV5)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT p.id
+    FROM public.pagos p
+    WHERE p.anulado = false
+      AND (SELECT COUNT(*) FROM public.recibos r
+            WHERE r.pago_id = p.id AND COALESCE(r.anulado,false) = false) <> 1
+  ) t
+)
+
+-- ============================================================================
+-- INV 24: el hueco entre INV2 (excluye anuladas) e INV12 (recorre contratos).
+-- Un pago VIVO sobre una cuota anulada o inexistente no lo mira NADIE, y esa
+-- plata SÍ entra al arqueo y al dashboard (que suman monto_cordobas bruto).
+-- Las cuotas manuales pueden tener contrato_id NULL (hay 2 en prod), así que
+-- INV12 tampoco llega por ese lado.
+-- ============================================================================
+,inv24 AS (
+  SELECT 'INV24: ningún pago vivo cuelga de una cuota anulada o inexistente' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT p.id
+    FROM public.pagos p
+    LEFT JOIN public.cuotas cu ON cu.id = p.cuota_id
+    WHERE p.anulado = false
+      AND (p.cuota_id IS NULL OR cu.id IS NULL OR cu.estado = 'anulada')
+  ) t
+)
+
+-- ============================================================================
+-- INV 25: verifica que la red de 0234 (anular cuotas futuras al dar de baja)
+-- haya funcionado. 0234 nació de 8 cuotas por C$6.411 que se siguieron
+-- facturando después de la baja.
+-- ¡OJO! El predicado del WHERE es COPIA EXACTA del CTE `futuras` de
+-- `contratos_anular_cuotas_futuras_trg`, A PROPÓSITO: si el trigger cambia,
+-- este invariante tiene que cambiar con él.
+-- Anclado a la VENTANA DE SERVICIO, nunca al mes calendario (regla 1c de
+-- AGENTS): anclado al mes da 14 FALSOS POSITIVOS que son prorrateos de baja
+-- correctos (facturación vencida con dia_pago <> 1).
+-- ============================================================================
+,inv25 AS (
+  SELECT 'INV25: contrato dado de baja sin cuotas FUTURAS vivas (red 0234)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT cu.id
+    FROM public.contratos ct
+    -- COALESCE A HOY-NICARAGUA (0255). El trigger 0234 hace exactamente esto
+    -- (`COALESCE(new.cancelado_en::date, (now() - interval '6 hours')::date)`)
+    -- y este chequeo NO lo copiaba, pese a que su comentario juraba ser copia
+    -- exacta. Justo ahi vivia la deuda fantasma: 37 contratos cancelados SIN
+    -- fecha de baja quedaban fuera del chequeo, y con ellos 6 cuotas por
+    -- C$6.154 que el panel reportaba como "0 violaciones".
+    -- OJO: borrar `AND b.fecha IS NOT NULL` a secas NO arregla nada - con
+    -- logica de tres valores `x > NULL` ya da NULL y la fila se excluye igual.
+    -- El filtro de `tipo_cargo_manual` tambien se saca: el CTE `futuras` del
+    -- trigger NO lo tiene, y esto dice ser su espejo.
+    JOIN LATERAL (
+      SELECT COALESCE(
+               CASE WHEN ct.estado = 'cancelado' THEN ct.cancelado_en::date
+                    ELSE (SELECT s.suspendido_en::date FROM public.contrato_suspensiones s
+                           WHERE s.contrato_id = ct.id AND s.reactivado_en IS NULL
+                           ORDER BY s.suspendido_en DESC LIMIT 1) END,
+               (now() - interval '6 hours')::date) AS fecha
+    ) b ON true
+    JOIN public.cuotas cu ON cu.contrato_id = ct.id
+    WHERE ct.estado IN ('cancelado','suspendido')
+      AND cu.estado = 'pendiente'
+      AND COALESCE(cu.monto_pagado, 0) <= 0.009
+      AND COALESCE(
+            (SELECT max(cu2.fecha_vencimiento) FROM public.cuotas cu2
+              WHERE cu2.contrato_id = cu.contrato_id
+                AND cu2.fecha_vencimiento < cu.fecha_vencimiento
+                AND cu2.estado <> 'anulada'),
+            (cu.fecha_vencimiento - interval '1 month')::date
+          ) > b.fecha
+  ) t
+)
+
+-- ============================================================================
+-- INV 26: cancelar contrato es el único evento de plata sin CHECK de
+-- atribución (`pagos` y `cuotas` sí tienen el suyo). CORTE 2026-08-20: los 94
+-- históricos sin atribuir son 37 legacy + 57 de una limpieza SQL manual del
+-- 19/08. Ningún camino de la APP deja el actor vacío. La segunda rama cubre
+-- el caso sin fecha, que si no se escaparía por el propio filtro de fecha.
+-- ============================================================================
+,inv26 AS (
+  SELECT 'INV26: cancelación de contrato atribuida (desde 2026-08-20)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT ct.id
+    FROM public.contratos ct
+    WHERE ct.estado = 'cancelado'
+      AND (ct.cancelado_en >= DATE '2026-08-20'
+           OR (ct.cancelado_en IS NULL AND ct.created_at >= DATE '2026-08-20'))
+      AND (ct.cancelado_por IS NULL
+           OR ct.cancelado_en IS NULL
+           OR COALESCE(btrim(ct.motivo_cancelacion), '') = '')
+  ) t
+)
+
+-- ============================================================================
+-- INV 27: `op_log` es el ÚNICO registro de cambios (audit_log se eliminó en
+-- 0140) y lo escribe el CLIENTE -> la fila puede perderse sin que el cobro se
+-- pierda. Ningún INV1-20 lo miraba.
+--
+-- CORTE 2026-08-20 + GRACIA DE 48 h. El corte deja afuera los 177 cobros
+-- históricos (causa conocida: `op_log` no tenía policy de SELECT para
+-- cobrador, el upsert fallaba con 42501 y el connector lo descartaba;
+-- cerrado por 0190 el 2026-07-17). La gracia de 48 h evita el FALSO POSITIVO
+-- del cobrador offline: `uploadData` sube las ops de a una y el insert de
+-- op_log es la ÚLTIMA del writeTransaction del cobro; si se corta la señal en
+-- el medio, el server queda con el pago y sin rastro hasta la próxima sync.
+--
+-- QUÉ NO VE: (a) el 2º pago o posterior sobre la MISMA cuota (es EXISTS, no
+-- conteo: ~3% de los pagos de Mairena desde julio); (b) los 177 históricos,
+-- a propósito. La variante estricta por conteo también arranca en 0 hoy.
+-- ============================================================================
+,inv27 AS (
+  SELECT 'INV27: todo cobro deja rastro en op_log (desde 2026-08-20, gracia 48h)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT p.id
+    FROM public.pagos p
+    WHERE COALESCE(p.ocurrido_en, p.fecha_pago) >= TIMESTAMPTZ '2026-08-20 00:00-06'
+      AND COALESCE(p.ocurrido_en, p.fecha_pago) < now() - INTERVAL '48 hours'
+      AND NOT EXISTS (
+        SELECT 1 FROM public.op_log o
+         WHERE o.tenant_id = p.tenant_id
+           AND o.entidad = 'cuotas' AND o.entidad_id = p.cuota_id
+           AND o.tipo_op IN ('cobro', 'cobro_recuperado'))
+  ) t
+)
+
+-- ============================================================================
+-- INV 28: el invariante #4 tiene DOS sumandos
+-- (`recaudado_caja = SUM(pagos) - SUM(saldos_favor devuelto)`) y los 20
+-- chequeos vigentes miran solo el primero. Bucketea por `fecha_devolucion` y
+-- `fecha_pago::date` — local-naive A PROPÓSITO, igual que el arqueo
+-- (regla 1b: el wall-clock de fecha_pago sostiene el bucketing). Solo
+-- `metodo='efectivo'`: una devolución en efectivo no sale de una transferencia.
+-- PREVENCIÓN PURA: hoy hay 0 filas tipo='devuelto' en toda la base, pero
+-- C$18.207 acreditados esperando a que alguien los aplique.
+-- El `ejemplo_ids` devuelve `cobrador_id@fecha`, no un uuid: la violación es
+-- del PAR, no de una fila.
+-- ============================================================================
+,inv28 AS (
+  SELECT 'INV28: devoluciones del día <= efectivo cobrado ese día (#4 caja neta)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(clave, ', ' ORDER BY clave), '') AS ejemplo_ids
+  FROM (
+    -- CONTRA LA CAJA DEL TENANT (0255), no la del usuario. Antes exigia que la
+    -- devolucion saliera del efectivo que ESE MISMO usuario cobro ESE MISMO
+    -- dia. Eso no esta en el modelo: quien devuelve es admin/admin_cobranza
+    -- (oficina, por gating) y la plata sale de la caja de la oficina, no de la
+    -- calle. Simulado sobre las 10 disposiciones de excedente reales, 2
+    -- habrian marcado rojo por una operacion correcta - una de C$30.516 - y no
+    -- hay corrector ni forma de bajar la bandera. Se conserva el sentido: no
+    -- puede salir mas efectivo del que entro ese dia en la empresa.
+    SELECT d.fecha_devolucion::text AS clave
+    FROM public.saldos_favor d
+    WHERE d.tipo = 'devuelto' AND d.fecha_devolucion IS NOT NULL
+    GROUP BY d.tenant_id, d.fecha_devolucion
+    HAVING SUM(d.monto) > COALESCE((
+        SELECT SUM(p.monto_cordobas) FROM public.pagos p
+         WHERE p.tenant_id = d.tenant_id
+           AND p.anulado = false AND p.metodo = 'efectivo'
+           AND p.fecha_pago::date = d.fecha_devolucion), 0) + 0.005
+  ) t
+)
+
+-- ============================================================================
+-- INV 29: sin cobrador+fecha la devolución no cae en NINGÚN bucket del arqueo
+-- (el ISP sigue mostrando en caja plata que ya devolvió); sin recibo no hay
+-- papel de la salida de efectivo. Las tres columnas son NULLABLE y no hay
+-- CHECK que las exija. Va de la mano de INV28: sin INV29, INV28 es EVADIBLE
+-- (una devolución sin cobrador ni fecha se saltea su GROUP BY).
+-- ============================================================================
+,inv29 AS (
+  SELECT 'INV29: devolución de saldo con cobrador, fecha y recibo (#2/#4)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT sf.id
+    FROM public.saldos_favor sf
+    -- SIN `recibo_id` (0255): ese campo NO LO ESCRIBE NINGUN CAMINO del
+    -- sistema. `registrarDisposicionExcedente` es el unico productor de filas
+    -- 'devuelto' y no lo setea; no hay UPDATE de saldos_favor en todo lib/; el
+    -- unico trigger de la tabla no lo toca; y las 30 filas vivas tienen
+    -- count(recibo_id) = 0. Era una condicion IMPOSIBLE de satisfacer: la
+    -- primera devolucion real dejaba esto en rojo permanente, con un texto en
+    -- pantalla que mandaba a completar un dato que no tiene campo. Peor, se
+    -- tapaba a si mismo: si TODA devolucion viola, deja de distinguir a la que
+    -- de verdad es inimputable - y sin ese filo INV28 vuelve a ser evadible,
+    -- que es literalmente lo que este chequeo previene.
+    -- Emitir un recibo de devolucion es una FEATURE, no un fix de audit.
+    WHERE sf.tipo = 'devuelto'
+      AND (sf.cobrador_id IS NULL OR sf.fecha_devolucion IS NULL)
+  ) t
+)
+
+-- ============================================================================
+-- INV 30: la moneda es el único ángulo del modelo contable cuyo SÍ es por
+-- código y no por datos: los 31.826 pagos son todos NIO, efectivo, vuelto 0.
+-- INV1 verifica la CONSISTENCIA de la ecuación, no la SANIDAD de sus factores:
+-- con tasa=0 pasa a exigir monto_cordobas+vuelto=0, y un pago marcado NIO con
+-- tasa 36 cumple igual si monto_original se guardó 36 veces más chico.
+-- Supuesto NIO => tasa=1 verificado al 100% sobre los 31.826 pagos.
+-- ============================================================================
+,inv30 AS (
+  SELECT 'INV30: moneda y tasa coherentes en pagos vivos (#3)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id), '') AS ejemplo_ids
+  FROM (
+    SELECT p.id
+    FROM public.pagos p
+    WHERE p.anulado = false
+      AND (p.tasa_conversion IS NULL OR p.tasa_conversion <= 0
+           OR p.monto_original IS NULL OR p.monto_original <= 0
+           OR (p.moneda = 'NIO' AND ABS(p.tasa_conversion - 1) > 0.0001))
+  ) t
+)
+
+-- ============================================================================
+-- INV 31: el crédito por excedente (0127) se escribe en DOS tablas desde el
+-- CLIENTE, en la misma writeTransaction, y nadie verifica el puente.
+-- Si entra SOLO el cargo: la cuota se descuenta sin consumir saldo -> el
+-- cliente usa el mismo crédito infinitas veces. Si entra SOLO el saldo: se
+-- consume el crédito sin descontar la cuota. Ninguno rompe INV14 (mira la suma
+-- de los cargos que SÍ llegaron) ni INV15 (mira el neto de saldos_favor).
+-- Prefijo saldo:/cargo: igual que INV10, para saber a qué tabla ir.
+-- ============================================================================
+,inv31 AS (
+  SELECT 'INV31: crédito aplicado <-> cargo credito_aplicado, mismo monto (#4)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(ofensor, ', ' ORDER BY ofensor), '') AS ejemplo_ids
+  FROM (
+    SELECT 'saldo:' || sf.id::text AS ofensor
+    FROM public.saldos_favor sf
+    LEFT JOIN public.cargos_extra ce ON ce.id = sf.cargo_id
+    WHERE sf.tipo = 'aplicado'
+      AND (ce.id IS NULL OR ce.tipo <> 'credito_aplicado' OR ABS(sf.monto - ce.monto) > 0.01)
+    UNION ALL
+    SELECT 'cargo:' || ce.id::text
+    FROM public.cargos_extra ce
+    WHERE ce.tipo = 'credito_aplicado'
+      AND NOT EXISTS (SELECT 1 FROM public.saldos_favor sf
+                       WHERE sf.cargo_id = ce.id AND sf.tipo = 'aplicado')
+  ) t
+)
+
+-- INV32 — LA PREMISA DEL TITULAR DEL DASHBOARD (2026-08-26).
+-- Desde hoy el titular "Cuotas por cobrar"/"En mora", el reporte de Mora y la
+-- tarjeta de Recuperacion NO llevan filtro de estado de contrato: miden toda la
+-- deuda viva. Eso es correcto SOLO mientras cancelar siga condonando, porque un
+-- cancelado con deuda ya no queda escondido detras de un filtro: se SUMA al
+-- numero que el dueno mira primero, y lo infla sin que nadie se entere.
+-- Este invariante es esa premisa, escrita.
+--
+-- Checklist #14 — las dos preguntas, contestadas:
+--   ¿Puede dar >0?  SI, y ya paso: 44 contratos de Mairena (C$102.834,54)
+--   quedaron con deuda viva porque el equipo que aprobo la baja tenia un build
+--   viejo, con la regla anterior a 0259. La condonacion vive en el server desde
+--   0259/0261, pero un `estado='cancelado'` escrito por otra via no dispara el
+--   trigger de condonacion.
+--   ¿Puede satisfacerse? SI: verificado en cero contra vxxz el 2026-08-26.
+--
+-- SI DA >0: correr `condonar_deuda_contrato` sobre los ofensores (es la misma
+-- funcion que usa el trigger). NO anular a mano las cuotas con plata aplicada:
+-- la cascada mataria pagos y recibos (invariante 6b de AGENTS.md).
+--
+-- #13c (el que MIDE y el que ARREGLA comparten predicado): el WHERE de aca es
+-- el del TITULAR restringido a cancelados —misma condicion de estado, mismo
+-- saldo canonico— y coincide con el de `condonar_deuda_contrato`, verificado
+-- contra el cuerpo VIVO de la funcion con `pg_get_functiondef` y no contra un
+-- comentario (#14b). La funcion tiene ademas una rama para una cuota ANULADA
+-- con plata encima: esa NO va aca a proposito, porque una anulada tampoco entra
+-- al titular — no es deuda, es una anomalia de datos, y la cubre INV24.
+--
+-- Poblacion (medida 2026-08-26, para que no sea un chequeo vacio): 253
+-- contratos cancelados con 2.544 cuotas colgando; 0 de ellas vivas. El join
+-- tiene filas de sobra, el discriminador es el estado de la cuota.
+,inv32 AS (
+  SELECT 'INV32: contrato cancelado sin deuda viva (premisa del titular del dashboard)' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(ofensor, ', ' ORDER BY ofensor), '') AS ejemplo_ids
+  FROM (
+    SELECT DISTINCT ct.id::text AS ofensor
+    FROM public.contratos ct
+    JOIN public.cuotas cu ON cu.contrato_id = ct.id
+    WHERE ct.estado = 'cancelado'
+      AND cu.estado IN ('pendiente', 'parcial')
+      AND (cu.monto + COALESCE(cu.cargos_neto, 0) - COALESCE(cu.monto_pagado, 0)) > 0.009
+  ) t
+)
+
+,inv33 AS (
+  -- INV33: `pagos.fecha_cobro` es SIEMPRE el dia de `fecha_pago`.
+  --
+  -- Desde el 2026-09-04 el dashboard filtra el ciclo por esta columna en vez
+  -- de por `date(fecha_pago)` — es lo que permite usar el indice y lo que
+  -- llevo una pasada del Resumen de 9.546 ms a 2.234 ms. Si las dos se
+  -- separan, la plata de un cobro aparece en el ciclo equivocado y NADIE se
+  -- entera: el numero se ve perfectamente razonable, solo esta en otro dia.
+  --
+  -- En el server lo mantiene el trigger `aa_pagos_fecha_cobro` (0273) y el
+  -- cliente la escribe en su INSERT (los triggers no corren en el SQLite del
+  -- dispositivo). Este chequeo existe para el dia que alguien agregue un
+  -- camino que edite `fecha_pago` sin mover las dos.
+  --
+  -- `AT TIME ZONE 'UTC'` y NO 'America/Managua': `fecha_pago` guarda el
+  -- wall-clock local etiquetado como UTC (convencion vieja, ver 0096 y 0214).
+  -- Convertir a Managua movería 26.178 de 34.010 pagos al dia anterior.
+  SELECT 'INV33: pagos.fecha_cobro coincide con el dia de fecha_pago' AS invariante,
+         COUNT(*) AS violaciones,
+         COALESCE(string_agg(id::text, ', ' ORDER BY id::text), '') AS ejemplo_ids
+  FROM public.pagos
+  WHERE fecha_cobro IS DISTINCT FROM (fecha_pago AT TIME ZONE 'UTC')::date
+)
+
 SELECT * FROM inv1
 UNION ALL SELECT * FROM inv2
 UNION ALL SELECT * FROM inv3
@@ -463,4 +875,17 @@ UNION ALL SELECT * FROM inv17
 UNION ALL SELECT * FROM inv18
 UNION ALL SELECT * FROM inv19
 UNION ALL SELECT * FROM inv20
+UNION ALL SELECT * FROM inv21
+UNION ALL SELECT * FROM inv22
+UNION ALL SELECT * FROM inv23
+UNION ALL SELECT * FROM inv24
+UNION ALL SELECT * FROM inv25
+UNION ALL SELECT * FROM inv26
+UNION ALL SELECT * FROM inv27
+UNION ALL SELECT * FROM inv28
+UNION ALL SELECT * FROM inv29
+UNION ALL SELECT * FROM inv30
+UNION ALL SELECT * FROM inv31
+UNION ALL SELECT * FROM inv32
+UNION ALL SELECT * FROM inv33
 ORDER BY invariante;

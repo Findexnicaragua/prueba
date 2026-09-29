@@ -9,6 +9,7 @@ import '../../data/services/impresora/recibo_escpos.dart';
 import '../../data/repositories/settings_repo.dart';
 import '../../data/utils/formatters.dart';
 import '../../data/utils/monto_a_letras.dart';
+import 'recibo_cambio_plan.dart' show lineasCambioPlan;
 import 'recibo_cargos.dart' show cargoEtiquetaRecibo;
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ Future<List<int>> construirReciboTextoEscPos({
   Uint8List? logoBytes,
   List<Map<String, dynamic>> moraRows = const [],
   List<Map<String, dynamic>> cargosRows = const [],
+  List<Map<String, dynamic>> cambioPlanRows = const [],
   required int anchoMm,
   String tildesModo = 'cp850',
   bool aplicarTamanos = false,
@@ -156,9 +158,9 @@ Future<List<int>> construirReciboTextoEscPos({
     if (!b.visible) continue;
     final bloque = esMulti
         ? _bloqueMulti(gen, b, rows, settings, logoBytes, moraRows,
-            cargosRows)
+            cargosRows, cambioPlanRows)
         : _bloqueSingle(gen, b, row ?? rows!.first, settings, logoBytes,
-            moraRows, cargosRows);
+            moraRows, cargosRows, cambioPlanRows);
     if (bloque.isEmpty) continue;
     // Hueco ANTES del bloque = el espaciado ENTRE SEGMENTOS, en líneas de feed.
     // Mismo nivel de config que imagen/PDF pero AMORTIGUADO (reciboEspacioFeed):
@@ -402,6 +404,21 @@ PosStyles _estilo({bool bold = false, PosAlign align = PosAlign.left, bool cp = 
       codeTable: cp ? _tablaPedida() : null,
     );
 
+/// Linea a todo el ancho alineada a la IZQUIERDA. La usa el bloque de cambio de
+/// plan para los renglones que no tienen columna derecha: `_fila` rotula con
+/// ":" y parte en dos columnas, asi que no sirve para texto corrido.
+///
+/// Respeta la sangria de `_filasPlanas` (Windows) para que el bloque quede
+/// alineado con el resto del recibo y no pegado al borde.
+List<int> _izq(Generator gen, String s, {bool bold = false}) {
+  final txt = _filasPlanas ? '${' ' * _indentPlano}$s' : s;
+  if (_estrategia == 'gbk') {
+    return gen.textEncoded(_gbkBytes(txt),
+        styles: _estilo(align: PosAlign.left, bold: bold, cp: false));
+  }
+  return gen.text(_tx(txt), styles: _estilo(align: PosAlign.left, bold: bold));
+}
+
 List<int> _centro(Generator gen, String s, {bool bold = false}) {
   if (_estrategia == 'gbk') {
     return gen.textEncoded(_gbkBytes(s),
@@ -578,6 +595,7 @@ List<int> _bloqueSingle(
   Uint8List? logoBytes,
   List<Map<String, dynamic>> moraRows,
   List<Map<String, dynamic>> cargosRows,
+  List<Map<String, dynamic>> cambioPlanRows,
 ) {
   // El tamaño del diseñador manda también acá: se aplica al bloque entero antes
   // de emitirlo. El logo NO lo usa — su tamaño ya vino resuelto en el raster
@@ -627,16 +645,21 @@ List<int> _bloqueSingle(
       final periodoCuota = DateTime.parse(r['periodo'] as String);
       final esManual = r['plan_nombre'] == null;
       final diaPago = (r['dia_pago'] as num?)?.toInt();
-      final periodoLabel = esManual || diaPago == null
-          ? Fmt.mes(periodoCuota)
-          : Fmt.periodoRecibo(diaPago, periodoCuota);
+      // 0262: el mes congelado manda sobre el calculado (ver recibo_ticket).
+      final periodoLabel = (r['periodo_label'] as String?) ??
+          (esManual || diaPago == null
+              ? Fmt.mes(periodoCuota)
+              : Fmt.periodoRecibo(diaPago, periodoCuota));
+      // 0268: el plan congelado manda sobre el del JOIN (ver recibo_ticket).
+      final planLabel =
+          (r['plan_label'] as String?) ?? (r['plan_nombre'] as String?);
       return _emitirCamposEscpos(b, {
         'servicio.servicio': _fila(
             gen,
             'Servicio',
             esManual
                 ? (r['cuota_descripcion'] as String? ?? 'Cuota manual')
-                : r['plan_nombre'] as String),
+                : (planLabel ?? '')),
         'servicio.ticket': r['ticket_correlativo'] != null
             ? _fila(gen, 'Ticket', '#${r['ticket_correlativo']}')
             : null,
@@ -700,6 +723,8 @@ List<int> _bloqueSingle(
                   : Fmt.cordobas(cobrado + vuelto)),
         ],
       ];
+    case 'cambio_plan':
+      return _cambioPlanBloque(gen, cambioPlanRows, [r]);
     case 'mora':
       return _moraBloque(gen, moraRows);
     case 'pie':
@@ -723,6 +748,7 @@ List<int> _bloqueMulti(
   Uint8List? logoBytes,
   List<Map<String, dynamic>> moraRows,
   List<Map<String, dynamic>> cargosRows,
+  List<Map<String, dynamic>> cambioPlanRows,
 ) {
   final first = rows.first;
   // Ídem single: el tamaño del diseñador aplica al bloque. Los casos que
@@ -735,7 +761,8 @@ List<int> _bloqueMulti(
     case 'titulo':
     case 'pie':
     case 'whatsapp':
-      return _bloqueSingle(gen, b, first, s, logoBytes, moraRows, cargosRows);
+      return _bloqueSingle(
+          gen, b, first, s, logoBytes, moraRows, cargosRows, cambioPlanRows);
     case 'meta':
       final emision = DateTime.parse(first['fecha_pago'] as String);
       final cuerpoMeta = _emitirCamposEscpos(b, {
@@ -810,6 +837,8 @@ List<int> _bloqueMulti(
                   : Fmt.cordobas(totalCobrado + totalVuelto)),
         ],
       ];
+    case 'cambio_plan':
+      return _cambioPlanBloque(gen, cambioPlanRows, rows);
     case 'mora':
       return _moraBloque(gen, moraRows);
     default:
@@ -851,6 +880,40 @@ List<int> _lineasCargos(Generator gen, List<Map<String, dynamic>> cargos,
         '${(c['tipo'] as String? ?? '').startsWith('descuento') ? '-' : '+'}'
         '${Fmt.cordobas(c['monto'] as num? ?? 0)}',
       ));
+    }
+  }
+  return out;
+}
+
+/// Bloque `cambio_plan` para ESC/POS. Mismo contenido que el raster y el PDF:
+/// las lineas las arma `lineasCambioPlan`, aca solo se maquetan.
+///
+/// SIN desglose dia por dia (decision de Ruben, 2026-09-02): eso vive en la
+/// pantalla del que autoriza, no en el papel del cliente.
+List<int> _cambioPlanBloque(
+    Generator gen,
+    List<Map<String, dynamic>> cambioPlanRows,
+    List<Map<String, dynamic>> filas) {
+  if (cambioPlanRows.isEmpty) return const [];
+  final out = <int>[];
+  for (final r in filas) {
+    final lineas = lineasCambioPlan(
+      cambioPlanRows,
+      r['cuota_id'],
+      montoCuota: (r['cuota_monto'] as num?)?.toDouble(),
+    );
+    if (lineas.isEmpty) continue;
+    out.addAll(_centro(gen, 'CAMBIO DE PLAN', bold: true));
+    for (final l in lineas) {
+      if (l.valor == null) {
+        // Linea a todo el ancho: `_fila` rotula con ":" y parte en dos
+        // columnas, asi que no sirve aca.
+        out.addAll(_izq(gen, l.texto, bold: l.destacada));
+      } else if (l.destacada) {
+        out.addAll(_total(gen, l.texto, l.valor!));
+      } else {
+        out.addAll(_fila(gen, l.texto, l.valor!));
+      }
     }
   }
   return out;

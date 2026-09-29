@@ -140,5 +140,44 @@ void main() {
           [for (var i = 0; i < 10; i++) svc.registrar(_rechazo('c$i'))]);
       expect(await svc.listar(), hasLength(10));
     });
+
+    // GARANTÍA DE LA QUE DEPENDE EL CONNECTOR (B1): junta los Future de
+    // `registrar` y los vacía con `Future.wait` ANTES de `transaction
+    // .complete()`, que borra las ops de la cola para siempre. Si esperar esos
+    // Future NO garantizara que el aviso está en disco, el arreglo sería
+    // decorativo: quedaría el recibo en papel y cero rastro del cobro.
+    //
+    // Antes de B1 el connector hacía `unawaited(registrar(...))` y seguía de
+    // largo — la ventana entre el disparo y la escritura quedaba abierta
+    // justo cuando la app puede morir (el cobrador cierra, se queda sin
+    // batería, Android mata el proceso).
+    test('esperar los Future de registrar garantiza que quedaron EN DISCO '
+        'antes de destruir la cola (contrato de B1)', () async {
+      final svc = RechazosSyncService.instance;
+
+      // Como en el connector: se disparan sin await y se juntan.
+      final pendientes = <Future<void>>[
+        for (var i = 0; i < 5; i++) svc.registrar(_rechazo('b1-$i')),
+      ];
+
+      // El vaciado, con el mismo timeout que usa `_vaciarRastros`.
+      await Future.wait(pendientes).timeout(const Duration(seconds: 5));
+
+      // Lectura desde prefs, no desde memoria: es lo que sobreviviría a que la
+      // app se cierre en este instante.
+      final prefs = await SharedPreferences.getInstance();
+      final crudos = prefs.getStringList('rechazos_sync_v1') ?? const [];
+      expect(crudos, hasLength(5),
+          reason: 'los 5 avisos tienen que estar persistidos, no en vuelo');
+
+      final lista = await svc.listar();
+      for (var i = 0; i < 5; i++) {
+        expect(lista.map((r) => r.id), contains('b1-$i'));
+      }
+      // Y el contenido del write rechazado, que es lo único con lo que se
+      // puede reconstruir el cobro a mano.
+      expect(lista.first.data, isNotNull);
+      expect(lista.first.data!['monto_cordobas'], 500);
+    });
   });
 }

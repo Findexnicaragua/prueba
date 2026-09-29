@@ -397,158 +397,83 @@ class _CuotasSectionState extends ConsumerState<_CuotasSection> {
             if (ok != true) return;
             final me = ref.read(cobradorActualProvider).valueOrNull;
             if (me == null) return; // sin actor no se atribuye la baja
-            await repo.quitarCargo(
-              cargoId: a['id'] as String,
-              aplicadoPorId: me.id,
-            );
+            // El repo RECHAZA quitar un cargo que dejaría la cuota
+            // sobrepagada (guard de INV4). Sin este catch la excepción se
+            // perdía y el tachito parecía no hacer nada: el usuario no se
+            // enteraba de por qué, ni de qué tenía que hacer en su lugar.
+            try {
+              await repo.quitarCargo(
+                cargoId: a['id'] as String,
+                aplicadoPorId: me.id,
+              );
+            } catch (e) {
+              if (sheetCtx.mounted) {
+                ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        e.toString().replaceFirst('Exception: ', '')),
+                    duration: const Duration(seconds: 6),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+              return;
+            }
             if (sheetCtx.mounted) recargar();
           }
 
-          // Etiqueta + ícono según tipo/origen (misma semántica que el
-          // recibo y el historial).
-          (String, IconData) etiquetaDe(Map<String, dynamic> a) {
-            final tipo = a['tipo'] as String? ?? '';
-            final origen = a['origen'] as String? ?? 'cobro';
-            if (tipo == 'reconexion') return ('Reconexión', Icons.power);
-            if (tipo == 'otro') return ('Cargo', Icons.add_circle_outline);
-            return switch (origen) {
-              'promo' => ('Promo', Icons.local_offer),
-              'ajuste' => ('Ajuste', Icons.percent),
-              'liquidacion' => ('Cancelación', Icons.cancel_outlined),
-              'credito' => ('Crédito aplicado', Icons.savings_outlined),
-              _ => ('Descuento del cobro', Icons.discount),
-            };
-          }
-
-          final scheme = Theme.of(sheetCtx).colorScheme;
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Descuentos y cargos de la cuota',
-                      style: Theme.of(sheetCtx).textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Los aplica el admin con motivo y quedan en el '
-                    'historial. Los nacidos de un cobro se muestran como '
-                    'referencia: se revierten anulando el pago.',
-                    style: Theme.of(sheetCtx)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: scheme.outline),
-                  ),
-                  const SizedBox(height: 8),
-                  FutureBuilder<List<Map<String, dynamic>>>(
-                    future: futuro,
-                    builder: (_, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      final items = snap.data ?? const [];
-                      if (items.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text('Sin descuentos ni cargos.',
-                              style: TextStyle(color: scheme.outline)),
-                        );
-                      }
-                      return Column(
+          // LA HOJA ES COMPARTIDA con la del cobro (`HojaCargosCuota`).
+          //
+          // Antes acá vivía su propia lista, con su propia etiqueta, su propio
+          // orden de renglones y su propio criterio de qué se puede quitar.
+          // Divergió de la del cobro —la del contrato repetía la descripción y
+          // no decía los días; la del cobro decía los días y no decía quién lo
+          // aplicó— y el 2026-09-02 se arregló una sola. Con un widget único
+          // eso no puede volver a pasar.
+          //
+          // Lo único propio de este lado es el PIE: acá sí se gestiona.
+          return FutureBuilder<List<Map<String, dynamic>>>(
+            future: futuro,
+            builder: (_, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              return HojaCargosCuota(
+                cargos: snap.data ?? const [],
+                onQuitar: quitar,
+                pie: !puedeAplicar
+                    ? null
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          for (final a in items)
-                            Builder(builder: (_) {
-                              final (etiqueta, icono) = etiquetaDe(a);
-                              final esDesc = (a['tipo'] as String? ?? '')
-                                  .startsWith('descuento');
-                              // origen='credito' NO es quitable por basura: se
-                              // revierte desde el saldo a favor (crítico $).
-                              final quitable = a['pago_id'] == null &&
-                                  a['origen'] != 'liquidacion' &&
-                                  a['origen'] != 'credito';
-                              return ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(icono,
-                                    size: 20, color: scheme.primary),
-                                title: Text(
-                                  '$etiqueta '
-                                  '${esDesc ? '−' : '+'}${Fmt.cordobas((a['monto'] as num).toDouble())}'
-                                  '${a['porcentaje'] != null ? ' (${(a['porcentaje'] as num).toStringAsFixed(0)}%)' : ''}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600),
-                                ),
-                                subtitle: Text(
-                                  '${a['descripcion'] ?? ''}\n'
-                                  '${_fechaNiCorta(a['ocurrido_en'] as String?)}'
-                                  '${a['aplicado_por_nombre'] != null ? ' · ${a['aplicado_por_nombre']}' : ''}',
-                                ),
-                                isThreeLine: true,
-                                trailing: quitable
-                                    ? IconButton(
-                                        icon:
-                                            const Icon(Icons.delete_outline),
-                                        tooltip: 'Quitar',
-                                        onPressed: () => quitar(a),
-                                      )
-                                    : Tooltip(
-                                        message: a['origen'] == 'credito'
-                                            ? 'Crédito a favor: se revierte '
-                                                'desde el saldo del cliente'
-                                            : 'Nació de un cobro: se revierte '
-                                                'anulando el pago',
-                                        child: Icon(Icons.lock_outline,
-                                            size: 18, color: scheme.outline),
-                                      ),
-                              );
-                            }),
+                          OutlinedButton.icon(
+                            icon:
+                                const Icon(Icons.add_circle_outline, size: 18),
+                            label: const Text('Cargo extra'),
+                            onPressed: aplicarCargoExtra,
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            icon: const Icon(Icons.percent, size: 18),
+                            label: const Text('Aplicar descuento'),
+                            onPressed: aplicarDescuento,
+                          ),
                         ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  if (puedeAplicar)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.add_circle_outline,
-                              size: 18),
-                          label: const Text('Cargo extra'),
-                          onPressed: aplicarCargoExtra,
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton.icon(
-                          icon: const Icon(Icons.percent, size: 18),
-                          label: const Text('Aplicar descuento'),
-                          onPressed: aplicarDescuento,
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
+                      ),
+              );
+            },
           );
         },
       ),
     );
   }
 
-  /// `ocurrido_en` viene en UTC; se muestra en hora Nicaragua (UTC−6 sin
-  /// DST). No usar Fmt.fechaHoraNi (es para timestamps local-naive).
-  static String _fechaNiCorta(String? isoUtc) {
-    if (isoUtc == null) return '';
-    final dt = DateTime.tryParse(isoUtc);
-    if (dt == null) return isoUtc;
-    final ni = dt.toUtc().subtract(const Duration(hours: 6));
-    String dos(int v) => v.toString().padLeft(2, '0');
-    return '${dos(ni.day)}/${dos(ni.month)}/${ni.year} '
-        '${dos(ni.hour)}:${dos(ni.minute)}';
-  }
+  // `_fechaNiCorta` se fue con la hoja compartida (2026-09-02): el formateo
+  // de la fecha ahora vive en `HojaCargosCuota`, para que las dos pantallas
+  // la muestren igual. Estaba duplicado y con otro formato en cada una.
 
   // Abre el historial de cambios de una cuota en un bottom sheet
   // (mismo patrón que `_showChangeLog` del contrato).

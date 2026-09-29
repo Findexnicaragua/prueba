@@ -16,8 +16,10 @@
 >    **(b)** el fix en UNA transacción (`BEGIN; ... COMMIT;`) con el
 >    `tenant_id` SIEMPRE en los WHERE →
 >    **(c)** verificación (SELECT post-fix + correr
->    `supabase/tests/invariantes_dinero.sql` → TODAS las filas (hoy 17,
->    INV1-INV17) en `violaciones = 0` — no hardcodees el conteo) →
+>    `supabase/tests/invariantes_dinero.sql` → **TODAS las filas que devuelva
+>    el archivo** en `violaciones = 0` (NO hardcodees el rango: eran 17, después
+>    20, hoy 31 — un rango viejo deja chequeos afuera sin que se note, y entre
+>    los últimos está el ÚNICO del oldest-first) →
 >    **(d)** efectos colaterales esperados (qué recalculan los triggers,
 >    qué va a ver el usuario en la app tras el próximo sync).
 > 4. Ante CUALQUIER duda sobre el alcance, pedí el SELECT de diagnóstico
@@ -85,8 +87,14 @@ quien corre SQL en el server:
    no es bug. Arreglada la fila fuente, todo cuadra solo en todas las
    pantallas.
 10. **Después de TODO fix de dinero:** correr
-    `supabase/tests/invariantes_dinero.sql` → TODAS las filas (hoy 17,
-    INV1-INV17) en `violaciones = 0`. Es no-negociable.
+    `supabase/tests/invariantes_dinero.sql` → **TODAS las filas que devuelva
+    el archivo** en `violaciones = 0`. Es no-negociable. NO cites un rango
+    fijo: el conteo creció 17 → 20 → 31 y cada vez esta guía quedó vieja.
+    **Baseline aceptado hoy** (la regla real es "tu fix no puede AUMENTAR
+    ningún contador"): `INV11 = 3` · `INV19 = 7`. Los dos están documentados
+    en BITACORA. Cualquier otro contador en rojo es un problema real, no
+    baseline — y se cierra por el camino de Operaciones (preview + motivo +
+    respaldo), no por SQL a mano.
 
 ## §3. Mapa de acoplamiento — "si toco X, ¿qué arrastra?"
 
@@ -153,6 +161,14 @@ re-asignación automática en conflicto (0116).
 (`setting_bool`/`setting_number`) — un INSERT de ajuste por SQL respeta el
 guard: exige `cobranza.ajustes_habilitados=true`, motivo y topes.
 
+> ⚠️ **LÍNEA BASE (verificada 2026-08-22): hoy NO todas dan 0.** `INV11 = 3`
+> (contratos fijos reactivados con meses anulados por la limpieza del cuaderno) e
+> `INV19 = 7` (C$29.018,53 de clientes desactivados con deuda, anteriores al guard
+> 0220) están **aceptados por decisión** y documentados en BITACORA. La regla real
+> es: **tu fix no puede AUMENTAR ningún contador ni agregar invariantes nuevos a la
+> lista.** Corré el script ANTES de tocar nada y guardá el resultado — comparás
+> contra eso, no contra un cero absoluto.
+
 ## §4. Triggers que corren SOLOS con tu SQL (tabla de referencia)
 
 | Tocás | Trigger | Efecto automático |
@@ -172,6 +188,31 @@ guard: exige `cobranza.ajustes_habilitados=true`, motivo y topes.
 | `inv_seriales` U | guard transiciones (0118) | rechaza instalar sin venir de stock |
 | `tickets` I | correlativo (0116) | re-asigna en conflicto |
 | `cuotas.monto` U | **NINGUNO recalcula estado** | ⚠️ ver T-CUOTA-MONTO |
+| **`contratos.estado` U** | **`z_contratos_anular_cuotas_futuras` (0234)** | 🔴 **ANULA EN MASA** las cuotas de vencimiento futuro del contrato al pasar a `cancelado`/`suspendido`. Un simple `UPDATE contratos SET estado=...` te borra deuda: tomá el snapshot ANTES. Corre AFTER, así que ya no lo podés frenar |
+| `contratos` U (precio/plan) | `trg_contratos_actualizar_cuotas_futuras` (R22) | re-valúa las cuotas FUTURAS al precio nuevo; las pasadas conservan su snapshot |
+| `contratos` INSERT | `trg_contratos_generar_cuotas_iniciales` | genera el juego inicial de cuotas |
+| `pagos` INSERT | **`trg_pagos_guard_sobrepago` (0218 + **0264**)** | si el pago excede el total de la cuota lo manda a **cuarentena** (`en_revision=true`) y sale de todas las métricas — **SIEMPRE, desde 0264**. Ojo si seguís una receta vieja: hasta el 2026-08-29 el gemelo exacto (mismo monto y mismo día) se AUTO-ANULABA; esa rama ya no existe, así que un INSERT de reparación que antes desaparecía solo ahora te queda esperando decisión en la bandeja |
+| `pagos` U | **`trg_pagos_guard_sobrepago_update` (0240)** | lo mismo al EDITAR un pago: puede dejarlo `en_revision` sin que lo pidas |
+| `cuotas` U (cualquiera) | **`cuotas_forzar_derivados_trg`** | 🔴 BEFORE UPDATE **sin WHEN**: pisa `monto_pagado`, `cargos_neto` y `estado` con los valores derivados. **Escribirlos a mano NO sirve de nada** — se recalculan solos |
+| `clientes.activo→false` | **`trg_clientes_guard_desactivar` (0220)** | rechaza desactivar un cliente que tenga deuda viva. Primero anulás, después desactivás |
+| `recibos` INSERT | `recibos_asignar_correlativo_trg` (0215) | 🔴 **PISA** `correlativo` y `numero_completo` con el contador `recibo_correlativos`. El valor que mandes se ignora; si la fila ya existe, devuelve el suyo (idempotente) |
+| `recibos` INSERT | `trg_recibos_guard_pago_anulado` (0240) | un recibo de un pago anulado nace anulado |
+| `cargos_extra` INSERT | `trg_cargos_descuento_pago_anulado` | rechaza un descuento colgado de un pago anulado |
+| `cuotas.estado`→pagada/no | `trg_resolver_notificacion_al_pagar` / `trg_reabrir_notificacion_al_anular_pago` | abren y cierran solas las notificaciones de cobranza |
+| `clientes.cobrador_id` U | `trg_propagate_cobrador_id_clientes` | propaga el cobrador a contratos y cuotas (dato ORGANIZATIVO; no toca quién cobró) |
+| `clientes`/`contratos` U | `trg_*_a_solo_notas` / `*_codigo_inmutable` | limitan qué campos puede tocar cada rol y congelan el código |
+
+> **Esta tabla envejece sola.** Regenerá la lista real antes de confiar en ella:
+> ```sql
+> select t.tgrelid::regclass as tabla, t.tgname, p.proname
+>   from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+>  where not t.tgisinternal and t.tgenabled = 'O'
+>    and t.tgrelid::regclass::text in
+>        ('pagos','cuotas','contratos','cargos_extra','clientes','recibos','saldos_favor')
+>  order by 1, 2;
+> ```
+> Al 2026-08-22 son **42** sobre las tablas de dinero. Si te da otro número, la
+> tabla de arriba quedó vieja: actualizala antes de seguir.
 
 ## §5. RECETARIO de casos comunes
 
@@ -214,7 +255,7 @@ Los datos del descuento borrado solo pueden reconstruirse desde:
 Si no hay rastro en ninguno, reconstruí el monto desde el recibo impreso /
 lo que reporte el cobrador y re-insertá el cargo con la receta T5.
 **Verificación:** la cuota volvió a `pagada`/`parcial` con `monto_pagado`
-correcto + invariantes TODAS en 0 (INV1-INV17).
+correcto + invariantes TODAS en su baseline (ver §0, punto 10).
 
 ### T2 — Des-anular una CUOTA anulada por error
 
@@ -334,8 +375,8 @@ writes NO subidos se pierden: confirmar con el usuario antes).
 ## §6. Verificación estándar post-fix (SIEMPRE)
 
 1. SELECT de las filas tocadas + sus dependientes (cuota del pago, etc.).
-2. `supabase/tests/invariantes_dinero.sql` → **TODAS las filas (hoy 17,
-   INV1-INV17), violaciones = 0**.
+2. `supabase/tests/invariantes_dinero.sql` → **TODAS las filas que devuelva
+   el archivo en su baseline** (ver §0, punto 10). Sin rango fijo.
 3. **No esperes rastro automático:** `audit_log` se eliminó (0140) y
    `op_log` lo escribe solo el CLIENTE — tu fix por SQL no queda
    registrado en ningún lado. El rastro ES tu reporte: dejá el SQL

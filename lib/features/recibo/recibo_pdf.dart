@@ -11,6 +11,7 @@ import '../../data/utils/logo_monocromo.dart';
 import '../../data/utils/papel_termica.dart';
 import '../../data/models/pago.dart';
 import '../shared/pdf/pdf_theme.dart';
+import 'recibo_cambio_plan.dart' show lineasCambioPlan;
 import 'recibo_cargos.dart' show cargoEtiquetaRecibo;
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,7 @@ Future<pw.Document> buildReciboPdf({
   Uint8List? logoBytes,
   List<Map<String, dynamic>> moraRows = const [],
   List<Map<String, dynamic>> cargosRows = const [],
+  List<Map<String, dynamic>> cambioPlanRows = const [],
 }) async {
   final doc = pw.Document();
   final theme = await pdfTheme();
@@ -65,7 +67,8 @@ Future<pw.Document> buildReciboPdf({
   for (final b in settings.reciboLayout) {
     if (!b.visible) continue;
     final contenido = _pdfBloqueSingle(b, _pdfScale(b.size), row, settings,
-        logoBytes: logoBytes, moraRows: moraRows, cargosRows: cargosRows);
+        logoBytes: logoBytes, moraRows: moraRows, cargosRows: cargosRows,
+        cambioPlanRows: cambioPlanRows);
     if (contenido.isEmpty) continue;
     if (children.isNotEmpty) {
       // Hueco ANTES del bloque = espaciado entre segmentos (no lineal, amplio
@@ -182,6 +185,7 @@ List<pw.Widget> _pdfBloqueSingle(
   Uint8List? logoBytes,
   List<Map<String, dynamic>> moraRows = const [],
   List<Map<String, dynamic>> cargosRows = const [],
+  List<Map<String, dynamic>> cambioPlanRows = const [],
 }) {
   switch (b.id) {
     case 'logo':
@@ -246,15 +250,22 @@ List<pw.Widget> _pdfBloqueSingle(
       final periodoCuota = DateTime.parse(row['periodo'] as String);
       final esManual = row['plan_nombre'] == null;
       final diaPago = (row['dia_pago'] as num?)?.toInt();
-      final periodoLabel = esManual || diaPago == null
-          ? Fmt.mes(periodoCuota)
-          : Fmt.periodoRecibo(diaPago, periodoCuota);
+      // 0262: el mes congelado manda sobre el calculado (ver recibo_ticket).
+      final periodoLabel = (row['periodo_label'] as String?) ??
+          (esManual || diaPago == null
+              ? Fmt.mes(periodoCuota)
+              : Fmt.periodoRecibo(diaPago, periodoCuota));
+      // 0268: el plan congelado manda sobre el del JOIN, igual que el mes.
+      // Sin esto, un cambio de plan reescribía el plan de TODOS los recibos
+      // viejos del contrato: la reimpresión de junio decía el plan de agosto.
+      final planLabel =
+          (row['plan_label'] as String?) ?? (row['plan_nombre'] as String?);
       return _pdfEmitirCampos(b, {
         'servicio.servicio': _pdfRow(
             'Servicio',
             esManual
                 ? (row['cuota_descripcion'] as String? ?? 'Cuota manual')
-                : row['plan_nombre'] as String,
+                : (planLabel ?? ''),
             k),
         'servicio.ticket': row['ticket_correlativo'] != null
             ? _pdfRow('Ticket', '#${row['ticket_correlativo']}', k)
@@ -340,6 +351,8 @@ List<pw.Widget> _pdfBloqueSingle(
         // VUELTO + PAGADO si hubo vuelto.
         ..._vueltoIfNeeded(row, k),
       ];
+    case 'cambio_plan':
+      return _pdfBloqueCambioPlan(cambioPlanRows, [row], k);
     case 'mora':
       // Detalle de mora del contrato (ya filtrado por el call-site). Resumen
       // informativo de lo que el cliente aún debe — no toca la matemática del
@@ -378,6 +391,7 @@ Future<pw.Document> buildMultiReciboPdf({
   Uint8List? logoBytes,
   List<Map<String, dynamic>> moraRows = const [],
   List<Map<String, dynamic>> cargosRows = const [],
+  List<Map<String, dynamic>> cambioPlanRows = const [],
 }) async {
   final doc = pw.Document();
   final theme = await pdfTheme();
@@ -391,7 +405,8 @@ Future<pw.Document> buildMultiReciboPdf({
   for (final b in settings.reciboLayout) {
     if (!b.visible) continue;
     final contenido = _pdfBloqueMulti(b, _pdfScale(b.size), rows, settings,
-        logoBytes: logoBytes, moraRows: moraRows, cargosRows: cargosRows);
+        logoBytes: logoBytes, moraRows: moraRows, cargosRows: cargosRows,
+        cambioPlanRows: cambioPlanRows);
     if (contenido.isEmpty) continue;
     if (children.isNotEmpty) {
       // Hueco ANTES del bloque = espaciado entre segmentos (px × 0.6 pt).
@@ -432,6 +447,7 @@ List<pw.Widget> _pdfBloqueMulti(
   Uint8List? logoBytes,
   List<Map<String, dynamic>> moraRows = const [],
   List<Map<String, dynamic>> cargosRows = const [],
+  List<Map<String, dynamic>> cambioPlanRows = const [],
 }) {
   final first = rows.first;
   switch (b.id) {
@@ -618,6 +634,8 @@ List<pw.Widget> _pdfBloqueMulti(
           ),
         ],
       ];
+    case 'cambio_plan':
+      return _pdfBloqueCambioPlan(cambioPlanRows, rows, k);
     case 'mora':
       // Detalle de mora del contrato (ya filtrado por el call-site, excluidas
       // las cuotas del grupo). Resumen informativo — no toca el dinero.
@@ -644,6 +662,55 @@ List<pw.Widget> _pdfBloqueMulti(
 /// Bloque `mora` en PDF (compartido single + multi): título "EN MORA", una
 /// línea por mes (`Fmt.mes` ↔ `Fmt.cordobas(saldo)`), y "TOTAL MORA" con la
 /// suma. `moraRows` ya viene filtrado por el call-site; vacío → [].
+/// Bloque `cambio_plan` del PDF. Mismo contenido que el ticket y el ESC/POS:
+/// las lineas las arma `lineasCambioPlan`, aca solo se maquetan.
+List<pw.Widget> _pdfBloqueCambioPlan(
+    List<Map<String, dynamic>> cambioPlanRows,
+    List<Map<String, dynamic>> filas,
+    double k) {
+  if (cambioPlanRows.isEmpty) return const [];
+  final out = <pw.Widget>[];
+  for (final r in filas) {
+    final lineas = lineasCambioPlan(
+      cambioPlanRows,
+      r['cuota_id'],
+      montoCuota: (r['cuota_monto'] as num?)?.toDouble(),
+    );
+    if (lineas.isEmpty) continue;
+    if (out.isNotEmpty) out.add(pw.SizedBox(height: 4));
+    out.add(pw.Text('CAMBIO DE PLAN',
+        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9 * k),
+        textAlign: pw.TextAlign.center));
+    out.add(pw.SizedBox(height: 2));
+    for (final l in lineas) {
+      if (l.valor == null) {
+        // Linea a todo el ancho: `_pdfRow` rotula con ":" y parte en dos
+        // columnas, asi que no sirve para texto corrido.
+        out.add(pw.Text(l.texto,
+            style: pw.TextStyle(
+                fontSize: 9 * k,
+                fontWeight: l.destacada ? pw.FontWeight.bold : null)));
+      } else {
+        out.add(pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(l.texto,
+                style: pw.TextStyle(
+                    fontSize: 9 * k,
+                    fontWeight: l.destacada ? pw.FontWeight.bold : null)),
+            pw.Text(l.valor!,
+                style: pw.TextStyle(
+                    fontSize: 9 * k,
+                    fontWeight:
+                        l.destacada ? pw.FontWeight.bold : pw.FontWeight.bold)),
+          ],
+        ));
+      }
+    }
+  }
+  return out;
+}
+
 List<pw.Widget> _pdfBloqueMoraRows(
     List<Map<String, dynamic>> moraRows, double k) {
   if (moraRows.isEmpty) return const [];

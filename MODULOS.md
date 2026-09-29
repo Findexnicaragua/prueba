@@ -34,6 +34,7 @@ roles.
 | [Mora y Suspensiones](#mora-y-suspensiones) | Cuotas vencidas y el ciclo suspender/reactivar/cancelar | siempre · por rol |
 | [Cargos extra (ajustes / descuentos)](#cargos-extra-ajustes--descuentos) | Sumar cargos o restar descuentos al saldo de una cuota | siempre · descuentos gateados |
 | [Saldo a favor (crédito por excedente)](#saldo-a-favor-crédito-por-excedente) | La plata pagada de más: se acredita y se aplica como descuento, sin tocar caja | siempre · por rol |
+| [Dashboard / Resumen](#dashboard--resumen-kpis-y-métricas-de-cartera) | Tablero ejecutivo: KPIs de caja, cobertura de cobranza, mora de ciclos y ranking | siempre · por rol (admin/super) |
 
 ### Campo y operación
 
@@ -92,11 +93,13 @@ cliente no hay contrato ni cobro.
 
 **Features:**
 - Lista paginada (scroll infinito ~60/página + contador COUNT real del filtro) con buscador case-insensitive plegado a ASCII (`foldBusqueda`) y filtros por cobrador y zona.
+- **Filtro por plan** (2026-09-03), agrupado por tipo de servicio (TV / Internet / Combo) con buscador. Un plan aparece si algún contrato lo usa —el `activo` del plan no participa— y cada opción muestra precio y cantidad de clientes, porque los nombres se repiten (en Mairena hay SIETE planes llamados "CATV"). Incluye la opción **"Sin plan"** para los clientes sin contrato activo.
 - Alta y edición de la ficha: datos personales, código, cédula, comunidad/ubicación, puerto de red, `cobrador_id` ORGANIZATIVO (puede ser NULL = admin-managed).
 - Detalle con pestañas: Detalle, Contratos (abre el detalle del contrato), Equipos instalados, Visitas (pestaña opcional gateada por `cobranza.registrar_visitas`).
 - Etiquetas: catálogo per-tenant que admin/admin_cobranza asignan al cliente desde su detalle; chips visibles en lista, mapa y cobro.
 - Historial op_log del cliente (bottom sheet) y PDF de historial; acciones externas (llamar / WhatsApp / mapa).
 - El cobrador VE y cobra todos los clientes del tenant (RLS tenant-wide); `cobrador_id` solo define el foco de ruta/listado, no la visibilidad.
+- **Desactivar = terminar la relación (regla del 2026-08-26).** Apagar el interruptor de estado CANCELA los contratos vivos del cliente —activos y suspendidos— y CONDONA su deuda; solo el histórico pagado sobrevive. Lo hace el server (migración `0260`). Como mueve plata, **pide aprobación del admin**: el `admin` ejecuta y el resto solicita, y quien decide ve el monto que se condona más el motivo obligatorio. **Reactivar sigue siendo directo.** Si el cliente se va debiendo y se le va a seguir cobrando, la acción NO es desactivar: es suspender el contrato.
 
 **Ciclo de uso:** El admin da de alta al cliente (datos + comunidad + cobrador
 organizativo) y, opcionalmente, le pega una o varias etiquetas del catálogo.
@@ -143,7 +146,8 @@ el contenedor del que cuelga toda la plata.
 - Alta de contrato: plan, precio mensual, `dia_pago`, fijo (N meses) o indefinido; al insertar, el trigger `contratos_generar_cuotas_iniciales` genera las cuotas.
 - Detalle con tarjeta de header (estado, plan, total/recaudado/pendiente) + pestañas de cuotas, pagos y documento.
 - Total contrato MOSTRADO = `Σ cuotas vivas` (monto + cargos de las no-anuladas = `recaudado + pendiente`), **NO** `precio_mensual × meses` (invariante #5 redefinido por R22 — robusto al cambio de plan; las cuotas son snapshots del precio de su momento). El nominal `precio×meses` queda solo para detectar fijo vs indefinido y como hint "ajustado" por CONTEO de cuotas. `pendiente` = suma de saldos canónicos cobrables. Indefinidos: solo total recaudado, sin pendiente.
-- Acciones de ciclo desde el detalle: Cambiar fecha de pago (cobra el "puente" de días y re-fecha futuras), Suspender, Reactivar, Cancelar (permanente).
+- Acciones de ciclo desde el detalle: Cambiar fecha de pago (cobra el "puente" de días y re-fecha futuras), **Cambiar plan**, Suspender, Reactivar, Cancelar (permanente).
+- **Cambiar plan** (R22): mantiene el contrato —su código, su vigencia, su día de pago y su cantidad de cuotas— y re-valúa al precio nuevo las cuotas **pendientes cuyo servicio todavía no empezó**. Dos modos: **próximo ciclo** (el default, no mueve un peso) o **hoy con prorrateo**, que ajusta los días no servidos del ciclo en curso — si sube cobra la diferencia como cargo sobre la cuota en curso, si baja acredita saldo a favor y la cuota **no** baja. Es la única acción del ciclo que puede CREAR plata cobrable. Detalle y bordes: `docs/reglas/cambio-plan.md`.
 - Gestión de cargos/descuentos del contrato (`CargoDialog`/`DescuentoDialog`) y aplicación de crédito a favor.
 - Historial op_log del contrato; PDF de deuda en suspensión.
 
@@ -169,8 +173,18 @@ Detalle cliente -> Crear contrato (plan + dia_pago + meses)
 
 **Gating:** Siempre activo (núcleo).
 Crear/editar/suspender/reactivar/cancelar/cambiar-fecha = admin/admin_cobranza.
-**Cambiar plan = solo admin** (no admin_cobranza — es gestión administrativa,
-Fase 2 roles 2026-07-19). Header del contrato: admin_cobranza NO ve "Recaudado"
+**Cambiar plan**: lo VEN admin, admin_cobranza, admin_usuarios y super_admin
+(`puedeVerCambiarPlanProvider`); quedan afuera `lectura`, `cobrador` y
+`tecnico`. Gate = setting `cobranza.cambio_plan_habilitado` (toggle
+super_admin, 0151) + contrato activo + `dia_pago` y `precio_mensual` no nulos
++ no impersonando. **Quién lo EJECUTA se decide por rol**:
+`requiereAprobacionPara` da false solo para admin y super_admin —ellos lo
+ejecutan— y true para el resto, que lo SOLICITA; ahí el botón se rotula
+"Solicitar cambio de plan" y cae en `/admin/solicitudes` (tipo `cambiar_plan`,
+0226). `admin_usuarios` se sumó el 2026-08-24: sin ese botón su única salida
+era cancelar y recrear el contrato, que parte al cliente en dos.
+*(Hasta el 2026-09-02 esta línea decía "solo admin" y era falsa desde agosto;
+contradecía a `PRODUCTO.md`, que es la referencia canónica de permisos.)* Header del contrato: admin_cobranza NO ve "Recaudado"
 (solo Total + Pendiente). El cobrador con foco en el cliente puede "Cambiar
 fecha" de los suyos (gateado + trigger owner-scoped).
 
@@ -192,6 +206,7 @@ directo al cobro. Es la pantalla que dice "qué hay que cobrar hoy".
 **Features:**
 - Pantalla "Por cobrar": una fila por contrato = cuota más vieja pendiente (igual que el pin del mapa), agregada en SQL (`cobros_query.dart`, escala a miles).
 - Chips de estado (todas/vencidas/gracia/hoy/próxima) y, en adminMode, filtros dropdown por cobrador y por zona.
+- **Filtro por plan** (2026-09-03): filtra por el plan del contrato de CADA cuota, no del cliente. Aplica también a **"Fuera de ruta"**, igual que cobrador y zona. La opción "Sin plan" son los cargos manuales sueltos (cuotas sin contrato).
 - Buscador client-side con debounce, plegado a ASCII (`foldBusqueda`) para matchear nombres con ñ/acentos.
 - Botón "Pagar" abre `/cobro` de esa cuota; tocar la fila abre el detalle del cliente.
 - Saldo canónico de cada cuota = `monto + cargos_neto − monto_pagado`; idéntico en toda pantalla (invariante #10).
@@ -243,6 +258,21 @@ verdad la recalcula un trigger server al sincronizar.
 - Panel `/admin/pagos` (opcional, gate por tenant): listado con anular y editar (editar bloqueado si tiene vuelto o es USD).
 - Anular preserva el pago (`anulado=1`) y restaura la cuota vía trigger; QUIÉN cobró = `pagos.cobrador_id` (NOT NULL, alimenta arqueo y "por cobrador").
 - Escribe op_log dentro del `writeTransaction`; al confirmar va directo al recibo.
+- **Circuito de integridad del cobro (0236/0237, incidente Derling):** un cobro que el server
+  rechaza al sincronizar ya no muere en silencio — el aviso sube a `sync_rechazos` (por fuera de
+  la cola de PowerSync) y aparece en la bandeja "Cobros a revisar" del admin: sección "Rechazados
+  al sincronizar" (botón **Registrar**: RPC definer re-inserta el pago, el guard 0218 decide
+  cuenta/cuarentena/duplicado, el recibo conserva su número IMPRESO y queda op_log
+  `cobro_recuperado`) y sección "Talonario" (`recibos_huecos()`, huecos reales del correlativo).
+- **Cuarentena de duplicados y resolución en "Cobros a revisar":** cuando dos cobros colisionan o
+  sobrepasan el total de la cuota, el server pone el pago en cuarentena (`en_revision=1`, con
+  `revision_motivo`). No cuenta en recaudado ni en cobertura hasta que el admin decida. En
+  `/admin/cobros-a-revisar` (`cobros_a_revisar_screen.dart`), el admin compara recibos, montos y
+  cobradores. Al elegir *"Este es el verdadero"* (anulando el duplicado vía `elegirCobroVerdadero()`)
+  o al anular manualmente el último pago en revisión de esa cuota, la hoja modal se cierra sola
+  automáticamente (`Navigator.pop()`) regresando al listado.
+- Banner de cola atascada (todo rol que cobra): avisa si hay cambios sin subir >30 min CON
+  conexión — la falla que el server no puede ver.
 
 **Ciclo de uso:** Desde "Por cobrar" (botón Pagar) el cobrador abre el cobro de
 la cuota más vieja. Ingresa lo que el cliente entrega y la moneda; si paga de
@@ -301,6 +331,7 @@ que el cobrador entrega en campo.
 - **Tildes (acentos)** por dispositivo: Sin tildes (transliterado — default en PC, infalible y alinea perfecto), Acentos (alfabeto nativo de las térmicas chinas, ej. 3nStar), Estándar y Occidental, para las impresoras que devuelven garabatos con las tablas occidentales.
 - Layout configurable: bloques/zonas/tamaños vía `recibo.layout`; título, pie libre, formato mm, mostrar cédula/adeudado, mostrar descuentos y motivo.
 - Bloque "EN MORA" que lista cuotas vencidas rotuladas con el mes simbólico de servicio (`recibo_mora.dart`).
+- Bloque **"CAMBIO DE PLAN"** (`recibo_cambio_plan.dart`): cuando la cuota viene de un cambio de plan, el recibo explica la transición —de qué plan a cuál con sus precios, los días y el rango, el total del mes y la cuota desde el siguiente— para que el cliente entienda por qué ESE recibo vale distinto; en la bajada le avisa el crédito a favor, que hasta ahora no aparecía en ningún comprobante. **Nace VISIBLE por defecto**, a diferencia de `cuota` (el desglose de montos), que nace oculto: explica un cargo que el cliente no puede deducir del total. En un recibo normal no ocupa ni una línea. **No** imprime el desglose día por día — eso vive solo en la pantalla del que autoriza. En el ticket del cobrador el caso de BAJADA no se dibuja, porque el bucket `por_cobrador` no sincroniza `saldos_favor`.
 - Desglose de cargos/descuentos del bloque cuota (`recibo_cargos.dart`) con sub-toggles del diseñador.
 - Branding de la empresa (nombre/dirección/teléfono/RUC/logo) desde settings.
 - El recibo captura quién cobró de `recibos.cobrador_id` (NOT NULL).
@@ -347,6 +378,7 @@ suyos. Lo dispara cualquier cobro (cobrador/admin/admin_cobranza).
 `lib/features/recibo/recibo_pdf.dart`,
 `lib/features/recibo/recibo_mora.dart`,
 `lib/features/recibo/recibo_cargos.dart`,
+`lib/features/recibo/recibo_cambio_plan.dart`,
 `lib/features/impresora/impresora_setup_screen.dart` (Bluetooth),
 `lib/features/impresora/impresora_sistema_setup.dart` (PC: modos, ajustes,
 regla de ancho, tildes),
@@ -369,7 +401,7 @@ servicio.
 - Badge "Vencida Nd" = días desde el venc − `dias_gracia` (setting `cobranza.dias_gracia`, default 10); coincide con el reporte.
 - Suspender: motivo predefinido + notas; clasifica cada cuota por `estadoServicio` (cumplido = entera, en_curso = prorrateo por días, futuro = anular), congela snapshot de deuda, ofrece disponer del excedente a favor.
 - Reactivar: cualquier día posterior a la suspensión; re-ancla el `dia_pago` al día de reactivación y revive el gap anulado sin estirar `fecha_fin` (mismo día → Revertir).
-- Cancelar (permanente): como suspender pero sin reactivar, deja la deuda real cobrable (no liquida a 0), exige motivo.
+- Cancelar (permanente): **CONDONA toda la deuda viva** (regla 2026-08-24) — el saldo de cada cuota queda en CERO: sin pago se anulan, con abono bajan a lo ya cobrado y la plata cobrada NUNCA se toca. No se reactiva, exige motivo. Lo aplica el SERVER (migración 0259), así que vale aunque el dispositivo tenga una versión vieja. **Para el que se va debiendo y le vas a seguir cobrando, la herramienta es SUSPENDER** — es el que conserva la deuda.
 - PDF de deuda en suspensión (reimprimible desde la tarjeta de suspensión).
 - El "por cobrar" EXCLUYE suspendidos → van al KPI "Suspendido (por reactivar)" aparte.
 
@@ -394,7 +426,7 @@ Cuota vence -> (pasan dias_gracia) -> Cron marca MORA -> badge 'Vencida Nd'
                               +-------------------+-------------------+
                               v                                       v
                     Reactivar (re-ancla ciclo)             Cancelar (permanente,
-                                                            deja deuda cobrable)
+                                                             CONDONA la deuda)
 ```
 
 **Gating:** Siempre activo (núcleo). Suspender/reactivar/cancelar =
@@ -470,6 +502,7 @@ pago: se acredita en `saldos_favor` y se aplica como descuento
 **Features:**
 - Libro append-only `saldos_favor` por cliente (cruza contratos): tipos "acreditado" (+), "aplicado"/"credito_aplicado", "condonado", "devuelto".
 - Al suspender/cancelar con excedente, el admin DECIDE la disposición (nunca automática): acreditar (queda disponible), condonar (la plata queda en caja, auditada) o devolver (sale de caja con `cobrador_id` + fecha para el arqueo).
+- **Segunda fuente, y la única automática: la BAJADA de plan** en modo "hoy con prorrateo" (R22). Acredita la diferencia de los días no servidos como `saldos_favor` tipo `acreditado` **dentro de la misma mutación**, sin pasar por la elección acreditar/condonar/devolver. Es otra cosa que el excedente: no viene de una cuota pagada de más, viene de un prorrateo. **La cuota NO baja** —sigue facturando el plan anterior entero— y se acredita **aunque esté impaga**, o sea que el cliente puede quedar con crédito por plata que todavía no entregó. Es el comportamiento buscado y hay un test que lo fija. Detalle: `docs/reglas/cambio-plan.md`.
 - `saldoFavorDisponible(cliente)`: suma firmada del libro; trigger server anti-sobregiro valida que no se exceda.
 - Aplicar crédito a una cuota: inserta `cargos_extra` tipo "credito_aplicado" (RESTA del saldo) + fila `saldos_favor` "aplicado", clampeado al `min(saldo cuota, disponible)`.
 - Por diseño NO toca `pagos` → el crédito a favor NO aparece en ninguna métrica de caja (`recaudado_caja`); `cobertura_cuota` sí lo incluye.
@@ -500,6 +533,8 @@ Cliente paga de más + suspensión/cancelación -> Excedente a favor
 **Gating:** Siempre activo (núcleo). La disposición del excedente
 (acreditar/condonar/devolver) y la aplicación de crédito = admin/admin_cobranza
 (nunca automática). El cobrador no dispone de créditos.
+**Excepción:** el crédito de una **bajada de plan** se acredita solo, dentro de
+la mutación — la decisión ya la tomó quien autorizó el cambio de plan.
 
 *Archivos: `lib/data/repositories/contratos_repo.dart`
 (`registrarDisposicionExcedente`, `saldoFavorDisponible`, aplicar crédito),
@@ -507,6 +542,54 @@ Cliente paga de más + suspensión/cancelación -> Excedente a favor
 `lib/features/contratos/contrato_detail_pagos.dart`,
 `lib/features/admin/reportes/arqueo_calculo.dart`,
 `ARQUITECTURA.md §3.5 (3)(4), invariante #4 recaudado_caja vs cobertura_cuota`.*
+
+---
+
+### Dashboard / Resumen (KPIs y métricas de cartera)
+
+**Para qué sirve:** El centro de control ejecutivo para administradores del ISP.
+Muestra la salud financiera de la cartera: cobros del ciclo actual, tendencia de
+recaudación día a día, mora histórica de los últimos 6 ciclos, distribución de
+cuotas, estado del padrón y ranking de recaudación.
+
+**Features:**
+- **Rendimiento instantáneo a escala real:** consultas indexadas (`dashboard_query.dart`)
+  que resuelven en 26 ms en bases con más de 50.000 cuotas (evita envolver columnas en
+  funciones como `date()` para preservar índices en SQLite).
+- **Ciclo de actualización triple 3-en-1:**
+  - *Al entrar:* `WidgetsBinding.instance.addPostFrameCallback` ejecuta `_refrescar()`
+    de inmediato garantizando datos frescos.
+  - *Manual:* Botón `[Actualizar · HH:mm]` con hora de recálculo estampada.
+  - *Pasivo:* Timer periódico de 10 minutos conectado a todos los KPIs vía `dashboardRefreshEpochProvider`.
+- **Cero churn al scrollear:** Listado estructurado con `SingleChildScrollView` + `Column`
+  y retención en memoria mediante `AutomaticKeepAliveClientMixin` en cada tarjeta.
+- **Cache de fechas en memoria:** `limitesCiclosProvider` calcula las cotas de ciclo una
+  sola vez en lugar de queries repetidas por tarjeta.
+- **Tarjetas modulares independientes:**
+  - *Caja del ciclo:* total cobrado bruto de la ventana (corte del 15 al 14).
+  - *Cobertura del ciclo (Tendencia):* curva acumulada vs meta del ciclo + mora recuperada;
+    tooltip dinámico con auto-desplazamiento vertical para evitar recortes.
+  - *Mora — últimos 6 ciclos:* barras de mora impaga vs recuperada.
+  - *Distribución de cuotas:* conteo y montos al día, en gracia, vencidas y pagadas.
+  - *Estado actual:* clientes activos, suspendidos y cuotas por cobrar.
+  - *Quién cobró:* desglose de recaudación por cobrador.
+- **Exportes Excel directos:** descarga de planillas de Cobertura y Mora de 6 ciclos.
+
+**Ciclo de uso:** El admin abre la app y aterriza en el Resumen. La pantalla se refresca
+sola al instante mostrando los cobros del día y del ciclo. Puede comparar la meta vs lo
+recaudado en la gráfica de tendencia tocando cualquier día para ver el globo de detalle,
+o pulsar `[Actualizar]` en cualquier momento para recalcular con los cobros más recientes.
+
+**Gating:** Roles `admin`, `admin_cobranza` y `super_admin`. Protegido por PIN opcional
+de 4 dígitos por usuario (`dashboard_pins`).
+
+*Archivos: `lib/features/admin/dashboard/dashboard_admin_screen.dart`,
+`lib/features/admin/dashboard/dashboard_query.dart`,
+`lib/features/admin/dashboard/tendencia_cobros_card.dart`,
+`lib/features/admin/dashboard/caja_ciclo_card.dart`,
+`lib/features/admin/dashboard/mora_ciclos_card.dart`,
+`lib/data/providers/dashboard_providers.dart`,
+`ARQUITECTURA.md §R Receta R2`.*
 
 ---
 
@@ -589,7 +672,7 @@ rechazo. Sin decidir; nunca se usó (0 eventos, 0 cargos puente).
 
 **Features:**
 - 6 tipos: `crear_contrato`, `cancelar_contrato`, `suspender_contrato`, `reactivar_contrato`, `desactivar_cliente`, `cambiar_plan` (0226). Un tipo que la app no conozca degrada a `TipoSolicitud.desconocido`: se ve pero NO se puede aprobar (antes caía a `crear_contrato` y su ejecutor intentaba crear un contrato con datos ajenos).
-- **La tarjeta muestra el PEDIDO, no solo la entidad:** para `cambiar_plan`, a qué plan, el precio nuevo con el viejo al lado y desde cuándo (hoy con prorrateo vs próximo ciclo).
+- **La tarjeta muestra el PEDIDO, no solo la entidad:** para `cambiar_plan`, a qué plan, el precio nuevo con el viejo al lado y desde cuándo (hoy con prorrateo vs próximo ciclo) — y, cuando el pedido es **"hoy con prorrateo"**, **el número**: "Se le cobra + C$X" si sube o "Le queda a favor C$X" si baja, con los días y el rango que lo justifican. Se calcula **en vivo** con el mismo helper que la mutación (`prorrateoCambioPlanHoy`) y NO se lee de `datos`: al aprobar se aplica el precio del plan de ESE momento, así que un número congelado al pedir mentiría si alguien editó el precio mientras la solicitud esperaba. En modo "próximo ciclo" no hay renglón de monto porque no hay plata en el acto.
 - **Se revalida AL APROBAR, no solo al pedir** (v0.31.27): el código de contrato se chequea contra la réplica y contra el server en el momento de escribir. Sin esto se perdieron 10 contratos: dos gestores pedían el mismo número con 18 h de diferencia, el admin aprobaba los dos, y el segundo lo rechazaba el server dejando la solicitud "aprobada" y al cliente sin contrato.
 - **Motivo + Notas OBLIGATORIOS al solicitar (v0.31.20):** el diálogo pide un motivo del dropdown (`kMotivosSolicitud`: solicitud del cliente / falta de pago / mudanza / otro) y notas escritas — sin notas el botón "Enviar solicitud" no deja pasar. Se guardan en `solicitudes_accion.datos` (`motivo`/`notas`).
 - La tarjeta de la cola (Pendientes e Historial) MUESTRA ese motivo ("Motivo: X — notas"), así el que aprueba decide con el porqué a la vista, sin preguntar por WhatsApp.
@@ -690,6 +773,7 @@ campo.
 - Capa calle (OSM) o satélite (Esri) con toggle; cache de tiles offline (`map_tile_cache`).
 - Filtro de chips por estado (pendientes / mora / gracia / hoy / próxima); el admin además tiene "Ver todo".
 - Filtros multi-select solo para admin: por Cobrador (incluye "Sin cobrador"), Comunidad/Zona y Nodo de red; el cobrador ve TODOS los clientes pero opera bajo RLS.
+- **Filtro por plan** (2026-09-03), cuarto chip. Se aplica en Dart como los otros tres (no en el SQL: mover el filtro al WHERE recrearía el stream en cada toque). Los planes de cada cliente vienen en una subconsulta que —a diferencia de las de códigos y etiquetas— NO se apaga en "Ver todo", porque ahí es donde más se usa el filtro.
 - Búsqueda de cliente: al seleccionarlo el mapa enfoca y muestra solo su pin.
 - Ubicación del dispositivo en vivo (geolocator).
 - Trazado de ruta interna al cliente con OSRM offline (`offline_routing_service`): dibuja el camino, encuadra, y muestra distancia y tiempo estimado.
@@ -1286,7 +1370,7 @@ de caja, cobros, por cobrador, mora, fiscal, clientes, etc.) para cuadrar la
 caja y rendir cuentas.
 
 **Features:**
-- Dashboard: KPIs de cobros, proyección, recuperación, sparkline 7 días, operativo, top cobradores y distribución de cuotas — cada sección toggleable por tenant (`dashboard.*_visible`, super_admin).
+- Dashboard (Resumen): ocho tarjetas — Caja del ciclo · Cobertura del ciclo · Mora del ciclo · Proyección de cobros por cobrador · Recuperación por cobrador y comunidad · Quién cobró · Estado actual · Distribución de cuotas. **Desde el 2026-09-02 las últimas cuatro volvieron al estilo que tienen en producción** (barras por cobrador, lista colapsable de tres niveles, KPI cards, lista con íconos) sobre la escala tipográfica nueva, y **el Excel descargable quedó SOLO en Cobertura del ciclo y en Mora del ciclo**, como era en producción. **Desde el 2026-09-02 la TABLA de mora vive dentro de Cobertura del ciclo**, bajo el mismo selector que la curva: antes había dos selectores de ciclo en la misma pantalla y podían quedar en meses distintos mirando lo mismo. "Mora del ciclo" se queda con las barras de los últimos 6 ciclos y su tooltip, que nunca dependieron del selector. El **orden y el encendido** los decide el setting `dashboard.tarjetas` (migración `0263`), editable en Ajustes → Avanzado → Tarjetas del Resumen (super_admin). Los `dashboard.*_visible` quedaron obsoletos con esa migración.
 - Reportes descargables con rango de fechas (default mes actual, filtra por `fecha_pago`): arqueo, cobros, por cobrador, mora, fiscal, anulaciones, eficiencia, clientes, inactivos.
 - Exporta a PDF (con logo del tenant) y a Excel.
 - Arqueo de caja: `recaudado_caja` = SUM(`pagos.monto_cordobas` no anulados) − devoluciones; consistencia cross-pantalla (misma fórmula canónica en dashboard/arqueo/fiscal/por-cobrador).
@@ -1305,8 +1389,13 @@ Admin -> /admin/resumen -> KPIs del mes en vivo
                             (arqueo, cobros, por cobrador, fiscal...)
 ```
 
-**Gating:** Por rol admin/admin_cobranza (no cobrador). Secciones del dashboard
-toggleables por tenant (super_admin). **Fase 2 roles (2026-07-19):**
+**Gating:** **El Resumen es SOLO DEL ADMIN** desde el 2026-08-27 (decisión de
+Rubén): se cierra en los DOS lugares —`adminOnly` en el menú del shell y
+`/admin/resumen` en la lista `soloAdmin` del router—. Los **reportes** siguen
+siendo de admin/admin_cobranza. *(Hasta el 2026-09-01 esta línea decía que el
+dashboard era de admin/admin_cobranza y contradecía a `ARQUITECTURA.md`;
+manda el router, verificado.)* Tarjetas del Resumen configurables por tenant
+(super_admin). **Fase 2 roles (2026-07-19):**
 `admin_cobranza` no ve secciones/reportes de dinero RECAUDADO (CobrosKPIs,
 ConsultarPeriodo, Proyeccion, Sparkline, TopCobradores, 5 reportes de dinero,
 RecaudacionMensual, CobradoresMes); sí ve lo operativo (Recuperacion%,

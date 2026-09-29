@@ -121,7 +121,7 @@ En la pantalla **Clientes** el botón azul «Nuevo cliente» abre el formulario.
 
 ![Editar o desactivar](img/clientes-editar.svg)
 
-El lápiz del encabezado abre el mismo formulario del alta con los datos cargados. El interruptor «Cliente activo» (solo lo ve el rol admin) es la baja suave: al apagarlo, el cliente desaparece de las listas, el mapa y la ruta, y no se le generan cuotas nuevas — pero nada se borra: sus contratos, pagos y deuda siguen en el sistema, y la deuda se puede seguir cobrando con el chip «Fuera de ruta».
+El lápiz del encabezado abre el mismo formulario del alta con los datos cargados. El interruptor «Cliente activo» **da por terminada la relación**: al apagarlo, sus contratos vivos —activos y suspendidos— pasan a **CANCELADO** y toda su deuda pendiente se **CONDONA** (regla del 26/08/2026). Lo ya pagado no se toca: queda como histórico. Antes de confirmar, la app te muestra cuánto se va a condonar y te pide el motivo. Como es una decisión de plata, **salvo el admin todos la solicitan** y el admin la aprueba viendo el mismo monto. **Si el cliente se va debiendo y le vas a seguir cobrando, no lo desactives: dejalo activo y suspendé el contrato.** Reactivar sí es directo, porque devolverlo a las listas no mueve plata.
 
 ### Asignar o cambiar el cobrador de un cliente
 
@@ -213,7 +213,7 @@ Cuando el cliente vuelve, la tarjeta «Suspensión vigente» ofrece «Cobrar pen
 
 ![Cancelar](img/contratos-cancelar.svg)
 
-Cancelar es el final definitivo: el diálogo lo advierte en mayúsculas y exige el motivo. Igual que la suspensión, cobra lo consumido y anula lo futuro, dejando la deuda real cobrable «fuera de ruta» — pero sin vuelta atrás (salvo «Revertir cancelación», disponible solo mientras no hayas cobrado nada de esa deuda, para los errores). Si el cliente regresa algún día, se le hace un contrato nuevo.
+Cancelar es el final definitivo y es lo OPUESTO de suspender: **condona toda la deuda pendiente**, incluidos los meses atrasados (regla del 24/08/2026). El diálogo lo advierte en mayúsculas, te muestra cuánto se va a condonar antes de confirmar y exige el motivo. Si el cliente se va debiendo y le vas a seguir cobrando, la acción correcta es **suspender**, no cancelar. Queda «Revertir cancelación» para los errores, disponible mientras no hayas cobrado nada. Si el cliente regresa algún día, se le hace un contrato nuevo.
 
 ### Pedir aprobación: suspender, cancelar o reactivar (admin de usuarios)
 
@@ -227,7 +227,8 @@ Lo mismo pasa cuando ese rol **crea un contrato**: al guardar, en vez de crearse
 
 **Preguntas frecuentes:**
 - **¿Suspender o cancelar?** Suspender = pausa (se puede reactivar). Cancelar =
-  definitivo (para volver, contrato nuevo). En ambos la deuda real queda viva.
+  definitivo (para volver, contrato nuevo). **Suspender CONSERVA la deuda; cancelar la CONDONA.**
+  Si se fue debiendo y le vas a seguir cobrando: suspender.
 - **¿Suspender borra la deuda?** No: cobra lo consumido, anula solo los meses
   futuros no usados, y congela el saldo. Se cobra con «fuera de ruta».
 - **¿Cambiar el precio del plan cambia los contratos existentes?** No — cada
@@ -281,7 +282,7 @@ Dos comportamientos que dependen de la configuración de tu empresa: el **parcia
 
 ![Fuera de ruta](img/cuotas-fuera-de-ruta.svg)
 
-La deuda de contratos suspendidos y cancelados no desaparece: vive en la sección «Recuperación · fuera de ruta», apagada por defecto para no ensuciar la ruta del día. Activá el chip y cobrala como cualquier cuota. Si un suspendido queda en cero, la app avisa «Deuda saldada» con el botón de reactivar (decisión del admin); un cancelado solo se recupera, nunca se reactiva.
+La deuda de contratos **suspendidos** no desaparece: vive en la sección «Recuperación · fuera de ruta», apagada por defecto para no ensuciar la ruta del día. Activá el chip y cobrala como cualquier cuota. Si un suspendido queda en cero, la app avisa «Deuda saldada» con el botón de reactivar (decisión del admin). Los **cancelados** casi no aparecen acá: desde el 24/08/2026 cancelar condona la deuda, así que solo pueden figurar bajas anteriores a esa fecha — y un cancelado nunca se reactiva.
 
 ### Anular una cuota cobrada por error y volver a cobrarla
 

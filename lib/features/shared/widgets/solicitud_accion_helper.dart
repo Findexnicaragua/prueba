@@ -53,10 +53,24 @@ Future<bool> solicitarAccion({
                   const SizedBox(height: 8),
                   Text(descripcionExtra, style: const TextStyle(fontSize: 13)),
                 ],
-                // Deuda que va a quedar cobrable después del corte. Se ve ANTES
-                // del formulario: es el dato que hace la diferencia entre pedir
-                // una suspensión con criterio y pedirla a ciegas. Sin `pieExtra`
-                // — a diferencia del diálogo de suspensión directa, acá no se
+                // SUSPENDER conserva la deuda; CANCELAR la condona. Son
+                // OPUESTOS, así que el mismo rótulo no puede servir para los
+                // dos: hasta el 2026-08-26 esta pantalla decía "Deuda que
+                // quedaría cobrable" también al cancelar, o sea exactamente lo
+                // contrario de lo que iba a pasar — y es la pantalla del rol
+                // que pide la mayoría de las bajas.
+                if (tipo == TipoSolicitud.cancelarContrato) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Cancelar es PERMANENTE y CONDONA toda la deuda pendiente, '
+                    'incluidos los meses atrasados. Si el cliente se va debiendo '
+                    'y se le va a seguir cobrando, la acción es Suspender.',
+                    style: TextStyle(fontSize: 13, color: Colors.red.shade800),
+                  ),
+                ],
+                // El número que hace la diferencia entre pedir el corte con
+                // criterio y pedirlo a ciegas. Se ve ANTES del formulario. Sin
+                // `pieExtra` — a diferencia del diálogo directo, acá no se
                 // guarda nada ni se genera ningún PDF, solo se pide.
                 if (deuda != null) ...[
                   const SizedBox(height: 12),
@@ -64,8 +78,12 @@ Future<bool> solicitarAccion({
                     total: deuda.total,
                     cuotas: deuda.cuotas,
                     diaPago: deuda.diaPago,
-                    titulo: 'Deuda que quedaría cobrable',
-                    vacioTexto: 'No queda deuda cobrable.',
+                    titulo: tipo == TipoSolicitud.cancelarContrato
+                        ? 'Se va a condonar'
+                        : 'Deuda que quedaría cobrable',
+                    vacioTexto: tipo == TipoSolicitud.cancelarContrato
+                        ? 'No hay deuda que condonar.'
+                        : 'No queda deuda cobrable.',
                   ),
                 ],
                 const SizedBox(height: 14),

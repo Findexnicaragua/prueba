@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/hooks/recordar_regla.py",
+            "timeout": 20,
+            "statusMessage": "Cargando la regla de oro"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/hooks/al_editar.py",
+            "timeout": 20,
+            "statusMessage": "Revisando si el archivo es superficie de una regla"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/hooks/al_cerrar.py",
+            "timeout": 240,
+            "statusMessage": "Verificando que la documentacion este al dia"
+          }
+        ]
+      }
+    ]
+  }
+}

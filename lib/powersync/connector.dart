@@ -86,6 +86,24 @@ class SupabaseConnector extends PowerSyncBackendConnector {
       return;
     }
 
+    // Rastros locales de esta pasada. Se vacían ANTES de `complete()`, que
+    // borra las ops de la cola PARA SIEMPRE (verificado en powersync_core
+    // 1.8.0). Hasta acá, `_registrarRechazo` disparaba la escritura con
+    // `unawaited` y seguía de largo: si la app moría en esa ventana —el
+    // cobrador cierra, se queda sin batería, Android mata el proceso— quedaba
+    // el recibo en papel y CERO rastro del cobro rechazado.
+    //
+    // Se junta y se vacía UNA vez, no un `await` por rechazo: adentro del loop,
+    // un cambio de policy que rechace cientos de ops retendría el batch entero
+    // esperando cientos de escrituras a disco.
+    //
+    // Y va SOLO antes de `complete()`, no en un `finally`: si el loop sale por
+    // excepción (un error retryable que se `rethrow`ea), `complete()` NO corre
+    // y las ops siguen en la cola — no hay evidencia que perder, y el rastro se
+    // vuelve a generar en el próximo intento. La ventana existe únicamente
+    // cuando la cola se destruye.
+    final rastrosPendientes = <Future<void>>[];
+
     try {
       for (final op in transaction.crud) {
         try {
@@ -115,10 +133,10 @@ class SupabaseConnector extends PowerSyncBackendConnector {
                 if (filas.isEmpty &&
                     !_esEspejoLocal(op) &&
                     await _filaSigueVisible(table, op.id)) {
-                  _registrarRechazo(op,
+                  rastrosPendientes.add(_registrarRechazo(op,
                       codigo: kCodigoRechazoSinFilas,
                       mensaje: 'El servidor no modificó ninguna fila '
-                          '(sin permiso sobre ese registro).');
+                          '(sin permiso sobre ese registro).'));
                   continue;
                 }
               }
@@ -132,10 +150,10 @@ class SupabaseConnector extends PowerSyncBackendConnector {
               // deseado. Si la fila sigue ahí, no se borró: eso sí es rechazo.
               if (borradas.isEmpty &&
                   await _filaSigueVisible(table, op.id)) {
-                _registrarRechazo(op,
+                rastrosPendientes.add(_registrarRechazo(op,
                     codigo: kCodigoRechazoSinFilas,
                     mensaje: 'El servidor no borró el registro '
-                        '(sin permiso sobre ese registro).');
+                        '(sin permiso sobre ese registro).'));
                 continue;
               }
               break;
@@ -167,18 +185,39 @@ class SupabaseConnector extends PowerSyncBackendConnector {
             // (RechazosSyncService, con el opData completo en `data` — único
             // registro del contenido para reconstruir el write a mano; vive
             // en shared_preferences.json del device).
-            _registrarRechazo(op, codigo: e.code, mensaje: e.message);
+            rastrosPendientes
+                .add(_registrarRechazo(op, codigo: e.code, mensaje: e.message));
             continue;
           }
           rethrow;
         }
       }
+      await _vaciarRastros(rastrosPendientes);
       await transaction.complete();
     } catch (e, st) {
       if (kDebugMode) {
         debugPrint('PowerSync uploadData falló: $e\n$st');
       }
       rethrow;
+    }
+  }
+
+  /// Espera a que los rastros locales de los rechazos estén EN DISCO antes de
+  /// que `transaction.complete()` borre las ops.
+  ///
+  /// El timeout NO es opcional: esto corre dentro del loop de sync, y una
+  /// escritura a `shared_preferences` que se cuelgue trabaría la subida de todo
+  /// lo demás. Si vence —o si falla— igual se completa: el batch ya se aplicó
+  /// en el server, y no completarlo lo haría reintentar para siempre, que es
+  /// peor que perder un aviso. El rastro en memoria (`_uploadErrors`, el que
+  /// alimenta el snackbar) sobrevive igual en esta sesión.
+  Future<void> _vaciarRastros(List<Future<void>> pendientes) async {
+    if (pendientes.isEmpty) return;
+    try {
+      await Future.wait(pendientes).timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('[CRUD] no se pudo persistir el rastro local de '
+          '${pendientes.length} rechazo(s): $e');
     }
   }
 
@@ -253,16 +292,25 @@ class SupabaseConnector extends PowerSyncBackendConnector {
     }
   }
 
-  /// Deja el DOBLE rastro de un write que el server no persistió: el aviso
-  /// inmediato (SnackBar via `uploadErrors`) y el aviso PERSISTENTE en el
-  /// device (`RechazosSyncService`, con el `opData` completo — es el único
-  /// registro del contenido para reconstruir el write a mano; no existe tabla
-  /// de errores server-side).
+  /// Deja el TRIPLE rastro de un write que el server no persistió: el aviso
+  /// inmediato (SnackBar via `uploadErrors`), el aviso PERSISTENTE en el device
+  /// (`RechazosSyncService`, con el `opData` completo) y —desde 0236— una fila
+  /// en `sync_rechazos` del SERVIDOR.
+  ///
+  /// Por qué hizo falta la tercera: hasta 0236 el rastro moría en el teléfono
+  /// del cobrador. Nadie en la oficina se enteraba, y si el equipo se perdía o
+  /// se reinstalaba, desaparecía el único registro del contenido. Así se
+  /// perdieron 10 cobros de Telenet el 28-29/07/2026 y se supo 19 días después,
+  /// por el reclamo de una clienta a la que le seguían cobrando julio.
   ///
   /// Lo usan los dos caminos de rechazo: el que llega como excepción de
   /// Postgres (constraint/trigger) y el SILENCIOSO de cero filas (policy que
   /// filtra por USING, que no levanta excepción).
-  void _registrarRechazo(CrudEntry op,
+  /// Devuelve el Future del rastro LOCAL — el que hay que esperar antes de
+  /// destruir la cola. La subida al server (`_subirRechazo`) queda best-effort:
+  /// es una llamada de red, puede no haber señal, y el local es la copia de
+  /// última instancia.
+  Future<void> _registrarRechazo(CrudEntry op,
       {required String? codigo, required String mensaje}) {
     final detalle = '${op.op.name.toUpperCase()} ${op.table}/${op.id}'
         ' — ${codigo ?? '?'} $mensaje';
@@ -274,7 +322,7 @@ class SupabaseConnector extends PowerSyncBackendConnector {
       codigo: codigo,
     ));
     final ahoraUtc = DateTime.now().toUtc();
-    unawaited(RechazosSyncService.instance.registrar(RechazoSync(
+    final rastroLocal = RechazosSyncService.instance.registrar(RechazoSync(
       id: '${ahoraUtc.microsecondsSinceEpoch}-${op.id}',
       tabla: op.table,
       registroId: op.id,
@@ -283,7 +331,59 @@ class SupabaseConnector extends PowerSyncBackendConnector {
       mensaje: mensaje,
       fechaUtcIso: ahoraUtc.toIso8601String(),
       data: op.opData,
-    )));
+    ));
+    unawaited(_subirRechazo(op,
+        codigo: codigo, mensaje: mensaje, ahoraUtc: ahoraUtc));
+    return rastroLocal;
+  }
+
+  /// Sube el rechazo a `sync_rechazos` (0236). Best-effort y aparte del rastro
+  /// local, que sigue siendo la copia de última instancia.
+  ///
+  /// NO pasa por la cola de PowerSync a propósito: la cola es justamente lo que
+  /// acaba de descartar este write, así que meterlo ahí lo expondría al mismo
+  /// final. Va por Supabase directo, y si no hay señal se pierde solo ESTE
+  /// aviso — el local queda igual.
+  ///
+  /// Nunca propaga: un fallo al avisar no puede romper el upload de lo que sí
+  /// está subiendo.
+  Future<void> _subirRechazo(
+    CrudEntry op, {
+    required String? codigo,
+    required String mensaje,
+    required DateTime ahoraUtc,
+  }) async {
+    try {
+      // Sin sesión no hay nada que intentar: la policy de INSERT es `to
+      // authenticated`, así que el server lo rechazaría igual.
+      //
+      // TODO ESTO va DENTRO del try a propósito. Leer `_supabase.auth` con
+      // Supabase sin inicializar LANZA, y como el llamador usa `unawaited` esa
+      // excepción se vuelve un error asíncrono sin dueño que CUELGA el runner
+      // de tests. Lo cazó `flutter test` (la suite se clavaba), nunca el
+      // analyze. Regla para este método: ninguna línea puede tirar hacia afuera.
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      // El tenant sale del propio write cuando viene; si el rechazo FUE por
+      // contexto de tenant, igual queda la fila con tenant nulo y el payload
+      // completo — que es lo que hace falta para reconstruirlo.
+      final tenantId = op.opData?['tenant_id'] as String?;
+      await _supabase.from('sync_rechazos').insert({
+        'tenant_id': tenantId,
+        'cobrador_id': userId,
+        'tabla': op.table,
+        'registro_id': op.id,
+        'op': op.op.name,
+        'codigo': codigo,
+        'mensaje': mensaje,
+        'payload': op.opData,
+        'ocurrido_en': ahoraUtc.toIso8601String(),
+      }).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      // Sin señal, sin sesión o la tabla todavía sin migrar: el rastro local ya
+      // quedó. No se reintenta para no competir con la cola real.
+      debugPrint('[CRUD] no se pudo subir el rechazo a sync_rechazos: $e');
+    }
   }
 
   bool _isNonRetryable(PostgrestException e) => esCodigoNoRetryable(e.code);

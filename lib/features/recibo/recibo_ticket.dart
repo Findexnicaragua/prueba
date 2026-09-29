@@ -7,6 +7,7 @@ import '../../data/models/recibo_layout.dart';
 import '../../data/repositories/settings_repo.dart';
 import '../../data/utils/formatters.dart';
 import '../../data/utils/monto_a_letras.dart';
+import 'recibo_cambio_plan.dart' show lineasCambioPlan;
 import 'recibo_cargos.dart' show cargoEtiquetaRecibo;
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,7 @@ class ReciboTicket extends StatelessWidget {
     this.logoBytes,
     this.moraRows = const [],
     this.cargosRows = const [],
+    this.cambioPlanRows = const [],
     this.margenHorizontal = 6,
     this.offsetDerechaDots = 0,
   }) : assert(row != null || rows != null,
@@ -66,6 +68,11 @@ class ReciboTicket extends StatelessWidget {
   /// cuota(s) cobrada(s)). Vacío → el bloque `mora` no se muestra. No toca la
   /// matemática del dinero del recibo.
   final List<Map<String, dynamic>> moraRows;
+
+  /// Transiciones de plan que afectan a la(s) cuota(s) de este recibo, ya
+  /// buscadas por el call-site (`fetchCambioPlan`). Vacío → el bloque
+  /// `cambio_plan` no se muestra, que es el caso de todos los recibos normales.
+  final List<Map<String, dynamic>> cambioPlanRows;
 
   /// Cargos/descuentos vigentes de la(s) cuota(s) cobrada(s), ya buscados por
   /// el call-site (`fetchCargosCuotas`). Se desgranan dentro del bloque
@@ -293,15 +300,25 @@ class ReciboTicket extends StatelessWidget {
         final periodoCuota = DateTime.parse(r['periodo'] as String);
         final esManual = r['plan_nombre'] == null;
         final diaPago = (r['dia_pago'] as num?)?.toInt();
-        final periodoLabel = esManual || diaPago == null
-            ? Fmt.mes(periodoCuota)
-            : Fmt.periodoRecibo(diaPago, periodoCuota);
+        // 0262: si el recibo CONGELÓ su mes al emitirse, se imprime ESE y no
+        // se recalcula — así una reimpresión no contradice el papel que el
+        // cliente tiene. NULL = recibo anterior al congelamiento (o sin período
+        // impreso): se calcula, exactamente como antes.
+        final periodoLabel = (r['periodo_label'] as String?) ??
+            (esManual || diaPago == null
+                ? Fmt.mes(periodoCuota)
+                : Fmt.periodoRecibo(diaPago, periodoCuota));
+        // 0268: idem con el PLAN. El JOIN resuelve el plan VIVO del contrato,
+        // así que un cambio de plan reescribía lo que decían todos los recibos
+        // anteriores — la reimpresión de junio mostraba el plan de agosto.
+        final planLabel =
+            (r['plan_label'] as String?) ?? (r['plan_nombre'] as String?);
         return _emitirCampos(b, {
           'servicio.servicio': _ticketRow(
               'Servicio',
               esManual
                   ? (r['cuota_descripcion'] as String? ?? 'Cuota manual')
-                  : r['plan_nombre'] as String,
+                  : (planLabel ?? ''),
               k),
           // Cobro originado en un ticket (0173): referencia el N° de ticket.
           'servicio.ticket': r['ticket_correlativo'] != null
@@ -406,6 +423,8 @@ class ReciboTicket extends StatelessWidget {
             ),
           ),
         ];
+      case 'cambio_plan':
+        return _buildCambioPlan(k);
       case 'totales':
         return _buildTotales(k);
       case 'mora':
@@ -529,6 +548,46 @@ class ReciboTicket extends StatelessWidget {
   /// Bloque `mora` (single + multi): título "EN MORA", una línea por mes
   /// (`Fmt.mes` ↔ saldo), y "TOTAL MORA". `moraRows` ya viene filtrado por el
   /// call-site. Resumen informativo — no toca la matemática del dinero.
+  /// Bloque `cambio_plan`: por qué esta cuota vale distinto que las demás.
+  ///
+  /// Se dibuja SOLO si la(s) cuota(s) de este recibo vienen de un cambio de
+  /// plan (el cargo trae `detalle`, 0267). En un recibo normal no ocupa ni una
+  /// línea, así que estar visible por defecto no le agrega papel a nadie.
+  ///
+  /// SIN el desglose día por día (decisión de Rubén, 2026-09-02): eso vive en
+  /// la pantalla del que autoriza. Ver `recibo_cambio_plan.dart`.
+  List<Widget> _buildCambioPlan(double k) {
+    if (cambioPlanRows.isEmpty) return const [];
+    final fuente = _esMulti ? rows! : [row!];
+    final out = <Widget>[];
+    for (final r in fuente) {
+      final lineas = lineasCambioPlan(
+        cambioPlanRows,
+        r['cuota_id'],
+        montoCuota: (r['cuota_monto'] as num?)?.toDouble(),
+      );
+      if (lineas.isEmpty) continue;
+      if (out.isNotEmpty) out.add(SizedBox(height: 4 * k));
+      out.add(Text('CAMBIO DE PLAN',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13 * k)));
+      out.add(SizedBox(height: 2 * k));
+      for (final l in lineas) {
+        if (l.valor == null) {
+          // Línea a todo el ancho: no lleva ":" ni columna derecha, así que
+          // NO puede usar `_ticketRow` (que rotula y parte en dos columnas).
+          out.add(Text(l.texto,
+              style: TextStyle(
+                  fontSize: 13 * k,
+                  fontWeight: l.destacada ? FontWeight.bold : null)));
+        } else {
+          out.add(_totalLine(l.texto, l.valor!, 13 * k, bold: l.destacada));
+        }
+      }
+    }
+    return out;
+  }
+
   List<Widget> _buildMora(double k) {
     if (moraRows.isEmpty) return const [];
     final totalMora =

@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:powersync/powersync.dart' show SyncStatus;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../data/providers/sync_status_provider.dart';
+import '../../../data/services/sync_foreground_service.dart';
 import '../../../powersync/db.dart' as ps;
 import '../utils/sign_out_helper.dart';
 
@@ -53,6 +55,7 @@ class _SyncGateScreenState extends ConsumerState<SyncGateScreen> {
   Timer? _slowHintTimer;
   Timer? _retryButtonTimer;
   Timer? _escapeHatchTimer;
+  StreamSubscription<SyncStatus>? _statusSub;
   bool _showSlowHint = false;
   bool _showRetryButton = false;
   bool _showEscapeHatch = false;
@@ -70,6 +73,22 @@ class _SyncGateScreenState extends ConsumerState<SyncGateScreen> {
   void initState() {
     super.initState();
     _scheduleTimers();
+    SyncForegroundService.instance.iniciar();
+    // Escucha el stream de PowerSync directamente: cuando la app está en segundo plano
+    // (en WhatsApp o con pantalla bloqueada), Flutter no ejecuta build(), pero los
+    // listeners de Dart siguen corriendo y actualizan la notificación del sistema en tiempo real.
+    _statusSub = ps.db.statusStream.listen((status) {
+      final progress = status.downloadProgress;
+      if (progress != null &&
+          progress.totalOperations > 0 &&
+          status.connected &&
+          status.anyError == null) {
+        SyncForegroundService.instance.actualizarProgreso(
+          progress.downloadedOperations,
+          progress.totalOperations,
+        );
+      }
+    });
   }
 
   void _scheduleTimers() {
@@ -91,11 +110,14 @@ class _SyncGateScreenState extends ConsumerState<SyncGateScreen> {
     _slowHintTimer?.cancel();
     _retryButtonTimer?.cancel();
     _escapeHatchTimer?.cancel();
+    _statusSub?.cancel();
+    _statusSub = null;
   }
 
   @override
   void dispose() {
     _cancelTimers();
+    SyncForegroundService.instance.detener();
     super.dispose();
   }
 
@@ -189,6 +211,16 @@ class _SyncGateScreenState extends ConsumerState<SyncGateScreen> {
     final connected = status?.connected ?? true;
     final hasError = status?.anyError != null;
 
+    if (progress != null &&
+        progress.totalOperations > 0 &&
+        connected &&
+        !hasError) {
+      SyncForegroundService.instance.actualizarProgreso(
+        progress.downloadedOperations,
+        progress.totalOperations,
+      );
+    }
+
     // Mensaje principal varía según el estado más prominente.
     final tituloPrincipal = hasError
         ? 'No se pudo sincronizar'
@@ -231,6 +263,15 @@ class _SyncGateScreenState extends ConsumerState<SyncGateScreen> {
                   tituloPrincipal,
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Preparando tu base de datos local para trabajar sin conexión',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
               AnimatedSize(

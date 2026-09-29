@@ -64,6 +64,30 @@ go_router.
    matchea el tenant impersonado). Ejemplo del bug si falta: `op_log` nació en
    0128 sin `super_admin_all` → "Sin permiso" al cambiar un setting
    impersonando; se arregló recién en 0131.
+   **`is_super_admin()` relaja el ROL, NUNCA el TENANT (regla nueva, bug
+   2026-08-20).** En toda función/policy/query de LECTURA que alimente una
+   pantalla del ISP (rutas `/admin/*` y las del cobrador), la forma canónica es:
+   ```sql
+   and <tabla>.tenant_id = public.current_tenant_id()
+   and (public.is_super_admin() or public.is_admin_or_cobranza())
+   ```
+   **NUNCA** `is_super_admin() or (tenant_id = current_tenant_id() and …)`: el
+   `OR` cortocircuita y para el super_admin el filtro de tenant no se evalúa
+   nunca. La rama del rol es necesaria (`is_admin_or_cobranza()` es FALSE para
+   el super_admin: sin ella perdería la pantalla hasta en el tenant que
+   impersona), pero va sobre el ROL, no sobre el tenant. Impersonando, el
+   super_admin ve EXACTAMENTE lo que vería el admin de esa empresa, ni una fila
+   más. Lo cross-tenant vive en `/super/*` (hoy: `/super/diagnostico`, que
+   etiqueta cada fila con el nombre de la empresa) y en funciones gemelas
+   `*_todos()` gateadas solo a `is_super_admin()`. Así nació el bug: la bandeja
+   de un tenant listaba huecos de talonario de otros dos ISPs (0237/0238/0242 →
+   corregido en 0246). **Al auditar**: `grep -n "is_super_admin() *$" -A2` sobre
+   las migraciones, buscando el patrón `is_super_admin()\n or (`. Y ojo con el
+   espejo en el cliente: el SQLite del super_admin NO es mono-tenant (baja su
+   propia fila del tenant System y conserva la empresa anterior hasta que cierra
+   el sync), así que toda query local de listas debe filtrar `tenant_id`
+   explícitamente — el supuesto "el sync ya lo scopeó" solo vale para usuarios
+   del ISP.
 2. **Offline-first** — el cobrador/técnico opera sin internet. Features que
    requieran conexión sincrónica deben declararse explícitamente.
 3. **Server gana** — Postgres es la fuente de verdad. El cliente espeja
@@ -73,6 +97,35 @@ go_router.
    nuevas. (El `audit_log` forense del server se ELIMINÓ — 0140.)
 5. **Workflow sin email** — toda feature que asuma "envía email" necesita
    fallback no-email.
+6. **🔴 Toda acción con repercusión monetaria pide AUTORIZACIÓN del admin**
+   (línea general de Rubén, 2026-08-26). Si una acción crea, borra o mueve
+   plata cobrable, el rol que la ejecuta pasa por `requiereAprobacionPara`
+   (`data/providers/aprobaciones_provider.dart`): el `admin` la ejecuta —es
+   quien aprueba— y **todos los demás la SOLICITAN**. La regla es *"requiere
+   aprobación salvo que seas quien aprueba"*, nunca una lista de roles por
+   descarte: un rol nuevo nace pidiendo permiso.
+   **Y quien autoriza tiene que VER el número antes de firmar**: monto real de
+   lo que se va a crear o borrar, calculado con el MISMO criterio que la
+   mutación, más motivo obligatorio. Un preview que usa otra fórmula que la
+   mutación es una firma en falso — pasó con la cancelación (el preview traía
+   el cálculo de suspensión y mostraba menos de lo que se condonaba, fix
+   2026-08-26).
+   **Cómo se rompe esto sin querer:** una acción que *antes* no movía plata y
+   *ahora* sí. Desactivar un cliente era organizativo y lo ejecutaba
+   `admin_usuarios` directo; cuando pasó a condonar la deuda (regla del
+   2026-08-26, migración `0260`), ese permiso quedó autorizando una baja de
+   cartera. **Al cambiar lo que una acción HACE, revisar quién puede hacerla.**
+   **Y el viaje de vuelta NO es simétrico (2026-08-29, migración `0265`):** esa
+   misma baja dejó de mover plata —ahora exige que no queden contratos vivos, y
+   la condonación se autoriza contrato por contrato— y **igual se le conservó la
+   aprobación**, por decisión del dueño: terminar la relación con un cliente es
+   una decisión de negocio. O sea: que una acción empiece a mover plata OBLIGA a
+   revisar el permiso; que deje de moverla **habilita** revisarlo, no lo relaja
+   solo. Quitar un permiso es del dueño, nunca una consecuencia automática.
+   **Dónde más mirar cuando una acción cambia de efecto:** el preview que la
+   muestra, el texto de la solicitud que ve el aprobador y el `deuda` que viaja
+   con ella. Los tres decían "se va a condonar" y quedaron mintiendo el día que
+   dejó de condonarse.
 
 ## Invariantes de dinero (NUNCA violar — la base del negocio)
 
@@ -114,6 +167,22 @@ Cualquier cambio que toque `pagos`, `cuotas`, `recibos`, `contratos`,
    (`vivas < duración_meses`), nunca por monto (un cambio de plan altera el monto
    pero no el conteo → no debe disparar el hint).
 6. **Contratos indefinidos**: solo "total recaudado"; no hay "pendiente".
+6b. **CANCELAR no deja deuda; SUSPENDER sí** (regla del dueño, 2026-08-24).
+   Cancelar un contrato pone en CERO todas sus cuotas vivas — incluidos los
+   meses de atraso — y el contrato sale de las listas de cobro. Suspender corta
+   el servicio pero CONSERVA la deuda y es reversible: es la herramienta para el
+   que se va debiendo y se le va a seguir cobrando. Antes los dos hacían casi lo
+   mismo (cancelar dejaba cobrable lo cumplido + el prorrateo del mes en curso),
+   y el dueño reportó contratos cancelados que seguían con deuda.
+   **CÓMO se pone en cero — y esto NO es negociable:** cuota sin pago → anular;
+   cuota CON pago → `monto = monto_pagado`, `cargos_neto = 0`, estado `'pagada'`.
+   **Anular una cuota con plata está PROHIBIDO**: el trigger
+   `cuotas_anular_pagos_asociados_trg` anula EN CASCADA sus pagos y sus recibos,
+   o sea que borra plata que entró a caja y un comprobante que el cliente tiene
+   en la mano. `cargos_neto` va a 0 en el mismo UPDATE: entra en el saldo
+   canónico (#10) y un cargo vivo resucita la cuota en las listas de cobro
+   aunque el monto quede en cero. Implementado en `contratos_repo.cancelarContrato`
+   + migración `0258` para la deuda histórica.
 7. **`cuota.monto_pagado` = SUM(pagos aplicados VIVOS)** — lo mantiene un
    trigger server. El cliente NUNCA lo calcula a mano (solo espeja).
    **PAGO VIVO = `anulado = false AND en_revision = false`.** Las DOS
@@ -199,6 +268,69 @@ pantallas de historial.
 
 ---
 
+## 🔴 LA REGLA DE ORO — un cambio no está hecho hasta que TODO lo conectado dice la verdad
+
+> **Pedido textual de Rubén (2026-08-26), después de frenar el trabajo por este
+> motivo.** Las reglas de abajo nacieron de UN caso: al cambiar la regla de
+> cancelación (cancelar CONDONA la deuda, 2026-08-24) se arregló el repo que la
+> ejecuta y quedaron mintiendo las superficies que la MUESTRAN. El filtro
+> "Cancelado con deuda" siguió ofreciendo una categoría abolida
+> (`clientes_admin_screen.dart:33`), el chip decía "Sin contrato" a un suspendido,
+> y la documentación afirmaba lo CONTRARIO en seis lugares. **Una regla de negocio
+> no vive solo en el repo que la ejecuta: vive en los filtros, chips, conteos,
+> exports, textos y documentación.**
+
+**1. Barrer las superficies conectadas — NO es opcional.** Antes de dar un cambio
+por hecho: `grep -rn '<tabla|símbolo>' lib/` y recorrer CADA filtro, chip, conteo,
+export, PDF, texto de ayuda y documento preguntándose *¿esta pantalla sigue
+diciendo la verdad?*. **Una superficie que no se revisó no es una superficie que
+está bien: es una que no se miró.**
+
+Las tres herramientas que lo vuelven mecánico. **Dos de ellas las corre el CI**
+(`regla.py --verificar` y `estructura.py --verificar`), así que una omisión
+FALLA en vez de pasar desapercibida; **`impacto.py` NO** — no tiene modo
+`--verificar`, toma una tabla como argumento, y por eso depende de que uno se
+acuerde de correrla:
+
+| Herramienta | Contesta | Cuándo |
+|---|---|---|
+| `python tools/impacto.py <tabla>` | dónde vive una TABLA (las 8 capas) | si el cambio toca una tabla o columna (Fase 2) |
+| `python tools/regla.py <regla>` | dónde se VE una regla de negocio | si el cambio toca una de las reglas con ficha (`docs/reglas/`) |
+| `python tools/estructura.py` | si las tablas que `ARQUITECTURA` declara COMPLETAS lo están | al crear una tabla o un bucket de sync |
+
+**2. Ejecutar COMPLETA la opción elegida.** Cuando Rubén elige una de las opciones
+propuestas se hace entera —incluidas las superficies del punto 1 y la
+documentación—, no la mitad más fácil. Entregar la mitad sin decirlo es peor que
+no empezar: deja la app en un estado que nadie sabe describir.
+
+**3. Cerrar con las TRES LISTAS.** Todo pedido se entrega con:
+   - **superficies tocadas** (`archivo:línea`),
+   - **superficies revisadas y sin cambios** (con el porqué de cada una),
+   - **superficies que quedan afuera** (con el porqué y qué las dispararía).
+
+   Sin las tres el cambio no está entregado: está abandonado a mitad de camino.
+
+**4. El criterio solo puede SUMAR trabajo, nunca sacarlo.** Se puede decidir
+convocar especialistas de más, profundizar un audit o pedir una verificación extra.
+NO se puede decidir que el barrido del punto 1 "esta vez no hace falta", ni que la
+documentación se actualiza después. *"Esto es sencillo"* es exactamente lo que uno
+piensa antes de romper algo.
+
+**5. Entrega VISUAL del antes y el después.** Todo cambio que altere lo que el
+usuario ve o hace se entrega con mockups del **ciclo de vida de uso** —el recorrido
+del negocio, no la pantalla suelta—: el ANTES real y el DESPUÉS propuesto en la
+propuesta (Fase 2), y el resultado real al cerrar (Fase 6), **sobre el MISMO
+diagrama** para que la comparación sea inmediata. Formato y reglas:
+`AUDIT-PROFUNDO.md` §6. En español llano: si hay que saber SQL para entenderlo,
+está mal hecho.
+
+**Por qué esto vive ACÁ y no en `BITACORA.md`:** este aprendizaje pasó dos días
+SOLO en el bloque de estado de la bitácora, que se reescribe cada sesión — o sea
+que estaba programado para desaparecer y que el próximo agente repitiera el error
+idéntico. Lo único que se carga solo en CADA sesión es este archivo.
+
+---
+
 ## Proceso mandatorio de fixes y features (lifecycle)
 
 **Fase 1 — Entender:** leer el pedido → `BITACORA.md` (dónde quedamos) →
@@ -208,6 +340,31 @@ este AGENTS.md → `ARQUITECTURA.md` §0 (¿hay receta para este cambio?).
 evaluar riesgos/dependencias, **presentar propuesta con opciones y ESPERAR
 aprobación (OBLIGATORIO)**. Si el cambio toca UI/UX → la propuesta incluye un
 **mockup visual** (ver "Reglas de comunicación con Rubén").
+
+> **🔴 MAPA DE IMPACTO — obligatorio si el cambio toca UNA TABLA O COLUMNA.**
+> Antes de proponer, correr y **pegar la salida en la propuesta**:
+>
+> ```bash
+> python tools/impacto.py cuotas.cargos_neto
+> ```
+>
+> Lista las 8 capas donde esa tabla vive en el repo (migraciones, `schema.dart`,
+> sync rules del VPS, queries Dart, tests, los DOS seeds, invariantes, docs) y
+> avisa de lo que rompe callado: triggers que recalculan solos, policies RLS,
+> CHECKs, FKs a otras tablas, DEFAULTs que el INSERT de Dart no hereda.
+>
+> **Por qué es obligatorio y no "buena práctica":** el modo de falla más caro
+> del proyecto es exactamente éste — *"se piden cambios que por jerarquía van
+> encadenados con otras tablas, esas tablas se quedan fuera y esos cambios dañan
+> la interacción"* (Rubén, 2026-08-14). La regla de grepear ya existía en el
+> checklist §4 y en R4/R10; lo que fallaba es que dependía de acordarse. Pegado
+> en la propuesta, Rubén ve la lista COMPLETA antes de aprobar, y lo que falte
+> lo caza ahí y no en producción tres días después.
+>
+> **Una capa sin hits es una PREGUNTA, no un OK.** Si la columna no aparece en
+> `schema.dart`, la app no la ve. Si no aparece en los dos seeds, el escenario
+> de test diverge de producción (ya pasó 3 veces). Si no aparece en ningún test,
+> el cambio no tiene red.
 
 **Fase 3 — Implementación:** cambio por cambio, committeando. Si toca
 tablas/columnas: cadena de integridad completa (Receta R4/R10).
@@ -245,6 +402,8 @@ handoff DEBE abrir con dos líneas obligatorias** (sin ellas está incompleto):
    `ARQUITECTURA.md`** (sección del módulo y/o recetas).
 3. Si cambió misión/roles/stack → `PRODUCTO.md`.
 4. Si hay flujo de testing nuevo → `TESTING.md` §0.3.
+5. **Entregar con las TRES LISTAS** (regla de oro §3) y, si cambió lo que el
+   usuario ve o hace, los **mockups del antes y el después** (regla de oro §5).
 > Sin este cierre, la próxima sesión arranca a ciegas. Documentar toma
 > minutos; no hacerlo cuesta horas.
 
@@ -419,6 +578,258 @@ handoff DEBE abrir con dos líneas obligatorias** (sin ellas está incompleto):
    que sí popea). Grep de regresión: `context.push('/admin/...` sobre una ruta del
    ShellRoute que NO sea `clientes/`/`contratos/` → debe ser `go`. NO lo cazan
    analyze ni tests (es comportamiento de runtime de go_router) — solo el uso en vivo.
+
+**12b. Gate booleano que falla ABIERTO por un NULL (CRÍTICO — regla nueva, bug
+   2026-08-21):** SQL tiene lógica de TRES valores y **`if not <expr>` NO entra
+   cuando `<expr>` es NULL** → el guard se saltea EN SILENCIO y la función sigue
+   como si estuviera autorizada. Toda función/expresión que se consuma como
+   permiso (`if not gate(...) then return 'sin permiso'`) tiene que ser **TOTAL**:
+   `coalesce(<expr>, false)`, o consumirse con `is not true`. Dónde aparece el
+   NULL: `current_tenant_id()` es NULL para un JWT sin fila en `cobradores`
+   (incluido `anon`) → `p_tenant = current_tenant_id()` da NULL, no false; y
+   `is_admin_or_cobranza()` también puede dar NULL. Los dos casos reales:
+   `sync_rechazo_autorizado()` devolvía NULL para anon y
+   `sync_rechazo_registrar()` la usaba con `if not` → **insertaba pagos, recibos
+   y op_log** con el guard salteado (0237→0247); y `sync_rechazo_descartar`
+   contra una fila huérfana (`tenant_id` NULL) daba NULL para un admin → caía al
+   UPDATE (regresión de 0246, cerrada en 0247). **En un WHERE no se nota** (ahí
+   NULL se comporta como false), así que el mismo gate puede estar bien en la
+   lista y mal en el `if` — probar los DOS consumos. Grep de regresión:
+   `if not public.` en `supabase/migrations/` → cada hit tiene que ser total.
+   Al probar, incluir SIEMPRE una identidad **sin fila en `cobradores`**: con
+   usuarios normales el bug es invisible (igual que `dia_pago = 1` en 1c).
+
+**13. Plata nueva que el Resumen no ve (CRÍTICO — regla nueva 2026-08-13):**
+   toda feature que pueda **CREAR, INFLAR o ENCOGER** plata cobrable tiene que
+   quedar reflejada en el dashboard **en el mismo sprint**, y hay que
+   **AVISARLE A RUBÉN** en el handoff: qué concepto nuevo aparece, en qué balde
+   (Mensualidad / Otros / Descuentos / ninguno), con qué número esperado y qué
+   gate lo enciende (setting, precio, módulo). **Pedido textual del dueño: el
+   dashboard se actualiza con CUALQUIER cambio de plata y se le avisa.** Un
+   cambio de plata que no movió el Resumen y no se avisó NO está cerrado.
+   La tabla de los 13 caminos vigentes, el puente ticket→cobro y el **grep de
+   regresión con baselines** están en **ARQUITECTURA §3.5 (6)** — ahí se agrega
+   la fila, no acá. **NO lo cazan `flutter analyze` ni los tests**: un balde
+   faltante no rompe nada, la plata entra igual y solo miente el concepto.
+   Exclusión deliberada (costo interno, egreso de caja) también se escribe, con
+   el porqué, para que el próximo agente no la "arregle".
+
+## Cómo se DELEGA el trabajo (las 8 capas y quién toca cada una)
+
+Un pedido casi nunca vive en una sola capa. El desorden que costó días fue
+tratar cada pedido como "un cambio" en vez de como **N cambios encadenados**.
+`python tools/impacto.py <tabla>` dice CUÁLES capas se tocan; esta tabla dice
+QUIÉN las toca y en qué orden.
+
+| # | Capa | Qué vive ahí | Se delega a |
+|---|---|---|---|
+| 1 | **Postgres** | migraciones, triggers, RLS, CHECKs | el hilo principal, NUNCA un subagente (es producción) |
+| 2 | **SQLite** | `powersync/schema.dart` | va junto con (1), mismo commit |
+| 3 | **Sync** | `powersync/sync-rules.yaml` + restart del VPS | el hilo principal (SSH a Hetzner) |
+| 4 | **Dart** | queries, repos, providers | subagentes en paralelo, uno por archivo/módulo |
+| 5 | **UI** | pantallas, widgets | subagente + la skill `design` / `ui-ux-pro-max` |
+| 6 | **Tests** | unit, widget, escenarios | subagente, DESPUÉS de que (4) esté escrito |
+| 7 | **Seeds** | `supabase/escenarios/` — los DOS generadores | el hilo principal (ya divergieron 3 veces) |
+| 8 | **Docs** | ARQUITECTURA / MODULOS / BITACORA | el hilo principal, en la Fase 6 |
+
+**Reglas de delegación que no se negocian:**
+
+1. **Nada que escriba en producción se delega.** Migraciones, `supabase db query`
+   con UPDATE/INSERT, sync rules, releases. Un subagente no tiene el contexto
+   para juzgar el daño y no puede pedirle permiso a Rubén.
+2. **Lo que se delega bien es lo que se puede VERIFICAR solo**: leer y reportar
+   (auditorías), buscar en muchos archivos, escribir tests, proponer diseños en
+   paralelo. Si el resultado necesita que alguien lo crea sin poder chequearlo,
+   no se delega.
+3. **Todo hallazgo de un subagente pasa por un escéptico** antes de llegar a
+   Rubén. En esta sesión, de ~30 hallazgos reportados sobrevivieron 4 — el resto
+   eran plausibles y falsos. Relatar un hallazgo sin refutarlo es hacerle perder
+   el tiempo.
+4. **Verificar los números uno mismo antes de relatarlos.** Un subagente dijo
+   "C$4.898 sin facturar" y era cierto; otro dijo que el efecto `reconexion` no
+   cobraba y era media verdad. Si el número va a llegar a Rubén, se corre la
+   consulta acá.
+5. **El orden es 1→8, no al revés.** Escribir Dart antes de tener la columna en
+   `schema.dart` produce código que compila y no ve datos.
+
+**Las skills, dónde entran:** `ui-ux-pro-max`/`design` cuando el pedido es de
+interfaz (evita las 8 iteraciones de la misma tarjeta que costó el Resumen);
+`systematic-debugging` cuando algo falla y no se sabe por qué;
+`writing-plans`/`brainstorming` para descomponer un pedido grande;
+`dispatching-parallel-agents` para el fan-out. **Ninguna reemplaza las 6 fases
+ni el mapa de impacto.**
+
+**13. Guard de ESTADO vs guard de TRANSICIÓN (CRÍTICO — regla nueva, 0254):**
+   Cuando la regla es *"quien hace X tiene que registrar quién y por qué"*, el
+   requisito es sobre la **TRANSICIÓN**, no sobre el estado de la fila. Un
+   `CHECK` no distingue: evalúa la fila entera en **cada** INSERT/UPDATE, y
+   `NOT VALID` **solo salta el escaneo inicial** — sigue disparando para siempre
+   en cualquier UPDATE futuro de una fila vieja que no lo cumple. Si algo del
+   día a día toca esas filas (en 0254: `propagate_cobrador_id_from_cliente`
+   updatea TODOS los contratos del cliente sin filtrar por estado), el guard
+   rompe una operación diaria para proteger un dato histórico — al revés.
+   **Regla: usar un trigger BEFORE que valide solo la transición** (`NEW.x = v
+   AND OLD.x IS DISTINCT FROM v`). Antes de agregar CUALQUIER `CHECK` a una
+   tabla con filas históricas que lo violan, contar **cuántas filas vivas
+   quedarían atrapadas** (`SELECT count(*) ... WHERE <la condición falla>`) y
+   preguntarse **quién las updatea en la operación normal**.
+
+**13b. `TG_OP` miente con el UPSERT (CRÍTICO — mismo origen):** PowerSync sube
+   los `UpdateType.put` con `table.upsert(...)` (`connector.dart`), que PostgREST
+   traduce a `INSERT ... ON CONFLICT DO UPDATE`. El trigger **BEFORE INSERT
+   dispara ANTES de que se detecte el conflicto**: `TG_OP` dice `'INSERT'` y
+   `OLD` no existe, **aunque la fila ya esté en la tabla**. Todo guard de
+   transición sobre una tabla sincronizada necesita, además de la rama
+   `TG_OP='UPDATE' AND OLD...`, la rama `TG_OP='INSERT' AND EXISTS (SELECT 1
+   FROM <tabla> WHERE id = NEW.id AND <ya estaba en ese estado>)`. Sin ella el
+   guard rebota re-puts legítimos de filas históricas. No lo cazan analyze ni
+   tests: solo aparece cuando un device re-sube una fila vieja.
+
+**13c. El corrector y el verificador comparten predicado (regla nueva, 0251):**
+   toda función que ARREGLA lo que un chequeo MARCA tiene que usar el predicado
+   **idéntico**. Si divergen, el botón "corrige" filas que el chequeo no marca
+   (o no corrige las que sí) y **nunca converge**: se aprieta, dice "N
+   corregidos", se vuelve a verificar y sigue igual. Peor si el corrector emite
+   `op_log`: estampa filas de "corrección" con `antes = después` en el historial
+   de dinero, en cada apretón. Al tocar cualquiera de los dos lados, grepear el
+   otro y comparar los WHERE **cláusula por cláusula**. Ojo con `en_revision`
+   (cuarentena del guard 0218): el predicado canónico de "pagos que cuentan" es
+   `anulado = false AND en_revision = false`, y `anulado = false` a secas es un
+   bug silencioso.
+
+**14. Un chequeo que NUNCA puede dar >0, o que SIEMPRE va a dar >0, es peor
+   que no tener chequeo (regla nueva, audit 0255):** el primero da falsa
+   tranquilidad, el segundo se ignora y tapa el día que haya algo real. Al
+   escribir o tocar un invariante, hacer SIEMPRE las dos preguntas y
+   contestarlas con una consulta, no con el ojo:
+   - **¿Puede dar >0?** Describí la fila que DEBERÍA dispararlo y verificá que
+     el predicado la atrapa. Ojo con el **fail-open por NULL**: `x > NULL` da
+     NULL y la fila se excluye en silencio — un `IS NOT NULL` río arriba puede
+     estar tapando justo la población donde vive el bug (así INV25 no vio 6
+     cuotas de deuda fantasma: le faltaba el `COALESCE` que su trigger sí hace).
+   - **¿Puede satisfacerse?** Si exige un campo, grepear **quién lo escribe**.
+     Si no lo escribe nadie (`count(campo) = 0` en producción, sin UPDATE en
+     `lib/`, sin trigger), el chequeo es una alarma permanente disfrazada de
+     invariante — y encima se tapa a sí mismo: si TODO viola, deja de
+     discriminar (INV29 pedía un `recibo_id` que ningún camino setea).
+   Y una tercera, para los que ya existen: **¿el que lo ARREGLA y el que lo
+   MIDE usan el mismo canon que el que MANDA?** Cuando hay un trigger BEFORE de
+   por medio, el trigger es la autoridad — gana siempre. Verificador y corrector
+   se alinean A ÉL, no entre ellos (ver #13c). Si el corrector pide algo que el
+   trigger no deja entrar, `RETURNING` devuelve el valor POST-trigger: la fila
+   cuenta como "corregida" sin haber cambiado. Blindaje barato y general:
+   `... RETURNING prev.x AS antes, q.x AS despues` + filtrar
+   `WHERE antes IS DISTINCT FROM despues` antes de contar y de loguear.
+
+**15. `Flexible` + `Expanded` en el MISMO `Row` deja un HUECO (regla nueva,
+   2026-09-01):** los dos son flex y se reparten el espacio libre en partes
+   iguales, pero `Flexible` es *loose*: usa sólo lo que su hijo necesita y **el
+   resto de su parte queda como hueco muerto**, que el `Expanded` nunca ve. La
+   cifra alineada a la derecha del `Expanded` termina donde termina su fracción
+   — **un lugar distinto en cada fila**, según cuán largo sea el texto del
+   `Flexible`. En "Estado actual" las cifras terminaban en **siete bordes
+   derechos distintos** a 1900px, y la única fila que llegaba al borde era la
+   única SIN hint, o sea sin `Flexible`.
+   **La forma correcta: UN SOLO `Expanded`, y que sea el de la IZQUIERDA.**
+   Absorbe todo el sobrante; el valor va sin flex, con su ancho natural, y por
+   eso pegado al borde. Cuando hay que alinear COLUMNAS entre filas (una tabla),
+   `Table` con `IntrinsicColumnWidth` lo resuelve **por construcción** — con
+   `Flexible` la alineación depende del CONTENIDO: si los textos saturan su
+   cuota queda derecha por casualidad, y con textos cortos se corre.
+   **No lo caza `flutter analyze` ni ningún test de datos**: no hay excepción,
+   el widget se dibuja. Sólo se nota mirando, y a un ancho concreto. Grep de
+   regresión: un `Flexible` y un `Expanded` hermanos en el mismo `Row`.
+
+**15b. Un test de layout que no distingue el ANTES del DESPUÉS es decoración
+   (mismo día, tres intentos):** al probar la alineación del globo, la primera
+   versión medía **un solo día** y daba VERDE con el layout roto (los montos del
+   escenario eran largos y saturaban); la segunda comparaba posiciones
+   **absolutas entre días** y daba 31 valores distintos porque el globo se mueve
+   con su punto en la curva; la tercera medía a **1400px**, donde el globo de
+   250 entra en cualquier posición y el bug de límites no se ejercita.
+   **Antes de dar por bueno un test de UI, correrlo contra el código VIEJO.** Si
+   pasa igual, no es una red.
+
+**16. Un escenario que no siembra lo que producción tiene no prueba lo que
+   creés (regla nueva, 2026-09-01):** el Excel sumó una columna `Recibo` y el
+   test la encontró VACÍA — el escenario tenía **245 pagos y CERO recibos**,
+   contra el **100%** de producción (32.609 de 32.609). El código estaba bien;
+   el escenario mentía.
+   Al agregar una columna que sale de una tabla que el escenario no puebla,
+   **sembrarla en los DOS generadores** (`generar_seed_dart.py` y
+   `generar_seed_sql.py`) — ya divergieron tres veces. Y contra producción,
+   preguntar **qué porcentaje** de las filas tiene el dato: si allá es 100% y
+   en el escenario 0%, el test no está probando la columna.
+
+**17. Una fila de cierre de Excel armada A MANO se corre en silencio (regla
+   nueva, 2026-09-01):** los exports con secciones escriben su subtotal como
+   `['Subtotal x', '', '', '', '', c.cuotas, c.monto]` — un `''` por columna
+   hasta la que lleva el número. **Agregar una columna y olvidar el `''` no
+   rompe nada**: el archivo se genera, se abre en Excel, y el total aparece una
+   casilla más a la izquierda. No lo caza `analyze` (las filas son
+   `List<Object?>` y aceptan cualquier largo) ni ningún test de datos.
+   Lo verifica **`LibroExcel.desparejas()`**, que salta como `assert` al
+   construir el libro — y encontró el error en el acto: al sumar `Recibo` y
+   `Ciclo del cobro`, el TOTAL de Cobertura quedó con **13 celdas para 15
+   columnas**. En release el assert no está: un subtotal corrido no es motivo
+   para dejar a nadie sin su Excel.
+
+**14b. Un comentario que dice "copia exacta de X" es una promesa que hay que
+   verificar, no creer (mismo audit):** INV25 declaraba ser copia exacta del CTE
+   `futuras` del trigger 0234 y difería en dos cosas (el `COALESCE` de la fecha y
+   un filtro de más). Al auditar cualquier bloque que se declare espejo de otro,
+   **traer los dos cuerpos VIVOS y diffearlos**, cláusula por cláusula. El
+   comentario envejece; el código del otro lado se mueve.
+
+**14c. El texto que la UI muestra sobre un problema es parte del fix:** si el
+   invariante dice "es plata que salió de una caja que no la tenía" y la
+   operación real es legítima, mandás a auditar un arqueo sano; si la corrección
+   sugerida es "completá el recibo" y no hay campo de recibo en ningún flujo, la
+   instrucción es imposible de seguir. Al cambiar el PREDICADO de un chequeo,
+   revisar SIEMPRE su `explicacion`/`correccion` en `invariantes_detalle.dart`.
+   Y no hardcodear conteos en pantalla ("corre los 20 chequeos"): derivarlos del
+   resultado — ese número fue 17, 20 y 31, y quedó viejo las tres veces.
+
+**18. Un dato del COMPROBANTE que sale de un JOIN a una tabla editable
+   CONTRADICE el papel que el cliente tiene en la mano (regla nueva,
+   2026-09-02):** el recibo no es una vista, es un **documento EMITIDO**. Todo
+   campo que se imprime y se **recalcula en cada impresión** hay que
+   congelarlo en la fila del recibo al emitirlo — columna nullable y **sin
+   backfill**: `NULL` = recibo viejo, el renderer calcula como siempre;
+   rellenar los viejos con la regla de hoy sería escribir una mentira con
+   cara de dato.
+   **Ya mordió DOS veces con la misma forma.** El **mes** (`0262`): el recibo
+   HL-00230 de Mairena dice *"Julio 2026"* en mano del cliente y *"Junio
+   2026"* en la app, mismo cobro y mismo correlativo. Y el **plan** (`0268`):
+   el recibo resolvía el plan por JOIN al plan VIVO del contrato, así que los
+   37 cambios de plan de Mairena entre el 22/08 y el 01/09 reescribieron **en
+   silencio** el plan que decían todos los recibos anteriores de esos
+   contratos.
+   **Siguen vivos y SIN congelar:** el nombre y la dirección de la empresa
+   (`settings.empresaNombre`/`empresaDireccion`, leídos vivos en los tres
+   renderers) y el nombre del cobrador (`co.nombre` por `JOIN cobradores`,
+   `recibo_screen.dart`). Cualquiera de los tres se edita y reescribe
+   retroactivamente lo que dicen todos los recibos viejos.
+   **NO lo cazan `analyze` ni los tests:** el recibo se imprime perfecto y la
+   mentira aparece recién en la REIMPRESIÓN, meses después, cuando el cliente
+   pone su papel al lado de la pantalla. Al sumar un campo al recibo,
+   preguntarse siempre: **¿de qué tabla sale, y quién la puede editar
+   mañana?** Caso completo: `docs/reglas/mes-servicio.md`.
+
+**19. Un parámetro que una función RECIBE, DOCUMENTA y nunca USA (regla
+   nueva, mismo día):** `cambiarPlan` declaraba `String? motivo` con el
+   docstring *"queda en el op_log del contrato"* y el cuerpo escribía siempre
+   el literal `'Cambio de plan'`. Producción lo confirma: **168 filas de
+   historial, cero variación**. Es la hermana de la 14b —un comentario que
+   promete— pero peor, porque el parámetro existe y **el llamador lo llena en
+   serio**: el camino de aprobación armaba un motivo que incluía el aviso de
+   que el precio del plan se movió entre el pedido y la firma, con los dos
+   números, y se descartaba entero.
+   **Cómo se caza, y es barato:** para todo parámetro opcional que un
+   docstring diga que se persiste, grepear su nombre **dentro del cuerpo** de
+   la función. Si solo aparece en la firma, no se usa. Y contra producción:
+   `SELECT DISTINCT <campo>` — si un campo que debería variar tiene UN solo
+   valor en miles de filas, nadie lo está escribiendo.
 
 ### Formato obligatorio del reporte de audit
 ```

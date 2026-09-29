@@ -67,10 +67,21 @@ class _SelectorBuscableState<T> extends State<_SelectorBuscable<T>> {
   late List<OpcionSelector<T>> _filtradas = widget.opciones;
   // Texto plegado de cada opción (nombre + textoBusqueda opcional), precomputado
   // una vez (no en cada tecla).
-  late final List<String> _nombresFold = widget.opciones
-      .map((o) => foldBusqueda(
-          o.textoBusqueda == null ? o.nombre : '${o.nombre} ${o.textoBusqueda}'))
-      .toList();
+  late final List<String> _nombresFold = widget.opciones.map((o) {
+    final base = foldBusqueda(
+        o.textoBusqueda == null ? o.nombre : '${o.nombre} ${o.textoBusqueda}');
+    // Variante SIN separador de miles, agregada al texto buscable. Sin esto,
+    // tipear `1282` no encuentra "1.282,00 C$" —el punto parte el substring— y
+    // el usuario concluye que el ítem no está. Lo reportó el ISP con los planes:
+    // buscaba el precio como lo dice en voz alta y no le aparecía nada.
+    // Solo se saca el punto ENTRE DÍGITOS (el separador de miles del formato
+    // es-NI); la coma decimal queda, así que "1.282,00" → "1282,00" y tanto
+    // `1282` como `1.282` matchean. No se toca `foldBusqueda`, que la usa media
+    // app: el arreglo vive acá, en el único lugar que muestra montos formateados.
+    final sinMiles = base.replaceAllMapped(
+        RegExp(r'(\d)\.(?=\d)'), (m) => m[1]!);
+    return sinMiles == base ? base : '$base $sinMiles';
+  }).toList();
 
   void _filtrar(String q) {
     // Búsqueda por TOKENS: cada palabra debe aparecer (en cualquier orden) en el

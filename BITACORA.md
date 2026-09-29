@@ -23,7 +23,2834 @@
 
 ## ⭐ ESTADO ACTUAL (refrescar al cerrar cada sesión)
 
-- **👉 NUEVO (2026-08-10, ÚLTIMO) — Notas internas, se elimina la suspensión por lote, y la deuda
+- **👉 (2026-09-27) — Release oficial v0.45.0 a producción (`main`): Motor de Ruteo Híbrido Callejero en Mapa (OSRM online + Offline A* con Snapping).**
+  · **Ruteo Callejero Preciso:** Sustituye el trazo euclidiano (línea recta) entre paradas de cobro por geometría real de calles vía OSRM con fallback offline instantáneo basado en grafo A* local (`assets/osm_graph.json`) y snapping geométrico al segmento vial más cercano.
+  · **Topología de Red aislada:** Los avances de topología de red (semáforos de ocupación en NAPs, hubs y mapa de planta externa) quedan preservados en la rama `feature/red-topologia-mapa` para continuar iteración controlada sin impactar el release de cobros.
+  · **Verificación:** 4/4 tests de ruteo pasando, integridad de tablas y buckets (50/15) y reglas de negocio (10/10) verificadas en verde.
+
+- **(2026-09-05) — Release oficial v0.44.1 a producción (`main`): título de notificación de sincronización en segundo plano agnóstico de marca ("Sincronizando cartera").**
+  · **Ajuste UX Android:** En `SyncForegroundService`, se reemplazó el título que exponía `'SITECSA CRM'` por `'Sincronizando cartera...'` / `'Sincronizando cartera (X%)'`, evitando redundancia con el encabezado de marca propio de cada tenant en Android.
+  · **Versión previa v0.44.0:** Publicada y disponible con la optimización de 26 ms en Dashboard, ciclo 3-en-1, background sync ininterrumpido y auto-cierre de modal en cobros duplicados.
+  · **Deploy:** Compilado con `build-release.ps1 -AllTenants` y publicado en `rubenmaltez/sitecsa-updates` (tag `v0.44.1`).
+
+- **(2026-09-04, ANTERIOR) — INCIDENTE RESUELTO: el Resumen dejaba a TODA la
+  app sin datos.** v0.42.0. Reportado por el dueño: al scrollear en el Resumen
+  y volver, los gráficos quedaban clavados y **la lista de clientes salía en
+  blanco** — la app entera, no sólo el dashboard.
+  · **Tres causas, las tres MEDIDAS** contra una base local con los 51.598
+    cuotas y 27.717 pagos reales de Mairena (banco de pruebas nuevo,
+    `rendimiento_escala_real_test.dart`):
+    1. **Los índices no se usaban.** Las consultas filtraban con
+       `date(p.fecha_pago)` y `date(cu.fecha_vencimiento)`: envuelta en una
+       función, la columna deja de ser indexable. **23 recorridas completas de
+       tabla por pasada.**
+    2. **Los providers no se apagaban.** 7 de 8 sin `autoDispose`: abrir el
+       Resumen UNA vez dejaba sus consultas corriendo hasta cerrar la app.
+    3. **Sin freno.** El `watch` se relanzaba cada **30 ms**; con 16 consultas
+       vivas, las **5 lecturas concurrentes** de PowerSync quedaban ocupadas
+       siempre y todo lo demás devolvía vacío.
+  · **Resultado: 9.546 ms → 2.234 ms por pasada (−77%), 23 recorridas → 1.**
+  · **`pagos.fecha_cobro` (migración 0273):** el DÍA del cobro como `date`.
+    Existe porque sacar el `date()` de `fecha_pago` a lo bruto **perdía 192
+    pagos por C\$152.143 en Mairena** — los del último día del ciclo, que
+    comparados como texto quedan afuera. Idea del dueño, y es mejor que la
+    gimnasia de rangos que yo proponía. **`fecha_vencimiento` no necesitó
+    nada**: 0 de 63.207 filas tienen hora.
+  · **La trampa de zona horaria, para el próximo que lea esto:** `fecha_pago`
+    guarda el wall-clock local etiquetado como UTC. Derivar el día con
+    `AT TIME ZONE 'America/Managua'` movería **26.178 de 34.010 pagos (77%) al
+    día anterior**. Va con `'UTC'`. Ya estaba documentado en 0096 y 0214.
+  · **Lo que dije mal en el camino**, porque importa para no repetirlo: dije que
+    el problema era arquitectural —"análisis contra un almacén de documentos"—
+    y propuse mover cuentas al servidor y apagar tarjetas. **Falso.** Medir el
+    PISO lo desmintió: sumar las 51.598 cuotas cuesta **85 ms**. El JSON de
+    PowerSync no era el problema; eran nuestras consultas. Lo cazó el dueño
+    dudando del diagnóstico, no yo.
+  · **Las cifras NO se movieron:** `mismas_cifras_tras_optimizar_test` compara
+    las 9 consultas vieja-contra-nueva, columna por columna, a escala real.
+  · **Un bug real que el test cazó antes de publicarse:** al updatear
+    `fecha_pago` sin mover `fecha_cobro`, 7 cuotas pagadas EN FECHA contaban
+    como mora. La app no tiene ese camino (nunca updatea `fecha_pago`), pero
+    ahora si alguien lo agrega, salta. **INV33** lo cuida del lado del server.
+  · **Tests: 885.** Commits: `0f473a6e` · `b8e0a1c2` · `2010bf13` · `c2656386`.
+  · **Pendiente, con su porqué:** reportes, arqueo, `mis_cobros` y
+    `cliente_detail` **siguen con `date(fecha_pago)`** — son pantallas bajo
+    demanda, con su propio rango de fechas, y no son parte del incidente.
+    Cambiarlas sumaba riesgo sobre consultas de dinero sin arreglar lo
+    reportado. Se disparan si alguna se vuelve lenta en un tenant grande.
+
+- **👉 (2026-09-03, ÚLTIMO) — El Resumen en el teléfono: las tablas pasan a
+  "el total arriba y sus partes abajo".** **SIN PUBLICAR** (sería la v0.41.2).
+  · **El pedido, en palabras del dueño:** *"que en la pantalla de un telefono se
+    miren los numeros y letras de tamaño consistente con el resto de la app"*,
+    con **toda la información** y **las mismas dos tablas**.
+  · **La causa de fondo, MEDIDA (no estimada):** a 360px la tabla dispone de
+    **312px** y las cinco columnas necesitan **287** sólo de números y
+    separadores. Quedan **25px** para un rótulo que necesita 84 → el `FittedBox`
+    dibujaba el monto al 34%, **4,8px**. **Ninguna variante de la GRILLA lo
+    arregla**: hay que cambiar de forma. Medido con la Roboto real cargada por
+    `FontLoader` — ojo, la fuente por defecto de `flutter_test` es Ahem y da
+    todos los glifos del mismo ancho: medir con ella es medir cualquier cosa.
+  · **Cuatro criterios se probaron y se descartaron antes**, y ése era el
+    problema de fondo: nunca se eligió entre ellos y quedaron **dos vivos, uno
+    en cada tabla** (ocultar el % · el monto en segunda línea · una tarjeta por
+    fila · abreviar los encabezados).
+  · **Lo que quedó:** el total de titular con su **barra de composición**, y
+    cada parte con su monto, su % y sus conteos rotulados con la palabra al
+    lado. Un solo archivo — `bloque_parte_y_todo.dart` — para las **TRES**
+    tablas (Cobertura, mora y "Quién cobró", que el barrido encontró con el
+    criterio viejo). Sin `FittedBox` y **sin inventar tamaños**: sólo roles de
+    `TxtResumen` que ya existían. **En PC no cambia nada.**
+  · **La barra se dibujaba con altura CERO y lo encontró el RENDER, no un
+    test.** Un `ColoredBox` sin hijo toma `constraints.smallest` y un `Row` da
+    la altura floja: la barra existía, con sus flex correctos, invisible. Los
+    tests contaban widgets y medían flex — todos estaban. **Regla nueva: para
+    juzgar layout hay que MIRARLO**; se capturó el widget a PNG con la Roboto y
+    los íconos cargados.
+  · **Tests: 874** (eran 853). Dos archivos que miden a 360px, y el del bloque
+    usa los montos de **siete dígitos** de Mairena porque el escenario tiene de
+    cinco (regla 16). Los 🔴 verificados contra el código roto.
+  · Commits: `a3edf688` · `98fd5a3e` · `af438e10` · `6e565150` · `9002ef79`.
+  · **De paso, dos bugs que nadie había reportado:** la barra de mora no abría
+    el globo al TOCAR (sólo `onHover`, que en Android no existe), y adentro del
+    globo el número se **pintaba fuera de la caja** con montos de siete dígitos
+    — eso pasaba **también en PC**, porque el globo medía 208px fijos.
+
+- **👉 (2026-09-03, ÚLTIMO) — El panel de los filtros entra en la pantalla.**
+  Reportado desde Android por usuarios de un tenant. **SIN PUBLICAR.**
+  · **El panel se anclaba SIEMPRE por la izquierda del chip**, con hasta 340px
+    y sin mirar dónde estaba el chip. Con **"Plan"** —el ÚLTIMO de la barra de
+    Cobros, o sea el más a la derecha— se cortaba: los usuarios veían
+    "COMBO INTER…" y "2.014,00 C\$ · 1 clie…".
+  · **NO era del chip nuevo: era del componente compartido.** Cobrador y Zona
+    nunca lo mostraron porque están a la izquierda y ahí sobra lugar. El
+    arreglo va en `FiltroMultiDropdown`, así que cubre los **cuatro** chips en
+    las **cinco** pantallas que lo usan (Clientes, Cobros, Mapa, Rutas y la
+    barra compartida).
+  · **Es la MISMA lección del globo de la curva, el mismo día: anclar sin
+    acotar.** Un widget anclado a otro no se queda dentro de la pantalla solo.
+    Van dos en una jornada; vale como patrón a revisar en cualquier overlay.
+  · Ahora se mide el espacio real a cada lado del chip: si por la derecha no
+    entra y por la izquierda hay más, el panel **se ancla por la derecha** y
+    crece hacia adentro. En los dos casos el ancho se clampea a lo disponible.
+  · **Test verificado en los dos sentidos**: contra el código viejo falla
+    diciendo *"termina en 589.0 y la pantalla mide 360"*. Con contraprueba a
+    1200px para que el arreglo no encoja el panel donde hay lugar. **853 tests.**
+
+- **🔴 (2026-09-03) — ABIERTO, es lo más urgente: usuarios reportan el Resumen
+  lento o EN BLANCO.** Sin resolver, sin causa confirmada.
+  · **Contexto que enmarca el riesgo:** v0.37.1 tenía **5 archivos** de
+    dashboard; v0.41.0 tiene **16**. El Resumen se reconstruyó entero y **le
+    llegó por primera vez a Mairena y Telenet hoy**. Encima la `0266` encendió
+    `operativo` y `distribucion` para las dos, tarjetas que **nunca habían
+    corrido contra sus datos**.
+  · **Descartado con evidencia:** (a) NO es la `0266` en versiones viejas —
+    v0.37.1 ni siquiera tiene `dashboard_tarjetas.dart`, no lee ese setting;
+    (b) NO es la `0269` — metió el valor `cambio_plan` en `origen`, que las
+    versiones viejas nunca vieron, pero sus dos `switch` tienen `_ =>`.
+  · **Palanca inmediata, sin release:** apagar de nuevo `operativo` y
+    `distribucion` para Mairena y Telenet. Es un cambio de settings, llega por
+    sync en segundos, y parte el problema al medio. **Propuesta al dueño,
+    esperando su OK.**
+  · **Falta el caso concreto:** qué empresa, qué usuario, qué versión, y si es
+    celular o PC. "Blanco total" puede ser la pantalla entera o el Resumen
+    dentro del shell, y son diagnósticos distintos.
+  · **También reportado, secundario:** las tablas del Resumen no siguen el
+    esquema responsive en celular (encabezados cortados "U…"/"C…", montos que
+    bajan de línea) y las barras de la mora de 6 ciclos no abren el globo al
+    tocarlas — el `onTapUp` se retiró el 2026-09-02 y el (i) todavía dice que
+    hacer clic salta al ciclo.
+
+- **(2026-09-03) — Entrar a una empresa espera el sync completo.**
+  Commit `bea774db`. **SIN PUBLICAR** (la v0.41.0 instalada no lo tiene).
+  · **Las dos quejas del dueño eran el MISMO número.** Reportó (a) que al
+    impersonar *"me hace una transición que me permite entrar al app sin nada
+    cargado y yo como dev necesito ver data"* y (b) que el Resumen seguía lento
+    *"cuando se supone que el sync ya descargó todo"*. La causa única:
+    **`syncGateGraceProvider` abría el gate a los 8 SEGUNDOS**, terminara o no.
+    Impersonar baja la empresa entera (~190.000 filas en Mairena) y en 8s entra
+    una fracción → app vacía; y el resto seguía bajando, con cada lote
+    re-disparando las consultas `watch` del Resumen, que nunca resolvían.
+  · **Lo irónico: el plazo existía POR ese caso.** Su comentario decía que era
+    para evitar "esperar minutos con DB vacía / sync inicial lento del
+    super_admin". Se había cambiado una espera larga por una app vacía.
+  · **Fix:** `AuthIdentityState.entrandoATenant` (sólo lo pone
+    `onImpersonationChanged`) desactiva el plazo. Un LOGIN normal sigue
+    liberando a los 8s — el plazo protege al cobrador y eso no se toca; hay
+    contraprueba en el test. Seguro porque `SyncGateScreen` ya muestra progreso
+    REAL y ofrece salidas a los 2 y 3 minutos. **Se paga una vez por empresa:**
+    al reingresar sólo bajan los deltas, medido y aceptado por el dueño.
+  · **851 tests.** El nuevo verificado en los dos sentidos.
+  · **🔴 LO QUE NO SE HIZO, y por qué — leer antes de retomarlo.** Estaba
+    aprobado filtrar por `tenant_id` las 16 consultas de `dashboard_query.dart`
+    (opción A). **Se frenó al medir que el tenant System tiene CERO clientes,
+    contratos, cuotas, pagos y recibos**: cuando el sync termina de verdad, el
+    SQLite del super_admin queda con UNA sola empresa, así que la mezcla sólo
+    existía durante la ventana de transición — que es la que este mismo fix
+    cierra. Hacer A a mano sobre 16 consultas con parámetros POSICIONALES y
+    subconsultas correlacionadas es donde se cuelan los errores silenciosos.
+    **Sigue siendo deseable como refuerzo**, pero con un test que siembre DOS
+    empresas y verifique que los números no se mueven — ese test no existe y es
+    lo único que la vuelve segura.
+  · **Pendiente relacionado (opción C, no urgente):** el bucket
+    `impersonated_tenant` baja 38 tablas, incluidas **36.786 filas de `op_log`**
+    en Mairena que ninguna pantalla del Resumen usa. Sacarlo acortaría la espera
+    ~20%. Requiere deploy de sync rules al VPS.
+
+- **(2026-09-03) — El globo del gráfico se dibuja ENCIMA de la
+  leyenda, y deja de cortar su rótulo.** Reporte del dueño con captura.
+  Commit `fead6a96`. **SIN PUBLICAR: la v0.41.0 instalada NO lo tiene.**
+  · **Lo reportó como "el fondo del tooltip es transparente" y no era eso.** El
+    globo mide ~196px contra los 180 del gráfico, se desborda hacia abajo, y la
+    leyenda era **hermana POSTERIOR** en la misma Column: en Flutter el hermano
+    de después se pinta encima. Se leía igual que una transparencia.
+  · **Es el mismo bug que ya se arregló una vez en el eje HORIZONTAL** —el
+    globo se salía por los costados y se clampeó, con su comentario y todo— y
+    que quedó abierto en el vertical. Y los renglones que lo hicieron crecer
+    (acumulado del ciclo + de otros ciclos) se agregaron ESE MISMO DÍA.
+  · **Decisión del dueño: NO achicar el globo**, porque perdería información.
+    *"El tooltip sólo se pone encima de la interfaz y que lo que queda en el
+    background se tape mientras se haga el hover"*. La leyenda pasó a vivir
+    DENTRO del mismo `Stack` y el globo quedó último.
+  · **El rótulo a dos líneas**: "Acumulado del ciclo" salía como "Acumulado del
+    cic…" — el renglón más importante era el único ilegible. No deja el monto
+    huérfano porque en el globo cada dato tiene su columna en la `Table`. Se
+    descartó ensanchar el globo: lo acercaría otra vez a los bordes.
+  · **Test de regresión verificado en los dos sentidos.** Ojo con el finder:
+    `find.text('Recuperado')` matchea TAMBIÉN una fila de la tabla, y con eso
+    el test daba rojo con el bug ya arreglado. Se busca por 'Meta del ciclo',
+    que sólo existe en la leyenda. Es la trampa que ese mismo archivo advierte.
+  · **847 tests**, 10/10 reglas.
+  · **🔴 PAUSADO, y es lo más grave abierto:** el dueño reportó que el Resumen
+    tarda y se queda girando al impersonar Mairena. Diagnosticado, sin tocar
+    nada: (a) las **48 consultas de `dashboard_query.dart` NO filtran
+    `tenant_id`** —verificado también en producción v0.37.1, o sea que es de
+    antes— y el SQLite del super_admin NO es mono-tenant, así que **los números
+    pueden estar mezclando empresas** (regla §1 del AGENTS); (b) el bucket
+    `impersonated_tenant` baja las 38 tablas —~190.000 filas para Mairena, de
+    las cuales 36.786 son `op_log` que el dashboard nunca usa— y mientras eso
+    escribe, cada lote **re-dispara todas las consultas `watch`** del Resumen,
+    así que ninguna llega a terminar. Propuesto: (A) filtrar por empresa las 48
+    consultas, (B) sacar `op_log` del bucket. Espera decisión.
+
+- **(2026-09-03) — Filtro por plan en Clientes, Cobros y Mapa + el
+  tipo de plan se elige a propósito.** Pedido de Rubén, antes del release.
+  Commits `46b39799` → `0e4f1708`. **846 tests, 10/10 reglas, 15/15 buckets.**
+  · **Lo que casi arruina el diseño, y era un error MÍO:** propuse agregar una
+    columna `tipo` al catálogo de planes con toda una argumentación sobre lo
+    frágil que es adivinar el tipo del nombre. **La columna ya existía** —NOT
+    NULL, con CHECK de tres valores, y el formulario ya la escribía—. Consulté
+    las columnas de la tabla, la salida se cortó, no la leí, y armé el
+    razonamiento sobre una premisa falsa. Rubén lo cazó con una captura.
+  · **El formulario** ya no preselecciona "Internet": arranca vacío y valida.
+    Como la columna es NOT NULL el form nunca fallaba, así que un combo creado
+    sin tocar el desplegable se guardaba como internet EN SILENCIO.
+  · **Migración `0271`**: tres planes mal marcados. `Promo 1 Catv Gratis`
+    (C$916 = el precio EXACTO de `Internet 20MB`, o sea internet + cable de
+    regalo) y `Promo 3 Internet Gratis` (C$513 = el de `Catv`) pasan a combo.
+    Sin eso, esos 25 clientes de Telenet no aparecían al filtrar por Combo.
+    Los otros 3 desacuerdos quedan como están **por decisión del dueño**: el
+    nombre no da ninguna pista y sólo Telenet sabe qué incluyen.
+  · **Avisos al editar un plan**, uno para cada caso opuesto: renombrar
+    reescribe lo que dicen **33.949 recibos ya entregados** (los que resuelven
+    el nombre por JOIN vivo; el congelado de `0268` recién entró) y se dice con
+    el número exacto; cambiar el precio NO toca las cuotas ya generadas y se
+    aclara, porque el 95% de los contratos son indefinidos y subir ese precio
+    ES el mecanismo del aumento de tarifa. Ninguno de los dos bloquea.
+  · **Las tres pantallas NO comparten barra de filtros** — cada una la tiene
+    hecha a mano y la única que usa `FiltrosBar` es Inventario. Lo compartible
+    es el SQL de opciones y su armado (`shared/widgets/filtro_planes.dart`).
+  · **Reglas cerradas:** un plan aparece si algún contrato lo usa (el `activo`
+    no participa) · el filtro mira el plan de HOY · opción centinela "Sin plan"
+    (96 clientes sin contrato activo en producción) · el chip va último.
+  · **Regla 16, otra vez:** el generador Dart no sembraba `planes` ni ponía
+    `plan_id`. Ahora siembra 4 planes con los tres tipos y dos que comparten
+    nombre. El primer test del grupo verifica que el escenario TENGA planes
+    antes de medir nada — y ya pagó: contra el seed viejo falló ahí en vez de
+    dar cuatro verdes vacíos.
+  · **Pendiente conocido:** el rol `coordinador` (0 usuarios hoy) ve el chip
+    pero su bucket de sync NO baja `contratos`, así que le queda sin opciones.
+    Para que le funcione hay que agregar `contratos` a `por_coordinador` — un
+    deploy de sync rules, decidido para cuando exista el primer coordinador.
+
+- **(2026-09-03) — AUDIT de la v0.40.0 y los 4 fixes que salieron
+  de él.** Pedido de Rubén: *"un audito de la app, un audito de codigo,
+  conexiones robustas entre tablas, UI y UX"*. **Nada publicado todavía.**
+  Commit `40c48e4a` (+ el de cierre de docs).
+  · **Lo que el audit encontró y NINGÚN invariante podía cazar:** los dos
+    hallazgos graves no violan una regla de dinero, sólo **dicen algo falso**.
+    Los 31 chequeos × 4 tenants dieron **1 sola violación** (INV11 en Mairena =
+    3, la limpieza manual del cuaderno de agosto) y las uniones entre tablas
+    **10 de 11 en cero**, incluidas las dos de fuga multi-tenant.
+  · **Fix 1 — la gráfica no seguía a su selector.** `mora_ciclos_card` armaba
+    las barras con `_mesHoy` (ancla fija) mientras el stream, el rótulo y el
+    Excel usaban `_mesFin`. Se arregló el Excel el 02/09 y quedó mintiendo la
+    gráfica de al lado. **Test de regresión nuevo** que compara encabezado vs
+    etiquetas del eje X — verificado que FALLA contra el código viejo (regla 15b).
+  · **Fix 2 — un cambio de plan reabría una cuota ya pagada.** Contrato `0986`
+    de Mairena: C$513 cobrados el 25/08 con recibo **RE-01069**, y el cambio del
+    28/08 la dejó debiendo C$49,61. **Decisión del dueño:** si la cuota del ciclo
+    está saldada, el cargo va a la SIGUIENTE; si no hay siguiente, no se cobra y
+    queda dicho en el `op_log`. Avisan el diálogo y la tarjeta del aprobador.
+    **La fila rota se resolvió sola** mientras se auditaba (alguien bajó el
+    `monto` a 463,39): las 3 cuotas con cargo de cambio de plan y pago quedaron
+    en saldo 0. **No se corrió migración correctiva** — habría roto datos sanos.
+  · **Migración `0269`** (corrida y verificada): los 8 cargos de cambio de plan
+    anteriores a `0267` tenían `origen='cobro'`, y el guard que impide borrarlos
+    mira `origen` → **C$1.175,27 de cartera de Mairena seguían borrables con la
+    papelera**. Sólo cambia `origen`; montos y `cargos_neto` idénticos (INV14=0).
+  · **Migración `0270`** (corrida y verificada): el bloque "Cambio de plan" del
+    recibo se imprimía **después del total** en los tres tenants (`fromRaw`
+    completa al final de la zona los bloques que un layout guardado no nombra).
+    Se arregló **el dato**, no la generación del recibo. Orden hoy en los tres:
+    `servicio → cambio_plan → cuota → totales → mora`.
+  · **Hallazgo propio, sin resolver:** `app_dispositivos` tiene 38 filas y
+    **ninguna es de un cobrador** (0 de 8). Son **5.582 recibos** desde equipos
+    que el registro nunca vio. RLS descartada empíricamente. La causa es que la
+    telemetría va directa por Supabase (no por la cola que reintenta), dispara
+    una vez por proceso con el flag puesto ANTES del await y se traga el error:
+    el cobrador arranca en la calle sin señal y se pierde. **Queda pendiente.**
+  · **Dos números míos que corregí en el camino:** (a) reporté "1 cargo de
+    cambio de plan" filtrando por `origen`, la columna que **sólo llena el
+    código nuevo** — eran 8; (b) reporté "0 warnings" sobre un archivo que tenía
+    sólo las últimas 25 líneas del `analyze`. El real: 32 infos + 1 warning
+    (`unreachable_switch_case`, **preexistente**, ver Backlog).
+  · Estado: **837 tests OK**, 10/10 reglas, 15/15 buckets, `analyze` con 1
+    warning preexistente. Reporte visual completo en el artifact del audit.
+
+- **(2026-09-03) — CHECKPOINT: todo consolidado en `main`, listo
+  para release.** Pedido de Rubén. **Nada publicado todavía.**
+  · **`main` = `9d2086a6` = v0.40.0**, local y en GitHub. Eran 83 commits por
+    delante; el merge fue **fast-forward** (main era ancestro).
+  · **🔴 Lo que el checkpoint destapó y era el riesgo real:** el commit de
+    producción (`7c49277f`, v0.37.1) **NO era ancestro de `main` ni de la rama
+    de trabajo** — el release se hizo en su propia rama y nunca volvió. Si se
+    publicaba desde la rama sin mirar esto, cualquier fix hecho en la línea de
+    release se perdía en silencio.
+    **Verificado por CONTENIDO, no por el grafo:** los tres fixes de esa línea
+    están en main — el permiso de `admin_usuarios` para Cambiar plan
+    (`puedeVerCambiarPlan`), la regla de cancelación (`cancelarContrato`) y el
+    buscador de planes (`selector_buscable.dart`, idéntico). El único archivo
+    ausente es `mora_historica_card.dart`, que el rework reemplazó por
+    `mora_ciclos_card.dart` y que en producción sólo usaba la pantalla vieja.
+  · **Producción NO tenía tag.** Sólo existía como rama. Se creó el tag
+    **`v0.37.1`** sobre `7c49277f` y se empujó, para poder volver a la versión
+    viva sin depender de una rama (política de AGENTS: hitos = tags).
+  · **Ramas borradas** (contenido 100% en main): `claude/app-status-79c6d7`,
+    `claude/sync-local-github-a0fdd0`, `feature/dashboard-mora`,
+    `release/v0.36.5`, `release/v0.36.6`, `release/v0.37.1`. Las dos remotas
+    que existían (`feature/dashboard-mora`, `release/v0.36.6`) también.
+  · **`feature/whatsapp-mora-meta` NO se borró:** tiene **5 commits que main no
+    tiene** (2026-08-25, refactor a Meta-only). **Y trae una migración `0260`
+    que COLISIONA** con la `0260_desactivar_cliente_cancela_y_condona.sql` de
+    main. Al retomarla hay que renumerarla a `0269+` antes de mergear.
+  · **Migraciones:** `0267` y `0268` corridas y verificadas. **La `0266` sigue
+    SIN correr** y va CON el release — enciende `operativo` y `distribucion`
+    para Mairena y Telenet, y correrla antes les mostraría una grilla que su
+    app instalada dibuja distinto.
+  · Estado: 834 tests, 10/10 reglas, `analyze` limpio (5 infos preexistentes).
+    Plata del Test Tenant intacta: 248 pagos, C$176.896,67.
+
+- **(2026-09-02 e) — el globo con el acumulado de mora, y el aviso
+  de deuda del cambio de plan dice de qué meses es.** Sin publicar. Build de
+  prueba **v0.39.6**.
+  · **El globo del gráfico** suma un renglón "de eso, de mora" con su conteo,
+    sangrado bajo "Acumulado". **No cuesta una consulta**: es la misma serie
+    que dibuja la línea roja. Va sangrado porque **es un subconjunto**,
+    verificado contra la base con el predicado de la tarjeta — C$4.990 de
+    C$21.100, 7 de 30 pagos. Al mismo nivel se leería como algo que se suma.
+    **Se descartó mostrar los dos porcentajes**: no comparten denominador (meta
+    del ciclo vs total en mora) y compararlos no significa nada.
+  · **El aviso de deuda del cambio de plan** lista los meses con su saldo, del
+    más viejo al más nuevo. El dato ya estaba en la consulta y se descartaba.
+    El rótulo sale de `Fmt.mesServicioLabel` (anclado al `dia_pago`), no del
+    mes calendario: con `dia_pago = 28` los dos difieren y el aviso nombraría
+    un mes distinto al del bloque de abajo.
+  · **Consulta de Rubén, contestada con números:** por qué el prorrateo va
+    sobre la DIFERENCIA de los dos planes. Porque no re-abre lo ya facturado.
+    Re-derivar la cuota por tramos da **877,85 contra 846,67 — 31,18 de más**,
+    y esa diferencia no es servicio: el ciclo 28/08→28/09 pisa dos meses de
+    distinto largo, así que la suma diaria del plan viejo sobre el ciclo da
+    **531,18 y no 500**. Con el método de la diferencia, la convención
+    "precio ÷ días de su mes" sólo toca el delta, nunca la base.
+  · **🔴 PENDIENTE que dejo escrito en vez de fingir:** el diálogo de cambio de
+    plan **no tiene NINGÚN test de widget**, y el harness que intenté armar se
+    cuelga al montarlo (queda en *"did not complete"*, ~4 min por test).
+    Sospecha: `runAsync` + los providers de sesión que el diálogo lee en
+    `_cargar`. No dejé el test colgado en la suite. **Lo dispara**: cualquier
+    cambio siguiente en ese diálogo — es la pantalla que mueve plata con menos
+    red de todo el repo.
+  · Commits: `860b0384` · `a64c723d`.
+
+- **(2026-09-02 d) — las 4 tarjetas del Resumen vuelven al estilo de
+  producción, y encendidas.** Pedido de Rubén, **sin publicar**.
+  · **El pedido, textual:** *"Proyección de cobros, Recuperación por cobrador y
+    comunidad, Estado actual y Distribución de cuotas tienen que regresar al
+    estilo anterior y habilitadas"*, más *"el excel solo era para distribución
+    de cuotas y para mora de 6 meses; el resto se mantiene solo la gráfica y el
+    (i)"*.
+  · **🔴 Lo primero fue entender qué mostraban las capturas.** Eran de
+    **Mairena EN PRODUCCIÓN (v0.37.1)** — confirmado con el dato, no de ojo:
+    4.474 clientes activos coincide EXACTO con Mairena y con ningún otro
+    tenant. O sea que Rubén no reportaba un bug: mostraba el estilo que quería
+    de vuelta. Sin ese chequeo, el pedido se lee como "arreglá esto".
+  · **Qué vuelve:** barras por cobrador + switch en Proyección · el rótulo
+    "Recuperación" · la grilla de KPI cards en Estado actual · Distribución
+    como tarjeta propia y encendida. **El layout es el viejo; la tipografía es
+    la nueva** (`TxtResumen`) — Rubén eligió esa combinación entre las dos
+    opciones, para que el Resumen no quede con dos lenguajes visuales.
+  · **El Excel** queda SOLO en Cobertura del ciclo y Mora de 6 ciclos. Su frase
+    describe producción al pie: verificado, `dashboard_admin_screen.dart` en la
+    v0.37.1 tiene **cero** botones de descarga. Se le sacó también a "Quién
+    cobró" — no estaba en su lista, pero la tarjeta que reemplazó tampoco lo
+    tenía y él confirmó aplicar la regla al tablero entero.
+  · **Dos cosas volvieron A SABIENDAS y quedaron escritas** en el código, en la
+    migración y en ARQUITECTURA, para que nadie las "arregle":
+    **(a)** Estado actual y Distribución muestran los MISMOS números
+    (20.065 + 746 + 2.563 = 23.374 = "Cuotas por cobrar"; "En mora" 2.563 =
+    "Vencidas"). Se le planteó con sus propios números y eligió las dos igual.
+    **(b)** "Recuperación" se había renombrado porque el rótulo mentía; se le
+    ofreció "Por recuperar…" y eligió el nombre viejo.
+  · **🔴 Una regresión que cazó la suite, no el ojo:** la primera versión de
+    `mora_zona` restauraba la clase de producción ENTERA y perdía el modo
+    compacto de teléfono — **desbordaba 235px a 360**. Se revirtió a la versión
+    que ya funcionaba y se aplicaron solo los dos cambios pedidos. Lección: al
+    "restaurar" un archivo, restaurar lo que se PIDIÓ, no el archivo entero;
+    lo que se agregó en el medio puede ser lo único que lo hace usable.
+  · **Un error mío que conviene no repetir:** tomé `3adcfcc6` como "producción"
+    y no lo es — la v0.37.1 es `7c49277f` ("vuelve el Resumen anterior"), y ni
+    siquiera desciende del otro. Lo detecté y comparé clase por clase: tres de
+    las cuatro son IDÉNTICAS entre los dos commits, y la cuarta difiere en un
+    comentario y en un `onTap` que Estado actual nunca usó. O sea que no cambió
+    el resultado — pero fue suerte. **Al buscar "cómo era en producción", partir
+    del commit del RELEASE, no del anterior al rework.**
+  · **Un hallazgo del panel que se cayó al verificarlo:** una agente reportó,
+    con evidencia de la base, que Proyección no puede verse en producción
+    porque su gate depende de `dashboard.pendientes_visible`, que **no existe
+    en ningún tenant** (cierto: 0 filas). Pero eso vale para `3adcfcc6`; en
+    `7c49277f` ese gate fue eliminado. Correcto sobre el código que miró, falso
+    sobre el que importa.
+  · **Migración `0266` AMPLIADA, no apilada:** nunca corrió en ningún tenant
+    (el Test Tenant se prendió a mano), así que extenderla para encender
+    también `distribucion` deja UNA verdad en vez de dos migraciones que se
+    leen como si pelearan. Renombrada a
+    `0266_dashboard_tarjetas_del_resumen_viejo.sql`. **Sigue SIN correr**: va
+    con el release, junto con el código.
+  · **Tests:** 818 en verde. Se reescribieron los 9 que custodiaban el diseño
+    fusionado; el de alineación de "Estado actual" se reemplazó por uno que
+    mide lo que SÍ manda en una grilla — cuántas columnas arma a cada ancho
+    (1 / 2 / 3) — y se verificó que falla si se rompen los cortes.
+  · **SEGUNDA PASADA (misma fecha):** Rubén miró el build y avisó que
+    Recuperación *"también tiene que regresar a como está actualmente en
+    producción"* — y que faltaba **habilitar** Distribución.
+    **(a) Tenía razón y yo había entregado la mitad:** le cambié sólo el rótulo
+    y el Excel, y dejé el cuerpo del rework. Mi motivo fue que el primer
+    intento desbordaba 235px en teléfono; eso explica la decisión pero no la
+    justifica — entregar la mitad porque la otra es difícil es justo lo que la
+    regla de oro §3 prohíbe. Ahora vuelve entera: encabezado colapsable con el
+    total, los dos ChoiceChips ("Vencidas del **período**", decía "del ciclo")
+    y la lista de tres niveles con su línea "Coincide".
+    **(b) Distribución no se veía y el motivo NO era el código:** el Test
+    Tenant tiene el ajuste `dashboard.tarjetas` GUARDADO con
+    `distribucion: false`, y el ajuste guardado le gana al default del código.
+    Se prendió a mano en el Test Tenant (verificado por contenido: 8 on / 3
+    off). Mairena y Telenet los enciende la `0266` con el release.
+    **(c) Un desborde REAL que estaba en producción:** la fila de los dos chips
+    mide ~328px y en un teléfono de 360 quedan 320 útiles. Nadie lo vio porque
+    el Resumen se mira en PC. Resuelto con `Wrap`.
+    **(d) La fuente de test volvió a mentir:** reporté 70px de desborde que no
+    existían. Con NotoSans cargada, cero a 360/800/1900. Es la SEGUNDA vez hoy
+    que este artefacto me hace diagnosticar mal — ya está escrito en dos tests.
+  · **TERCERA PASADA:** Rubén vio que *"hay algunas opciones que no tienen
+    dropdown y no sé de cuánto es la cantidad de las que consiste"*. Bug mío:
+    al reescribir el cuerpo traje del rework la condición `tramos.length > 1`,
+    que oculta la flecha cuando la comunidad tiene un solo monto. Producción no
+    tiene condición. **El argumento de esa condición era falso** —"abrirlo
+    repetiría la fila"— porque la fila dice el total y la cantidad, nunca el
+    monto UNITARIO.
+  · **🔴 Y ahí apareció lo más importante del día: los DOS GENERADORES DE
+    ESCENARIO habían divergido.** `generar_seed_sql.py` sembraba comunidades y
+    `generar_seed_dart.py` **cero**, así que en el escenario de los tests la
+    consulta agrupaba todo en un solo "Sin comunidad" y **cualquier test sobre
+    los tres niveles de esa tarjeta pasaba sin medir nada**. Lección 16 de
+    AGENTS al pie: escribí el test, pasó contra el código CON el bug, y sólo al
+    instrumentarlo apareció que había UNA comunidad en vez de siete. Cerrado —
+    el generador Dart ahora siembra `comunidades` y `clientes.comunidad_id`.
+    Además se movió `PB-43` a una comunidad propia ("El Naranjo") para que
+    exista el caso de UN SOLO TRAMO: sin él el test tampoco discriminaba. No
+    altera ningún total, y las 828 pruebas lo confirman.
+  · Commits: `c44d64a2` · `570e247d` · `871a4b11`. 828 tests, 10/10 reglas.
+
+- **(2026-09-02 c) — la columna USUARIOS vuelve a contar PERSONAS,
+  y las cuatro columnas entran sin cortarse.** Pedido de Rubén, **sin publicar**.
+  Build de prueba **v0.39.1** instalado en la PC.
+  · **Qué pidió:** una columna de usuarios en las dos tablas de Cobertura del
+    ciclo, *"sin texto explicativo — en tenants grandes eso puede ser demasiado
+    contexto visual"*, con **data real por ciclo que haga match con el Excel**.
+    Después: que las columnas no se entrecorten, que el % diga solo `%` y que
+    `Usuarios` se vea completa.
+  · **🔴 La decisión de fondo, que ya se dio vuelta DOS veces** — ficha nueva
+    `docs/reglas/conteo-usuarios.md`, creada justo para que no haya una tercera.
+    En agosto contaba personas, el dueño vio *"más cuotas que usuarios"* y se
+    cambió a CONTRATOS para que cuadrara. Ahora explicó **para qué** la usa:
+    *"si veo más cuotas que usuarios, reviso si por accidente alguien tiene dos
+    contratos"*. Contando contratos eso es **imposible de ver**: da 1:1 siempre,
+    por construcción. **La diferencia no es un descuadre, es EL DATO.**
+    Medido antes de tocar: Mairena 4.409 personas contra 4.414 cuotas = cinco
+    clientes con CATV + COMBO, todos legítimos; Telenet 1; Test Tenant 4.
+  · **Lo que el barrido de superficies encontró, y es el motivo de que exista:**
+    el **Excel seguía contando SERVICIOS** cuando la tarjeta ya contaba
+    personas. Su fila de cierre habría dicho **4.414 contra 4.409 en pantalla**
+    — dos números creíbles que se contradicen, sin que nada falle. Es la misma
+    contradicción que el comentario del export advertía, **dada vuelta**.
+    Corregido, con test que compara contra el número que el archivo REALMENTE
+    escribe (falla contra el export anterior: pedía 55 y el archivo decía 57).
+  · **Las columnas cortadas:** con las dos tablas lado a lado cada una mide la
+    mitad, y el `maxLines: 1` que alineó las cabeceras el día anterior corta en
+    vez de envolver — Rubén fotografió `Usuar…`, `% de las 56 cu…`. El `%` pasa
+    a decir solo `%` y baja de flex 2 a flex 1: lo más ancho que aloja es
+    `100%`, no una frase, y ese ancho es justo el que le faltaba a `Usuarios`.
+    El denominador no se pierde: es la fila `Cobros` de la misma tabla.
+  · **🔴 Lección que cuesta y conviene no repetir: un test de recorte sin
+    fuente cargada MIENTE.** En un widget test sin fuentes, Flutter usa una
+    fuente donde cada glifo mide `fontSize` × `fontSize`: `Cuotas` da 75px a
+    12,5 contra ~42 reales. El test marcaba como cortado hasta lo que entra de
+    sobra. Se resolvió cargando **NotoSans** —la que la app ya embebe para los
+    PDFs— con `FontLoader` en el tema del test. Es un PROXY (en Windows la
+    pantalla usa Segoe UI), sirve para holgura, no para el pixel. **El test
+    ahora falla contra el código viejo**, que es lo único que lo separa de la
+    decoración.
+  · **Migraciones `0267` y `0268` CORRIDAS y verificadas** contra `vxxz`
+    (producción) para poder testear. Las cuatro comprobadas por CONTENIDO;
+    la plata intacta (26.590 pagos, C$23.494.710,30). **La `0266` sigue sin
+    correr a propósito**: le mostraría la grilla de KPIs vieja a Mairena y
+    Telenet, que no la pidieron. Va con el release.
+  · **Falta:** que Rubén lo mire. **No pude verificarlo yo**: el Resumen pide
+    PIN y no ingreso PINs ni contraseñas.
+  · Commits: `b33b7e23` (columnas) · `89cd657d` (fuente real en el test) ·
+    `e2c018c1` (el Excel cuenta personas) · `470f8b38` (ARQUITECTURA) ·
+    `dce565df` (v0.39.1). 817 tests en verde, 9/9 reglas.
+
+- **(2026-09-02 b) — el Resumen: la tabla de mora sube a Cobertura
+  y la curva de mora marca sus días.** Pedido de Rubén, sin publicar.
+  · **Por qué:** había DOS selectores de ciclo en la misma pantalla —el de
+    Cobertura y el de Mora— y podían quedar en meses distintos mirando lo mismo.
+    Ahora uno solo manda sobre la curva y las dos tablas.
+  · **El cálculo NO cambió**, y se verificó antes de tocar: las dos tarjetas
+    resolvían su rango con las MISMAS funciones y sus guards de navegación dan
+    el mismo resultado con el corte 15→14.
+  · **Lo que el test destapó y el ojo no:** las dos tablas comparten los rótulos
+    `Recuperado` y `Por recuperar` —el vocabulario único que Rubén pidió el
+    2026-08-27— así que lado a lado esas palabras aparecían dos veces con
+    significados distintos. Se resolvió con encabezados: **"COBERTURA DEL CICLO"
+    y "COBERTURA DE MORA"** son lo único que las separa.
+  · **Efecto lateral que conviene saber:** el Excel de mora pasa a exportar la
+    misma ventana que dibujan las barras. Antes tomaba el ciclo del selector, o
+    sea que podía exportar 6 ciclos terminando en julio mientras las barras
+    mostraban los últimos 6 — contra su propio principio de "el archivo trae lo
+    que la pantalla muestra".
+  · **8 tests nuevos, verificados contra el código viejo: 6 de 8 fallan ahí.**
+    Es lo único que los vuelve una red y no decoración (lección 15b).
+  · Commits `a302a1e2` (los puntos rojos) y `2398d993` (la mudanza).
+
+- **👉 CHECKPOINT (2026-09-02, ÚLTIMO) — el cambio de plan: el prorrateo que se
+  entiende, el recibo que lo explica y el aprobador que ve el número. NADA
+  publicado: producción sigue en v0.37.1.**
+  · **De dónde salió:** Rubén preguntó cómo funciona hoy el cambio de plan.
+    Mapeando la feature aparecieron tres cosas que mentían, y de ahí el sprint.
+  · **LO QUE ARRANCÓ TODO — "el cálculo es muy confuso".** La pantalla decía
+    *"+C$245,16 por los 25 días que faltan"* y no contestaba **bajo qué plan** se
+    prorratea ni **a qué período** se suma. Investigándolo apareció la razón de
+    fondo, que no estaba escrita en ningún lado: **el cambio de plan es el único
+    de los tres flujos que prorratean que MEZCLA** mes nominal con suma
+    día-a-día (suspender REEMPLAZA el monto; el puente cobra días que ninguna
+    cuota cubre). La convención del precio-por-día se decidió el 2026-06-14
+    **para el puente**, que no tiene cuota detrás; nunca se decidió cómo valuar
+    un ciclo que ya tiene una cuota nominal encima. De ahí sale un hueco que
+    **oscila entre −25,92 y +25,92** contra el modelo "mitad y mitad".
+    **Decisión de Rubén: NO se toca el cálculo** (opción B, no C) — se explica
+    el número que efectivamente se cobra.
+  · **QUÉ ENTRÓ, en una línea cada uno:**
+    · **el prorrateo se desglosa por mes** — no existe un precio por día único
+      (junio vale 10,0000 y julio 9,6774), así que la pantalla muestra un
+      renglón por mes y la cuenta cierra a mano. Pedido explícito de Rubén;
+    · **el cargo tiene identidad propia** — `origen='cambio_plan'` + `detalle`
+      con la transición completa, porque ese dato **no se puede reconstruir
+      después**: el contrato ya apunta al plan nuevo;
+    · **el recibo explica la transición** — bloque nuevo en los tres renderers,
+      visible por defecto, y en la BAJADA le avisa al cliente el crédito, que
+      hasta hoy no aparecía en ningún comprobante. **Sin** desglose diario: eso
+      es para quien autoriza, no para el cliente (decisión de Rubén);
+    · **el recibo congela el plan** (`0268`) — espejo de `0262`. Cada uno de los
+      37 cambios de Mairena venía reescribiendo **en silencio** el plan que
+      decían todos los recibos anteriores de ese contrato;
+    · **el aprobador ve el monto** — firmaba un cargo sin haberlo visto nunca; el
+      cálculo ni se invocaba en esa pantalla. Se computa EN VIVO con el mismo
+      helper que la mutación;
+    · **el motivo se escribe de verdad** — la función lo recibía, lo documentaba
+      y escribía un literal: **168 filas en producción con el mismo texto**. El
+      camino de aprobación armaba un motivo que incluía el aviso de que el precio
+      del plan cambió entre el pedido y la firma, y se descartaba entero;
+    · **el conteo dejó de prometer de más** y la nota verde dejó de contradecir a
+      la tabla que tiene encima.
+  · **NINGÚN número se movió.** Todo es presentación, contexto y columnas nuevas.
+  · **🔴 DOS COSAS QUE HABRÍAN LLEGADO A PRODUCCIÓN** y las cazó la auditoría de
+    documentación (Rubén la pidió; tenía razón): la bitácora decía que faltaba
+    correr UNA migración y son TRES —sin `0267`/`0268` el build **traba la cola
+    de subida** en el primer cobro—, y el `pubspec` seguía en 0.38.8 con once
+    commits encima, o sea que un build de prueba se habría llamado igual que el
+    instalado. Ahora **v0.39.0+304**.
+  · **DOC AL DÍA:** ficha nueva **`docs/reglas/cambio-plan.md`** (la que el
+    protocolo pedía ANTES de tocar código y no se creó) · `ARQUITECTURA` R22
+    corregida en cinco lugares —decía "solo rol admin", falso desde agosto, y
+    citaba un CHECK que `0023` dropeó hace 245 migraciones— · `MODULOS`, que se
+    contradecía a sí mismo · `AGENTS` lecciones **18** (el comprobante que sale
+    de un JOIN editable) y **19** (el parámetro que se recibe, se documenta y no
+    se usa) · `TESTING` §0.3.-3, que no tenía **ni un paso** para esta feature.
+  · **PENDIENTE del sprint:** tests del diálogo y del bloque del recibo, y
+    sembrar un cambio de plan en los dos generadores de escenario (hoy el
+    escenario no ejercita esta feature ni una vez).
+
+- **CHECKPOINT (2026-09-01) — el rework del Resumen, cerrado y
+  documentado. NADA publicado: producción sigue en v0.37.1.**
+  · **Rama `feature/dashboard-mora`, 34 commits.** Build de prueba instalado:
+    **CRM TEST 0.38.8** (`com.sitecsa.crm.test`, paquete APARTE del de Mairena).
+    **784 tests en verde** — la suite COMPLETA del repo, no sólo dashboard.
+  · **QUÉ ENTRÓ, en una línea cada uno:**
+    · **la mora, en rojo y adentro de la jerarquía** — cuatro referencias en la
+      gráfica (verde/meta + roja/techo), y la mora repartida DENTRO de cada
+      momento de la tabla en vez de colgando al lado;
+    · **"Estado actual" volvió y se comió a "Distribución de cuotas"** — eran la
+      misma partición contada dos veces; ahora cada parte trae su plata y su %;
+    · **separación clara entre tarjetas** (borde 1px + 28px de aire);
+    · **tipografía unificada en `escala_resumen.dart`** — nueve tamaños sueltos,
+      algunos de 9px, pasaron a seis roles con piso en 11;
+    · **el globo es una grilla** que parte el día en `a tiempo` + `venían de
+      mora` = `cobradas`, y ya no se sale del gráfico;
+    · **los cinco Excel con contexto** — `Recibo`, `Fecha de cobro`,
+      `Ciclo del cobro` / `Ciclo de la cuota`, `Estado`, y `Cobrador` partido en
+      `Cobró` vs `Cobrador asignado`.
+  · **NINGÚN número del dashboard se movió.** Todo el rework es presentación,
+    contexto y columnas nuevas. Si una cifra difiere de la de antes, es un bug.
+  · **🔴 LO QUE FALTA ANTES DE PUBLICAR — son TRES migraciones, no una:**
+    1. ~~correr `0267` y `0268`~~ — **CORRIDAS Y VERIFICADAS el 2026-09-02**
+       (Rubén las autorizó para poder testear). Las cuatro comprobadas por
+       CONTENIDO: `cargos_extra.detalle`, `saldos_favor.detalle`,
+       `recibos.plan_label` y el CHECK aceptando `'cambio_plan'`. La plata,
+       intacta: 26.590 pagos vivos y C$23.494.710,30 en Mairena, sin cambio —
+       eran aditivas y no tocaron una fila. **La `0266` sigue SIN correr**, y
+       eso es a propósito: haría aparecer la grilla de KPIs vieja a Mairena y
+       Telenet, que no la pidieron, porque la app instalada dibuja otra cosa
+       con ese id. Va con el release. Texto original, por si hace falta:
+       aditivas, en la misma ventana que la 0266. `0267`: suma `'cambio_plan'` al CHECK de
+       `cargos_extra.origen` + las columnas `cargos_extra.detalle` y
+       `saldos_favor.detalle`. `0268`: `recibos.plan_label`.
+       **🔴 Sin ellas el build nuevo TRABA LA COLA DE SUBIDA.** No es un detalle
+       cosmético: `schema.dart` ya declara las tres columnas, el connector sube
+       con `table.upsert({'id': op.id, ...?op.opData})` (`connector.dart:90`) —
+       o sea TODAS las columnas de la fila local— y PostgREST rebota contra una
+       columna que no existe. `plan_label` se escribe en **todo recibo nuevo**
+       (los tres caminos de `pagos_repo`), así que rebotaría **en el primer
+       cobro**. Las otras dos solo en el modo "Hoy con prorrateo".
+    2. **correr la migración `0266`** (enciende `operativo` en los tenants con
+       ajuste guardado) — **con** el release, nunca antes: la app instalada
+       tiene el Resumen viejo, donde ese id dibuja la grilla de KPIs sueltos;
+    3. el **testing manual** de Rubén (`TESTING.md` §0.3.-2 y §0.3.-3);
+    4. decidir los pendientes de abajo.
+  · **PENDIENTES propuestos y NO aprobados:** el desglose de *Caja del ciclo*
+    ("de esto, C$2.300 vienen de meses anteriores") · rehacer **Consultar
+    período** con el estilo nuevo · el Excel de **Mora** sin `Recibo` ni
+    `Ciclo del cobro` · la tabla de Cobertura **centrada** a 720px · medir con
+    el test de bordes las **otras cinco tarjetas**.
+  · **DOC AL DÍA (2026-09-01):** `ARQUITECTURA` (sección del Dashboard reescrita
+    + **LOS DOS EJES DEL TIEMPO** + receta R2) · `MODULOS` (las 7 tarjetas y el
+    gate solo-admin, que **contradecía** a ARQUITECTURA) · `AGENTS` (cuatro
+    lecciones nuevas: 15, 15b, 16, 17) · `TESTING` §0.3.-2 · ficha nueva
+    **`docs/reglas/ejes-del-ciclo.md`**. Herramientas en verde: 50/50 tablas,
+    15/15 buckets, **8/8 reglas**.
+
+- **👉 NUEVO (2026-08-31 d, ÚLTIMO) — la mora en Cobertura: los datos, listos y
+  cruzados; falta pintarlos.**
+  · **🔴 NO HACÍA FALTA UNA CONSULTA NUEVA, y casi escribo una.** Se agregó
+    `moraDeCobertura` y **se borró antes de que llegara a ningún lado**:
+    `cortesDelCiclo` ya devolvía las cuatro categorías (`at_*` a tiempo, `cm_*`
+    cobrado en mora, `sm_*` sigue en mora, `ef_*` en fecha) **y su stream ya
+    estaba armado** en la tarjeta (`_cortesStream`). Los números de las dos
+    consultas dieron idénticos, o sea que eran equivalentes.
+    **La lección, que vale más que el código: dos consultas de plata que
+    responden la misma pregunta terminan divergiendo, y ahí nacen las pantallas
+    que se contradicen.** Antes de escribir una consulta, grepear qué hay.
+  · **VERIFICADO EL CRUCE QUE PEDÍA RUBÉN** (*"que haga match con la gráfica de
+    mora, los números"*): sobre el escenario, **Cobertura dice 28 cuotas /
+    C$19.285 y Mora dice 28 cuotas / C$19.285**. Son dos consultas distintas
+    (`cortesDelCiclo` y `desgloseMora`), escritas por separado, cruzadas en el
+    test — no dos copias de la misma idea.
+  · **Y las cuatro categorías PARTEN las filas madre:** 7 + 22 = 29 saldadas;
+    28 + 0 = 28 con saldo; y las cuatro juntas = todas las cuotas del ciclo. Ese
+    tercer expect no es redundante: sin él, una cuota podría quedar fuera de las
+    cuatro y los otros dos seguirían cerrando cada uno por su lado.
+  · **Test nuevo** `mora_cobertura_test.dart` (3 casos), incluido el que separa
+    las **dos definiciones de "en mora"** —se pagó tarde vs la cuota ya venció—,
+    que en el ciclo en curso del Test Tenant dan **0 contra 5**.
+  · **FALTA, y es lo próximo:** pintar las cuatro líneas en la tabla (nivel 2,
+    con su chevron), las dos líneas de la gráfica (tope de mora punteado + curva
+    de mora recuperada) y el renglón del tooltip. Los datos ya están en el
+    stream que la tarjeta tiene abierto: es trabajo de UI, no de consulta.
+
+- **👉 NUEVO (2026-08-31 c, ÚLTIMO) — los 7 tests rojos, resueltos: la suite
+  queda en CERO por primera vez en semanas (742 verdes).**
+  · **POR QUÉ SE EMPEZÓ POR ACÁ** (Rubén: *"a como vos consideres"*): esos 7
+    vivían en `dashboard_numeros_test.dart`, el archivo que verifica **los
+    números** del Resumen, y todo lo que viene toca números. Mientras estuvieran
+    rojos **tapaban cualquier rotura nueva** ahí. El mismo día habían cazado un
+    overflow de 145 px que ninguna lectura habría visto.
+  · **LA CAUSA, y no era "recalcular":** el escenario creció de **15 a 60
+    clientes** el 2026-08-27 (`ad0a1e94`) —a propósito, porque con 15, todos del
+    mismo cobrador y sin comunidad, tres tarjetas nuevas no se podían probar—.
+    Los valores esperados quedaron describiendo el escenario viejo, **en el test
+    Y en `esperados_ciclo_actual` del JSON**.
+  · **EL CRITERIO CON QUE SE ARREGLÓ, que es lo importante:** los montos y
+    conteos absolutos **se retiran, no se actualizan**. Con 343 cuotas generadas
+    por perfiles de pago nadie puede recalcularlos a mano, y un número copiado de
+    la salida del propio código no prueba nada — solo se vuelve a pudrir. Queda
+    **un solo test que conoce el tamaño** del escenario (59/60/343/245) y los
+    demás prueban **invariantes**, que valen con cualquier escenario.
+  · **Dos mejoras que salieron de aplicarlo:** *"una cuota sobrepagada no le come
+    deuda a los demás"* ahora **mide ANTES y compara DESPUÉS** en vez de contra un
+    número fijo —prueba exactamente lo que dice—; y el del export cruza el total
+    contra una consulta **independiente** de las dos que suma.
+  · **🔴 UNA TRAMPA QUE CASI SE COLÓ:** el primer arreglo de "los 6 ciclos"
+    comparaba `rec + imp` contra `rec + imp`. Es `x == x`: **no puede fallar
+    nunca**, o sea peor que no tener chequeo (checklist #14). Se descartó y quedó
+    lo que sí se puede afirmar sin inventar (seis ciclos, en orden, sin negativos,
+    con movimiento en los cerrados) más el cruce fuerte contra OTRA consulta, que
+    ya vive en el test de al lado.
+  · **PENDIENTE:** `esperados_ciclo_actual` y `esperados_historico` del JSON
+    `supabase/escenarios/dashboard.json` **siguen describiendo el escenario de 15
+    clientes**. No rompen nada (ningún test los lee hoy) pero son la
+    especificación escrita del escenario: quien los lea va a creer que el Resumen
+    debe mostrar C$11.200 cuando muestra C$40.385.
+
+- **👉 NUEVO (2026-08-31 b, ÚLTIMO) — el rework del Resumen sigue en su rama, y
+  vuelve el desglose de caja.**
+  · **DÓNDE VIVE QUÉ, ahora que se separó:** producción quedó en **v0.37.1**
+    (rama `release/v0.37.1`) con el Resumen ANTERIOR y los dos cambios de regla
+    del 30/08; todo el rework del Resumen vive en **`feature/dashboard-mora`**,
+    que es donde se trabaja **sin publicar al canal oficial**.
+  · **PEDIDO:** *"todo lo que sale actualmente en el dashboard actual tiene que
+    ser optimizado y aparecer en el que vamos a seguir desarrollando"*.
+  · **INVENTARIO de las 11 tarjetas del Resumen de producción contra el nuevo**
+    (abriendo cada una, no de memoria): **7 ya están** —y la *Mora histórica* no
+    se perdió: se **FUSIONÓ** dentro de "Mora del ciclo", que muestra la tabla de
+    un ciclo y abajo la gráfica de los últimos seis—. **3 están apagadas con su
+    estilo VIEJO** (Estado actual · Distribución de cuotas · Consultar período):
+    encenderlas tal cual mezclaría dos épocas, así que hay que rehacerlas con el
+    formato de las seis nuevas. *Cobros últimos 7 días* está apagada **también en
+    producción**, en los dos ISP.
+  · **🔴 MI INVENTARIO SE EQUIVOCÓ EN UN PUNTO, y queda anotado:** listé como
+    faltante el corte de **HOY** de "Top cobradores". **Ya existe** desde el
+    2026-08-28 en "Quién cobró", como un `SegmentedButton` *Solo hoy / Este
+    ciclo* — y su docstring explica por qué se hizo así (las dos tarjetas viejas
+    ocupaban el doble y la de "hoy" salía vacía la mitad del tiempo). No se tocó
+    nada. **Lección: buscar por el WIDGET, no por el rótulo** — el grep de
+    "Top cobradores" no encuentra "Solo hoy".
+  · **VUELVE EL DESGLOSE DE CAJA, cerrado** (decisión de Rubén, 2026-08-31). Es
+    el bloque que él mismo mandó sacar el 29/08 (*"totalmente innecesario"*), así
+    que **no vuelve igual**: detrás de un chevron, y **el cuerpo no se construye
+    mientras esté cerrado** —su consulta tampoco corre—. La objeción era el lugar
+    que ocupaba, no el dato. El provider nunca se había ido (lo usa el puente);
+    se recuperó el widget de `a9ba41b0`.
+  · **DOS COSAS LAS CAZARON LOS TESTS, no la lectura:** el encabezado nuevo
+    **desbordaba 145 px a 360 px** (el rótulo no entra al lado del chevron → va
+    en `Expanded` con ellipsis), y un comentario de test afirmaba que el bloque
+    *"se ELIMINÓ"*. El `findsNothing` del test de `admin_cobranza` **sigue siendo
+    correcto** —ese rol no ve la tarjeta entera— y ahora prueba más que antes.
+  · **Test nuevo que fija las DOS mitades de la decisión:** que el desglose esté
+    **y** que arranque cerrado. Si alguien lo deja abierto vuelve el problema que
+    lo hizo sacar; si lo saca, se pierde lo que se pidió recuperar. Mira "Total
+    que entró" porque es la **única fila incondicional** del cuerpo.
+  · **69 verdes** en el dashboard; siguen los **7 rojos PREEXISTENTES**.
+  · **PENDIENTE, en este orden:** (1) la **mora en Cobertura** —propuesta,
+    verificada contra la base, **sin el sí formal**—; (2) rehacer **Estado
+    actual** y **Distribución de cuotas**; (3) rehacer **Consultar período**;
+    (4) los dos ajustes chicos (formato de Proyección, ancho de las barras en PC);
+    (5) los **7 tests rojos**, que mientras sigan así **tapan cualquier rotura
+    nueva** en ese archivo. Y sigue **sin verificar en pantalla** la config de
+    Tarjetas del Resumen (sólo la ve el super_admin).
+
+- **👉 NUEVO (2026-08-31, ÚLTIMO) — v0.37.0 PUBLICADA en el canal oficial, con
+  el rediseño del dashboard adentro.**
+  · **PEDIDO:** *"mandemos el update oficial al release oficial"*, con la
+    condición *"si no hay nada de backlog que corregir"* y, después,
+    *"asumiendo que sea responsivo… y para todos los escenarios online y
+    offline"*.
+  · **DECISIÓN DE RUBÉN: se buildea `main`.** El rediseño del dashboard estaba
+    en `main` desde la v0.36.2 y **nunca se había publicado** — cada release
+    salía de una rama `release/*` = `main` menos el rediseño. Se terminó, se
+    aprobó tarjeta por tarjeta y sale ahora. Los dos documentos de
+    `Install Steps/` que decían "NO se buildea main" quedaron actualizados; la
+    receta de la rama **no se borró**: es la forma probada para cuando `main`
+    tenga otra vez trabajo a medio terminar.
+  · **LA VERIFICACIÓN QUE FALTABA, y no era retórica:** ninguna de las dos
+    pantallas nuevas había pasado por un ancho de teléfono. Se escribieron tests
+    que las RENDERIZAN —Cobros a revisar sobre un SQLite real, y el bloqueo de
+    la baja, que hubo que **extraer a `ContratosVivosBloqueo`** para poder
+    montarlo— a **320/360/412/800/1400 px**. **734 verdes** (+12).
+  · **Dos errores propios que el test destapó:** tapeaba el nombre del cliente
+    en vez del chip que abre el detalle, y el escenario tenía los DOS pagos en
+    cuarentena — un estado que el trigger del server no puede producir.
+  · **ONLINE/OFFLINE:** los dos guards viven en el server (valen sin señal); las
+    dos pantallas leen de SQLite local; y si un equipo con copia vieja deja
+    pasar una baja que el server rechaza, ese `P0001` está en la lista de
+    permanentes, deja rastro local, sube a la bandeja y **el mensaje llega tal
+    cual al usuario** (`humanizarRechazoSync` no traduce los P0001).
+  · **🔴 EL HALLAZGO DEL DÍA — el tenant de prueba iba al canal oficial.** Al
+    crear `branding/test/` para la build de Android, `-AllTenants` empezó a
+    incluirlo: el release se armó con `CRM-TEST-v0.37.0.msix/apk` y
+    `version-test.json` entre sus assets. **No llegó a publicarse** (lo frenó el
+    fallo de `gh`), pero iba al canal que leen los 12 equipos. Se marca con
+    `soloPrueba: true` en el config —no por nombre, que hardcodearía un slug— y
+    `-AllTenants` lo saltea avisando.
+  · **`gh release create` falló por CUARTA vez** (`no matches found for ''`).
+    Se descartó con evidencia: no es `Invoke-Native` (replicada, anda), no son
+    los argumentos (espiados: 18, ninguno vacío), no es el splat vacío
+    (probado), no es `gh` (create con assets anda suelto). **Publicado a mano
+    con los 6 assets buenos.** Se dejó en el script el volcado de `CWD` + cada
+    asset con marca de VACÍO/NO EXISTE, para que la próxima falla se explique
+    sola.
+  · **PUBLICADO Y VERIFICADO END-TO-END:** `v0.37.0` es **Latest** en
+    `sitecsa-updates`, con 6 assets, y las dos URLs que la app consulta
+    (`releases/latest/download/version-<slug>.json`) responden `0.37.0`.
+  · **NO se borraron los releases anteriores** (la política dice conservar solo
+    el vigente): v0.36.6 queda como red hasta que Rubén confirme la 0.37.0 en un
+    equipo real. **Pendiente de su OK para limpiar.**
+
+- **👉 (2026-08-30 b) — los 41 huecos, explicados y cerrados; y el
+  barrido de documentación para el release oficial.**
+  · **PEDIDO:** *"cerralos no hay problema, y mandemos el update oficial…
+    actualicemos todos los documentos .md y de arquitectura… si no hay nada de
+    backlog que corregir podemos mandar a producción"*.
+  · **EL DIAGNÓSTICO REAL, y corrige lo que yo mismo había dicho:** los huecos
+    **no eran cobros perdidos**. El correlativo lo asigna el SERVER desde
+    `0215` (2026-08-01); antes lo **adivinaba el device** leyendo su copia
+    local desactualizada, dos equipos sin señal tomaban el mismo número y el
+    server rechazaba el segundo RECIBO — el PAGO entraba igual. Verificado:
+    Derling registró **31 cobros y hay 31 recibos**, ninguno anulado; **0 pagos
+    vivos sin recibo** en toda la base; los 25 sin recibo están **todos
+    anulados** y son de abril-julio. PowerSync nunca falló.
+  · **Los 41 son TODOS anteriores al 01/08.** Agosto cerró con **5.137 recibos,
+    13 equipos y CERO huecos**; el contador de Telenet (249) coincide exacto con
+    su recibo más alto. **Cerrados los 8 rangos** con el motivo que explica la
+    causa raíz y la verificación; la bandeja quedó en **0 pendientes**.
+  · **BACKLOG, verificado contra la base y no contra el documento** (que estaba
+    mintiendo: declaraba "CERRADA 8/8" arriba y dejaba los bullets sin tachar
+    abajo). Los **5 hallazgos CRÍTICA/ALTA** del audit integral del 22/08 están
+    cerrados: #1 y #2 por `07ef4125`, #3 y #4 ya estaban, y **#5 se cerró hoy**
+    —la contradicción del Total de contrato seguía viva en `ARQUITECTURA:687`
+    ("NUNCA suma de cuotas"), justo al revés del invariante #5—. Los otros 42
+    son MEDIA/BAJA. Los 21 clientes activos sin contrato son remanentes de la
+    importación por Excel del 21/06, no el bug del backlog (**0 de los 8
+    códigos** que listaba siguen así).
+  · **Superficies que el cambio de ayer dejó mintiendo y se cazaron hoy:** la
+    **guía de troubleshooting SQL** (§4) decía que el guard "AUTO-ANULA el
+    gemelo exacto" —es la guía OPERATIVA que se usa para corregir data, así que
+    mentía sobre lo que va a pasar— y `ARQUITECTURA:1512` lo narraba en
+    presente. Los audits fechados (`AUDIT-INTEGRAL`, `PLAN-CONSISTENCIA`) **no
+    se tocan**: narran lo que era cierto ese día.
+  · **v0.37.0+294.** Minor porque cambian dos reglas de negocio.
+
+- **👉 (2026-08-30 a) — todo duplicado lo decide el admin, y dar de
+  baja pasa a ser el último paso.**
+  · **PEDIDO:** que ni el duplicado idéntico se resuelva solo *"porque el recibo
+    puede variar por el vuelto… o si se pagó en dólar, y lo más importante es el
+    correlativo del cobrador"*; y que desactivar un cliente **avise que no se
+    puede** mientras tenga contratos vivos.
+  · **0264 — se saca la rama que anulaba sola el gemelo exacto.** Dos cobros con
+    el mismo monto y el mismo día NO son intercambiables: cada uno tiene su
+    recibo, con su correlativo y su cobrador, y el cliente tiene **uno** en la
+    mano. Ahora los dos casos van a cuarentena. Los **14 ya resueltos se quedan
+    como están** (decisión de Rubén) y conservan su motivo, del que dependen
+    INV18 y el CHECK `pagos_anulacion_coherencia`.
+  · **Barato porque `en_revision` ya estaba propagado** en las 21 superficies de
+    reportería con el predicado canónico: **cero queries que tocar**.
+  · **La tarjeta de decisión** suma recibo destacado + cobrador, moneda/monto
+    entregado y vuelto —los cuatro datos que distinguen un papel del otro— y el
+    `revision_motivo` del server, que ahora diferencia el idéntico del sobrepago.
+    **Fuera la sección "Resueltos automáticamente"** (decisión B): al sacarse la
+    rama que la alimentaba quedó estructuralmente vacía.
+  · **0265 — desactivar EXIGE cero contratos vivos.** Se retira la cascada de
+    `0260`, que condonaba la deuda de varios contratos con **una sola firma**.
+    Ahora se cierra cada contrato por separado, con su autorización, y la baja es
+    el último paso. **Sigue pidiendo permiso aunque ya no mueva plata**
+    (decisión C): terminar la relación es una decisión de negocio.
+  · Guard de **TRANSICIÓN, no CHECK** (regla #13) y contemplando el UPSERT de
+    PowerSync (#13b). El bloqueo en la UI va **antes** de bifurcar por permiso:
+    si viviera sólo en el diálogo del admin, el rol que SOLICITA lo saltearía y
+    el aprobador firmaría algo que el server rechaza.
+  · **Verificado en producción:** las dos migraciones por CONTENIDO; el guard
+    probado en vivo (rechaza con contratos, pasa sin ellos) y revertido sin
+    escribir; 578 clientes inactivos con **0 atrapados**; 259 cancelados sin
+    deuda; 1.074 pagos preservados. **Invariantes idénticos antes y después**
+    (93 chequeos, los mismos 2 hallazgos preexistentes de Mairena).
+  · **Ficha nueva** `docs/reglas/duplicado-cobro.md` + `cancelacion.md`
+    actualizada. Su patrón prohibido se dejó SIN el grep de `new.anulado := true`:
+    las migraciones son inmutables y daría hallazgos eternos (checklist #14) — el
+    chequeo bueno corre contra la definición viva y lo lleva `0264`.
+  · **Tests: 722 verdes** (+2 nuevos de `previewBajaCliente`); siguen los **7
+    rojos PREEXISTENTES**, confirmado corriéndolos en el commit anterior.
+  · **PENDIENTE:** los **41 recibos faltantes** (8 rangos, 33 de Mairena y 8 de
+    Telenet) son **históricos** —el más nuevo es del 30/07 y agosto cerró con
+    5.098 recibos y CERO huecos—. Falta decidir dos cosas propuestas y no
+    aprobadas: que los huecos suenen la campana, y el reintento del aviso de
+    rechazo (hoy es de una sola oportunidad).
+
+- **👉 (2026-08-29 b) — el orden y el encendido de las tarjetas
+  del Resumen, configurables por empresa.**
+  · **PEDIDO:** *"que la configuración de la posición entre cada gráfico sea
+    configurable en el Dev panel… habilitar, deshabilitar y mover el orden de
+    las métricas"*, en los ajustes avanzados (super_admin) y **por tenant**.
+  · **UN SOLO ajuste** (`dashboard.tarjetas`, migración **0263**) con orden y
+    encendido juntos. Los toggles sueltos no podían expresar el ORDEN, que
+    vivía escrito a mano en `dashboard_admin_screen.dart`.
+  · **LA REGLA QUE EVITA QUE UNA TARJETA DESAPAREZCA:** el ajuste NO es la
+    autoridad sobre QUÉ tarjetas existen —eso lo dice `kTarjetasResumen`, en
+    código—. Un id que el código ya no conoce se ignora; una tarjeta que el
+    ajuste no nombra se agrega **al final, encendida**. Sin esa segunda regla,
+    agregar una tarjeta la dejaría invisible en todo tenant con ajuste viejo.
+    Un ajuste corrupto cae al default entero.
+  · **ARREGLA ALGO QUE ROMPÍ EL 28:** al retirar los gates sin uso quedaron
+    **tres interruptores en Ajustes que no hacían nada** (`proyeccion_visible`,
+    `recuperacion_visible`, `top_cobradores_visible`). Los siete
+    `dashboard.*_visible` salieron de la lista de claves.
+  · El **gate de rol manda sobre el ajuste**: encender "Caja del ciclo" no se la
+    muestra a `admin_cobranza`. La pantalla lo dice en cada fila que aplica.
+  · **Migración verificada POR CONTENIDO** (lección 0192): sembrada en los 3
+    tenants, tipo `json`, `editable_por=super_admin`, y el trigger de seed
+    conserva sus **16 `perform`** (lección 0151).
+  · **Tests (11):** los fallbacks —ajuste roto, id desconocido, id repetido,
+    `on` como string, tarjeta nueva—, la ida y vuelta, los ids como candado, y
+    uno que **lee la migración** y compara su default contra el de Dart: si se
+    separan, un tenant nuevo abriría el Resumen distinto de uno viejo.
+    **68 verdes**; siguen los 7 rojos PREEXISTENTES.
+  · **PUBLICADO:** `Template-TT` → **v0.36.33**, prerelease, con el APK.
+    Producción sigue en v0.36.6.
+  · **El script falló por TERCERA vez** en `gh release create` (`no matches
+    found for -`). Se descartó también que sea `Invoke-Native`: se replicó la
+    función entera con los mismos argumentos y funciona. Queda como sospecha
+    —sin confirmar— algo del estado acumulado del script. Publicado a mano.
+  · **🔴 NO VERIFICADO EN PANTALLA:** la tab "Avanzado" sólo la ve el
+    super_admin y el build local está logueado como admin del Test Tenant. La
+    pantalla nueva compila y sus tests pasan, pero **nadie la vio funcionar
+    todavía** — hay que abrirla como super_admin.
+
+- **👉 NUEVO (2026-08-29 a) — responsive real en teléfono, y fuera el
+  desglose de Caja.**
+  · **PEDIDO:** *"aseguremonos que esto es responsive para telefonos como para
+    PC, y el bloque de que cuota era esta plata, eso es totalmente
+    innecesario"*, con capturas del teléfono.
+  · **FUERA el desglose de Caja** ("¿De qué cuotas era esta plata?"): esa
+    clasificación ya se lee en Cobertura y en Mora. **SE QUEDÓ EL PUENTE**, que
+    no está en ninguna otra parte y ya se había perdido una vez.
+  · **UN CRITERIO, aplicado en las cinco:** umbral 600px de pantalla = compacto.
+    Rótulo de fijo a proporcional (46%, piso 120) · la columna de % y su
+    encabezado se ocultan · el monto pierde el "C$" repetido · los bloques
+    apilados van a ancho completo · el selector de Quién cobró acorta y baja el
+    rango · las barras achican nombre y monto.
+  · **CUATRO OVERFLOWS que las capturas NO mostraban**, cazados por el test
+    nuevo a 360px: el navegador de ciclo de Mora (192px) y el de **Cobertura**
+    (68px), y las leyendas de Mora (190px) y **Cobertura** (185px).
+    Los dos de Cobertura son el ÚNICO cambio a esa tarjeta desde que Rubén la
+    dio por cerrada, y son overflows —la franja amarilla y negra encima del
+    contenido—, no rediseño: nada de lo que muestra cambia.
+  · **Tests:** `responsive_tarjetas_test.dart` (3) + dos que MONTAN el Resumen
+    a 360px y verifican que los bloques queden apilados y parejos, y en fila a
+    1600. **Ese test es el que encontró los cuatro overflows.** 57 verdes;
+    siguen los 7 rojos PREEXISTENTES de `dashboard_numeros_test`.
+  · **PUBLICADO:** `Template-TT` → **v0.36.32**, prerelease, con el APK.
+    Producción sigue en v0.36.6.
+  · **🔴 PENDIENTE SIN RESOLVER:** el script aborta en `gh release create` con
+    `no matches found for -`, las DOS veces que se usó. El mismo comando a mano
+    funciona. Se descartó que sean los argumentos (se instrumentó y llegan
+    exactos), `--prerelease` (la primera vez no existía) y los assets. El flujo
+    manual está escrito en `Install Steps/4-Build-de-prueba-Android.md`.
+
+- **👉 NUEVO (2026-08-28 d) — app **CRM TEST** para Android, en canal
+  privado y sin tocar producción.**
+  · **PEDIDO:** *"quiero que para android hagas la app CRM exclusiva para
+    testing y para yo poderla descargar desde github en un release de test que
+    no afecte los releases oficiales"*.
+  · **CÓMO FUNCIONA EL AUTO-UPDATE (lo verifiqué antes de proponer):** cada app
+    pide `releases/latest/download/version-<slug>.json`. Ese **`latest` lo
+    decide GitHub**: publicar un release de prueba en `sitecsa-updates` lo
+    volvería el `latest` que consultan Mairena y Telenet.
+  · **SOLUCIÓN — marca `test`** (`branding/test/`), que reusa el mecanismo de
+    branding y no necesita código nuevo:
+    - `applicationId` **`com.sitecsa.crm.test`** → Android la instala AL LADO de
+      las oficiales, nunca encima. Barrera estructural.
+    - Canal **`Template-TT`** (privado, **no tenía ningún release**: canal
+      limpio) + **`--prerelease`**, que GitHub excluye del `latest`.
+    - Cinta **"PRUEBA"** en pantalla (`kEsBuildDePrueba`, resuelto en tiempo de
+      compilación desde `TENANT=test`).
+  · **UN BUG LATENTE QUE SE ACTIVABA JUSTO ACÁ:** el script publicaba en
+    `-Repo` pero horneaba el `UPDATE_REPO` desde el `.env.json`. Un build con
+    `-Repo` se publicaba en un canal y **se auto-actualizaba desde otro**. Ahora
+    hornea `--dart-define=UPDATE_REPO=$repo`: para producción es el mismo valor
+    (idempotente), para cualquier otro canal lo vuelve coherente.
+  · **LO QUE NO AÍSLA — decisión de Rubén:** la base es la MISMA de producción
+    (`vxxz`). Un cobro desde la app de prueba con un usuario de una empresa real
+    es un cobro real. Le propuse un candado por tenant y una base aparte;
+    **eligió la disciplina** (*"yo sé que para eso está el test tenant"*).
+    Queda escrito acá y en `branding/test/README.md` por si algún día se
+    revisa.
+  · **Docs:** `Install Steps/4-Build-de-prueba-Android.md` (cómo publicar, cómo
+    bajarlo del repo privado —da 404 sin sesión—, y el detalle de la firma
+    debug: hay que buildear siempre desde la misma máquina).
+  · **PUBLICADO:** `Template-TT` → `v0.36.31`, **prerelease**, con
+    `CRM-TEST-v0.36.31.apk` (102 MB), el MSIX y `version-test.json`.
+    Verificado que `sitecsa-updates` sigue en **v0.36.6 como Latest**: el canal
+    de producción no se movió.
+  · **EL SCRIPT FALLÓ UNA VEZ Y NO SE SUPO POR QUÉ.** El build salió bien y
+    `gh release create` abortó con `exit 1` sin imprimir una línea. El reintento
+    a mano, con el MISMO comando y los mismos assets, funcionó — así que la
+    causa no quedó identificada (probablemente algo transitorio de red o del
+    contexto sin TTY del proceso en background). Lo que SÍ se arregló es el
+    diagnóstico: `Invoke-Native` ahora usa `Tee-Object` y el error incluye las
+    últimas 8 líneas del comando. La próxima vez que falle, se va a saber.
+  · **PENDIENTE:** que Rubén lo baje y pruebe.
+
+- **👉 NUEVO (2026-08-28 c) — "Caja del ciclo" ENCENDIDA, con
+  retroceso propio en cada bloque.**
+  · **PEDIDO:** *"poder ver la data del día, semana y período con la opción en
+    cada uno de poder seleccionar días anteriores como opciones
+    predeterminadas"*. Sin Excel (pedido explícito), con (i).
+  · `caja_ciclo_card.dart`, autocontenida como el resto. Sale del gate
+    `extras_visible` y va PRIMERA: es la lectura más inmediata. Los tres
+    bloques son independientes — se puede mirar el martes pasado, la semana
+    antepasada y el ciclo de hace tres meses a la vez. 7 días · 6 semanas ·
+    6 períodos, **cada opción con su monto en el menú**.
+  · **Las fechas se calculan en DART** y viajan como parámetros; antes los
+    cortes estaban escritos en el SQL, que sirve para "hoy" pero no deja
+    retroceder.
+  · **El desglose se clasifica contra el ciclo de la VENTANA ELEGIDA**, no el
+    actual: mirando "15 jun – 14 jul" sus cuotas salen como "del ciclo" y no
+    como atrasos.
+  · **DOS COSAS QUE SE ROMPIERON Y SE REPUSIERON:**
+    (1) `IntrinsicHeight` — **regla #11 del checklist**: el `Row` con
+    `crossAxisAlignment.stretch` dentro del scroll reclamaba altura INFINITA y
+    tiraba el layout de la pantalla ENTERA (no se veía ni Cobertura). Lo cazó
+    el test de widget, no el analyzer.
+    (2) **EL PUENTE con Cobertura** —*"De este ciclo entraron X ahora, y otros
+    Y ya se habían cobrado antes…"*— se había perdido al reescribir. Vuelve, y
+    sólo cuando la ventana es un ciclo COMPLETO: lo cobrado un martes no se
+    compara con el "Recuperado" de un ciclo entero.
+  · **Tests:** 12 nuevos de BORDES de fecha (el 14 contra el 15, el domingo que
+    abre la semana, el cruce de año, que las ventanas no se pisen ni dejen
+    huecos) + los 4 de widget actualizados. Cada bloque lleva `Key` para mirar
+    UNO: "2 cobros" es un error en el de día y legítimo en el de semana.
+    **52 verdes**; siguen los 7 rojos PREEXISTENTES de `dashboard_numeros_test`.
+  · **PENDIENTE:** testing manual (v0.36.31 local). Y decidir si la Proyección
+    va en formato compacto (una línea con switch, como la oficial) o queda con
+    el diseño actual.
+
+- **👉 NUEVO (2026-08-28 b) — las 3 tarjetas restantes del Resumen.
+  Las cinco quedan encendidas y cada una en SU archivo.**
+  · **PEDIDO:** *"podemos habilitar las 3… cada una es individual, así cada
+    cambio en cada una es independiente de los demás y no deberían
+    afectarlos"*.
+  · **TRES ARCHIVOS NUEVOS**, sin un símbolo en común entre ellos ni con las
+    dos anteriores — cada uno con su consulta, su grilla, su botón de Excel y
+    su paleta: `proyeccion_cobros_card.dart`, `deuda_zona_card.dart`,
+    `quien_cobro_card.dart`.
+  · **DOS RÓTULOS QUE MENTÍAN:**
+    (1) *"Recuperación por cobrador y comunidad"* mostraba lo que FALTA cobrar,
+    no lo recuperado. Al lado de Mora —donde "Recuperado" sí es plata que
+    entró— hacía leer C$170.185 como cobranza. Ahora es **"Deuda por cobrador
+    y comunidad"**; el número no se tocó. Mismo arreglo que Usuarios→Servicios.
+    (2) *"Top cobradores (hoy)"* salía **vacía** cualquier día sin cobros
+    (medido: el 28 nadie había cobrado). Se unificó con la de período en
+    **"Quién cobró"** con selector, y el vacío se EXPLICA en vez de mostrar una
+    tarjeta en blanco.
+  · **Los sin cobrador asignado** (30 cuotas / C$20.800) aparecen como fila
+    propia en las dos primeras, en itálica y con la barra rayada: es cartera
+    real que nadie trabaja, y pintarla igual que a un cobrador la volvía
+    invisible como problema.
+  · **LIMPIEZA:** se retiraron del screen las 3 tarjetas viejas, sus 2 widgets
+    huérfanos de desglose, los 4 providers sin consumidor y **los 4 gates de
+    settings** (`pendientes_visible`, `proyeccion_visible`,
+    `recuperacion_visible`, `top_cobradores_visible`) que servían para
+    encenderlas de a una. Un gate que nadie consulta es una palanca que el
+    próximo agente cree que hace algo. El screen bajó de 1.407 a 1.264 líneas y
+    `dashboard_providers.dart` de ~800 a 593.
+  · **Tests:** 35 verdes. Un choque de rótulos apareció al montarlas juntas —
+    el test de Cobertura busca `find.text('Hoy')` y el selector nuevo agregaba
+    otro; el segmento pasó a **"Solo hoy"**, que además hace juego con el otro
+    ("Ciclo 15 ago – 14 sep") y deja claro que son excluyentes.
+  · **UN BUG DE PLATA QUE ENCONTRÓ UNA CAPTURA DE RUBÉN (misma sesión):** al
+    reescribir la tarjeta de comunidad se perdió el filtro
+    `vencimiento + gracia < hoy`. Dejó de mostrar la **MORA** y pasó a mostrar
+    **toda la deuda viva**, incluidas cuotas que ni habían vencido:
+    **C$170.185 contra C$33.485 reales**. Con el filtro de vuelta, 5 de las 6
+    comunidades dan EXACTO lo que muestra la versión oficial (la 6ª creció
+    porque pasó el tiempo). Pasó a llamarse **"Mora por cobrador y comunidad"**
+    — "Deuda" describía bien lo que estaba midiendo mal.
+  · **VOLVIÓ EL TERCER NIVEL** (pedido de Rubén): abriendo una comunidad se ve
+    de cuánto son las cuotas —"C$900 × 3 cuotas"— y una línea confirma que el
+    desglose suma la comunidad. Los tres niveles salen de UNA sola consulta:
+    traerlos de consultas separadas es exactamente como estas tablas se
+    descuadran.
+  · **EXCEL PRECISO** (*"que no se invente nada"*): el de mora sale del MISMO
+    provider que la pantalla; y el de "Quién cobró" hacía `JOIN cobradores` sin
+    `activo = 1` mientras la pantalla sí lo filtraba — un cobrador dado de baja
+    con pagos salía en el archivo y no en la tarjeta. Alineado.
+  · **Test nuevo** `dashboard_tarjetas_nuevas_test.dart` (4, verdes): los tres
+    niveles suman igual · el filtro de gracia está PUESTO (sin él el universo
+    tiene que ser estrictamente mayor: 40.385 vs 62.485) · pantalla y Excel
+    miran el mismo universo en las tres tarjetas.
+  · **EL EXCEL DE ESA TARJETA BAJA UNA FILA POR CUOTA** (pedido: *"que la data
+    sea trackeable al 100%… en X comunidad con Y cobrador hay 2 cuotas de 500, y
+    en el excel aparece esa información con los detalles de esas 2 cuotas"*).
+    **La app y la tabla NO se tocaron**: el cambio es sólo del archivo.
+    Columnas: Cobrador · Comunidad · Cliente · Nombre · Contrato · Vence · Días
+    de atraso · Saldo. Los tres niveles de la pantalla se reconstruyen
+    agrupando (por `Saldo` el tercero, por `Comunidad` el segundo, por
+    `Cobrador` el primero). Los **subtotales salen del provider de la
+    pantalla**, no de sumar el detalle: si las dos consultas divergieran, el
+    archivo mostraría la diferencia en vez de taparla. El detalle NO va en un
+    `watch` (2.471 filas en Mairena); se consulta al hacer clic.
+    Test nuevo: filtrar por (cobrador, comunidad, saldo) da el MISMO conteo que
+    la tabla, en los dos sentidos — 58 cuotas en 11 grupos, todos exactos.
+
+  · **OJO — los ajustes del Test Tenant cambiaron:** días de gracia pasó de 7 a
+    10 y `dias_cuotas_visibles` es 10. Las tarjetas leen el setting en vivo, así
+    que se ajustan solas; los números de referencia de esta bitácora anteriores
+    a este bloque quedaron viejos.
+
+  · **PENDIENTE:** testing manual (v0.36.30 local). Siguen los 7 rojos
+    PREEXISTENTES de `dashboard_numeros_test.dart`.
+
+- **👉 NUEVO (2026-08-28 a) — tarjeta 2 (Mora del ciclo): barras de 6
+  ciclos + tabla del ciclo elegido. ENCENDIDA.**
+  · **PEDIDO:** *"la siguiente metrica de mora de los ultimos 6 ciclos… en
+    formato tabla y el grafico de barra de cumplimiento"*, y después *"la tabla
+    quiero que sea estilo como la de cobertura del ciclo, pero ciclo por ciclo
+    y con la capacidad de ir a ciclos anteriores, y la grafica de barras que
+    siempre tenga los ultimos 6 ciclos"*.
+  · **POR QUÉ:** la tarjeta vieja agregaba los 6 meses en UN número —"64% de
+    cumplimiento global"— y eso no dice si la cartera viene mejorando: marzo
+    (100%) y agosto (24%) quedaban promediados en la misma cifra. Medido en el
+    Test Tenant: abr 100% · may 92% · jun 76% · jul 58% · ago 24% · sep 0%.
+  · **QUÉ SE HIZO** (commits `16fdf9ed`, `541b7b93`):
+    - `serieMoraPorCiclo` (una fila por ciclo) + `desgloseMora` (el 2º nivel).
+      Por construcción `rec + pend = mora` en cuotas y monto → la barra apilada
+      no puede mentir y el hover no puede discrepar de la tabla.
+    - `TablaCiclo` (`tabla_ciclo.dart`): la grilla se EXTRAJO de `_TablaSummary`.
+      Cobertura y Mora dibujan la misma tabla en vez de dos copias que se
+      desalinean sola la primera vez que alguien toca una.
+    - `MoraCiclosCard` (`mora_ciclos_card.dart`) reemplaza a `TendenciaMoraCard`,
+      que se borró junto con 3 params del shell que solo usaba ella.
+    - Excel: bloques por ciclo → **plano con columna `Ciclo` + `Fila de la
+      tarjeta` + `Detalle`**. Es el formato que Rubén ya había elegido en
+      Cobertura; filtrando salen los mismos conteos que la pantalla.
+    - `kInfoMora` reescrito para la tarjeta nueva (el (i) explica cómo leerla).
+    - Tests: `dashboard_mora_ciclos_test.dart` (3, verdes) verifica la identidad
+      contra SQLite real; se actualizaron los 2 que asumían el formato viejo.
+  · **DECISIONES:** el chevron aparece SOLO donde hay ≥2 categorías (por eso
+    cambia de fila según el ciclo); el ciclo en curso va rayado e itálica; la
+    gráfica NO se mueve al navegar (si retrocedés más de 6 ciclos, queda sin
+    recuadro); altura por MONTO, no normalizada (si no se perdería que agosto
+    tuvo mucha más mora que el resto).
+  · **DOS BUGS QUE APARECIERON AL VERLA EN VIVO** (no los cazan analyze ni los
+    tests — son de runtime): (1) con un `MouseRegion` POR BARRA, el `setState`
+    del primer `onEnter` reconstruye el árbol y los eventos en vuelo se pierden:
+    el cursor sobre junio y el globo diciendo marzo. Se reemplazó por UNA región
+    que resuelve la columna por posición. (2) las barras salían de 180px (6
+    `Expanded` repartiendo la tarjeta) y el ciclo en curso se leía como una caja
+    vacía: tope de ancho 54px, selección por fondo tenue en vez de borde, y el
+    rayado dibujado con un `CustomPainter` real.
+  · **SEGUNDA VUELTA (mismo día) — INDEPENDENCIA TOTAL + formato de Cobertura.**
+    Pedido: *"cada grafica va a tener su propia codificacion y customizacion…
+    con eso quiero asegurarme que un cambio que se haga en una grafica no
+    modifique otras sin querer"* + *"la grafica de Mora… que siga el mismo
+    formato de la cobertura"*. Rubén eligió la **opción B** (copia literal)
+    sobre la de motor común, y cerró Cobertura: no se toca más.
+    - `tabla_ciclo.dart` **eliminado**; Mora tiene su `_GrillaMora`. Su botón
+      de Excel es propio y `BotonExportar` volvió a ser privado en Cobertura.
+      El Excel de Mora tiene `_headersMora`/`_filaMora`/`_cierreMora` propios.
+      **Verificado: cero símbolos en común entre los dos archivos.**
+    - Orden nuevo: encabezado → navegación centrada → tabla → barras (estaba
+      al revés); descarga y DESPUÉS el (i) (estaban invertidos); la pastilla
+      del ciclo avisa cuando está en curso.
+    - **Hover:** el globo cuelga de su columna con una flecha que la apunta y
+      las demás bajan de intensidad. Dos arreglos de runtime más: `setState`
+      solo cuando la columna CAMBIA (`onHover` dispara por pixel y repintaba
+      60 veces por segundo), y `onEnter` además de `onHover` — entrando de un
+      salto no llegaba ningún evento y el globo no aparecía.
+    - **TERCERA VUELTA:** el botón de descarga usaba `download_outlined` y el
+      de Cobertura `file_download_outlined` — uno arriba del otro se veían
+      distintos. Independientes por dentro no significa dos íconos para la
+      misma acción. Y el Excel de Mora **volvió a agruparse por ciclo con el
+      subtotal de cada uno**; los bloques ahora conviven con las columnas
+      `Fila de la tarjeta` y `Detalle`, que son las que dejan reconstruir
+      cualquier número de la pantalla fila por fila — sin ellas, los bloques
+      obligaban a sumar subtotales a mano, que fue el reclamo original.
+    - Trade-off ESCRITO en el encabezado del archivo: un ajuste que sirva a las
+      dos hay que hacerlo dos veces.
+  · **PENDIENTE:** testing manual de Rubén (v0.36.27 instalada local, identidad
+    genérica `com.sitecsa.crm`; Telecable 0.35.2 y Telenet 0.27.0 NO se
+    tocaron). Las tarjetas
+    3 a 5 siguen ocultas tras `dashboard.pendientes_visible`. Siguen rojos los
+    7 tests de `dashboard_numeros_test.dart` (esperados a mano del escenario
+    viejo, PREEXISTENTE — incluye "el escenario se sembró completo", que no
+    toca nada de esta sesión).
+  · **HALLAZGO SUELTO:** los números del ciclo 15 jul–14 ago cambiaron solos
+    (57→56 cuotas, C$40.385→39.685). Causa: la cuota **PB-43** (C$700, vencía
+    16 jul) se anuló el 28 ago con motivo *"Cancelación de contrato"* — no es
+    una de las anulaciones del escenario ("Anulada por el escenario de prueba").
+    Es la regla de cancelación funcionando (cancelar condona), no un bug.
+
+- **👉 NUEVO (2026-08-27 f) — tarjeta 1 (Cobertura del ciclo): 12
+  arreglos de claridad. El Resumen queda con ESA SOLA.**
+  · **PEDIDO:** *"la tabla se mira que requiere mejoras de UI porque no está muy
+    clara, y también en la gráfica; al hacer hover quiero ver claro en qué día
+    se hizo el pago y cuántas cuotas se pagaron"*. Y: *"de momento solo
+    habilitemos lo de la cobertura del ciclo"*.
+  · **PANEL:** 3 especialistas (2 UI/UX + contabilidad) + escéptico por hallazgo.
+    32 hallazgos, 16 sobrevivieron, 12 aprobados por Rubén.
+  · **TRES BUGS QUE NADIE HABÍA VISTO:**
+    (1) las tres pastillas de % salían **siempre en rojo de alarma**, incluido
+    el 100% de Cobros — `pctPill(0, entero: pct)` pasaba un `0` LITERAL donde va
+    el valor que elige el color; en la fila Recuperado convivían el punto verde
+    y la pastilla roja diciendo cosas opuestas del mismo número. **Era la causa
+    de "no se ve clara"**: el único color de la tabla gritaba error.
+    (2) `onHorizontalDragEnd` limpiaba la selección al soltar → **en Android el
+    tooltip se borraba justo al levantar el dedo para leerlo**.
+    (3) `_onHover`/`_onTap` clampeaban en vez de descartar → arrastrar sobre el
+    eje Y mostraba el día 0 y pasar por un día futuro mostraba el último.
+  · **LO PEDIDO:** tooltip reescrito — abre con *Cuotas cobradas* rotulado y en
+    17px, con día de la semana. Antes ese dato era un `(5)` pelado entre
+    paréntesis. Y `qty` pasa a `COUNT(DISTINCT p.cuota_id)`: contaba filas de
+    pago. Medido: 685 días con cobro en los 3 tenants, cero diferencias — o sea
+    que coincidía **por casualidad, no por diseño**.
+  · **VOCABULARIO Y UNIDADES:** el % de la tabla es de CUOTAS y el de la curva
+    es de MONTO, y nada lo decía. Ahora los dos dicen su base. La curva tenía
+    tres nombres → uno: *Recuperado*. El pie decía "recuperado" con otro
+    significado que la fila → *cobrado tarde*. El Excel usa el vocabulario de
+    la pantalla.
+  · **UNA PROPUESTA SE DESCARTÓ Y ESTUVO BIEN:** el contable proponía una línea
+    con la caja del ciclo como chequeo. Rubén frenó: *"me confunde que digan que
+    los totales no son correctos"*. Tenía razón — la caja (C$5.300) y el
+    Recuperado (C$3.745) miden cosas distintas y ponerlos juntos agregaba ruido
+    a una tarjeta cuyo problema es la claridad. **El desglose real ya vive en el
+    Excel**, que suma exacto (verificado: 57 filas = C$40.385 / 21.100 / 19.285).
+  · Commits `9cb4800e` + el del test. Versión **0.36.9** instalada en la PC.
+  · **EL EXCEL, REESTRUCTURADO (opción B, elegida por Rubén):** el archivo pasa
+    de dos bloques por ORIGEN (contrato vs cobro puntual — que casi nunca es lo
+    que se quiere mirar, y que la columna "Tipo" ya dice fila por fila) a
+    **tres por CÓMO SE COBRÓ**: cobradas a tiempo · cobradas tarde · por
+    recuperar, cada uno con subtotal. Son el desglose exacto de la tarjeta: los
+    dos primeros suman su fila "Recuperado", el tercero ES "Por recuperar".
+    Columnas de plata de **7 a 3**: el cruce por mora se retiró porque el bloque
+    dice lo mismo. Medido antes de sacarlo: **cero cuotas** cobradas en parte
+    dentro de la gracia y en parte después, en los tres tenants.
+  · **COLUMNA `Días`:** nació del caso que trajo Rubén — una cuota que vencía el
+    18 y se pagó el 11 aparecía en el ciclo sin forma de ver que era un pago
+    adelantado. Ahora dice `+7 adelantado` / `−2 en gracia` / `−16 tarde`, con
+    los mismos días de gracia que usa la tarjeta.
+  · **LA GRÁFICA NO SE TOCÓ** para esto, por decisión: el pago adelantado se
+    explica en el archivo y en el tooltip del primer día ("Antes del ciclo").
+    Sí se agregó **un punto por día con cobro** sobre la curva (pedido directo);
+    sale de `montoPorDia`, no de "dónde subió la curva", porque el día 0 arranca
+    elevado cuando hubo pagos ANTES del ciclo y ahí no hubo cobro ese día.
+  · **Un error propio que cazó el test nuevo:** el commit que "sacaba" las 4
+    columnas del cruce por mora solo agregó el comentario que lo decía — las
+    tuplas seguían ahí. El test de reconciliación lo marcó al instante.
+  · **UN SOLO CORTE (2026-08-27, el pedido más fino del día).** Rubén auditó
+    ciclo por ciclo y encontró que *"las cantidades de cuotas no hacen match y
+    todo depende de si una cuota fue pagada en el periodo anterior por
+    adelantado o en el siguiente como pago muy atrasado"*. Tenía razón, y al
+    medirlo aparecieron **TRES causas** distintas, todas reales:
+    (1) plata que entró FUERA de la ventana que la gráfica dibuja — en el ciclo
+    15 jul–14 ago: 1 cuota cobrada antes (C$1.025) y 2 después (C$1.000);
+    (2) dos cuotas con abono parcial (TT-06 y TT-13): su plata entró pero
+    siguen debiendo; (3) **TT-07**, cuota de C$1.075 con un cargo de −1.075:
+    quedó saldada **sin que entrara un peso** y sin ningún pago que dibujar.
+    → **La columna Cuotas y la columna Monto no pueden cerrar fila por fila.**
+  · **QUÉ SE HIZO:** se retiró el pie de mora (*"es bastante confuso, no hace
+    match visual"*) — sus dos números eran un TERCER corte que no salía de
+    ninguna fila ni de ningún punto: el 36 era 8 de una fila + 28 de otra. Se
+    retiraron también las sub-filas de mora. En su lugar, bajo `Recuperado`,
+    tres sub-filas de **plata sola** por CUÁNDO entró: antes del ciclo · en el
+    ciclo · después. Suman el Recuperado EXACTO y son, una a una, las tres
+    partes de la curva (la altura en que arranca, lo que sube, el salto final).
+    **Sin conteos a propósito** — ahí estaba la trampa.
+  · **EL EXCEL SE AGRUPA IGUAL:** cuatro bloques por cuándo entró la plata, más
+    una columna `Cuándo entró` por fila. El subtotal de cada bloque da, uno a
+    uno, las sub-filas de la tarjeta. Test nuevo que lo fija.
+  · Versión **0.36.12** instalada. La mora del ciclo vive ahora solo en la
+    tarjeta 2, que es para lo que existe.
+  · **LOS ABONOS PARCIALES DEJAN DE SER INVISIBLES (0.36.13).** Rubén, auditando
+    la tarjeta contra el Excel: *"esos pagos parciales prácticamente califican
+    en 2 grupos"*. Exacto: una cuota con abono recibió plata (está dentro del
+    Recuperado) Y sigue debiendo (está contada en Por recuperar), y solo se veía
+    una de las dos cosas. Ahora hay una sub-fila `con abono parcial · N · ya
+    entraron C$X` bajo Por recuperar.
+  · **ME EQUIVOQUÉ Y LO ENCONTRÓ EL PANEL:** le dije que los conteos costaban
+    una consulta nueva. Para ESTE caso era falso — `med_c` y `med_e` ya venían
+    en `resumenCobros` (:93-95) y ya se parseaban en `ParticionCobro`, y **no se
+    dibujaban en ningún lado**. Data muerta desde que existe.
+  · **REGLA NUEVA DEL DUEÑO:** *"yo no quiero que se inventen cuotas o
+    cantidades, todo tiene que ser números reales"*. Rechazó una propuesta mía
+    que fabricaba un residuo (19.075 − 1.100 = 17.975). Por eso quedó **afuera**
+    poner conteos en las tres sub-filas de "cuándo entró": suman 30 y no 29,
+    porque cuentan cuotas que recibieron plata y dos de ellas siguen debiendo.
+    Es real, pero no cierra contra la fila madre.
+  · **EL EXCEL SE CONTRADECÍA A SÍ MISMO:** el bloque decía "COBRADO DESPUÉS DEL
+    CICLO · pago muy atrasado" y la columna `Días` de esas mismas filas decía
+    "en gracia". Medido: las 2 cuotas de ese bloque pagaron a 2 y a 6 días, con
+    gracia de 7. Pasa siempre que el `dia_pago` cae cerca del 14 — toda la
+    gracia queda fuera del ciclo sin que el cliente se atrase. Los subtítulos
+    pasan a decir solo CUÁNDO ("desde un ciclo siguiente"); el juicio de atraso
+    lo da la columna Días, que es la que mira la gracia.
+  · **DEUDA PROPIA SALDADA:** el (i) seguía describiendo la sub-fila "venían de
+    mora" retirada el día anterior y prometiendo las 4 columnas de mora del
+    Excel ya borradas. Al cambiar la tabla no se barrió el texto que la explica.
+  · **TT-07 no es un error del seed:** `dashboard.json` lo describe como CRÉDITO
+    A FAVOR APLICADO — cuota saldada con un cargo de −1.075 y cero filas en
+    `pagos`. Pero el generador lo construyó a medias: el cargo quedó tipado
+    `descuento_monto` en vez de `credito_aplicado` y no creó la fila en
+    `saldos_favor` (`generar_seed_sql.py:373-386`). El efecto es correcto, el
+    mecanismo no — o sea que ese escenario **hoy no prueba lo que dice cubrir**.
+  · **DOS ENTREGAS MIAS QUE ESTABAN MAL (0.36.14).** Rubén: *"pedí líneas guías
+    y el análisis de UI/UX que hiciste no funcionó porque se mira desalineado"*,
+    y *"en el hover solo sale el monto pero no cuántas cuotas"*.
+    (1) **La desalineación tenía causa medible:** la fila madre armaba su rótulo
+    en 122px (8+6+108) y la sub-fila en 138 (22+12+6+98) → las columnas de
+    números de las sub-filas quedaban **16px corridas**. Ahora los dos caminos
+    miden 14 antes del rótulo y el rótulo mide 108: alineados por construcción,
+    y coincide con el encabezado (14+108). Más la GUÍA que había pedido dos
+    veces: una barra vertical del color de su fila madre.
+    (2) **El tooltip:** `construirSerieTendencia` tiraba el `qty` de los días
+    fuera de la ventana. Ahora lo acumula en `baselineQty`/`tailQty` y el
+    tooltip dice "1 cuota · C$1.025,00".
+  · **TRAMPA DEL WIDGET TEST, para la próxima:** `filaDeCobertura` localiza una
+    fila con `find.ancestor(... byType(Row)).first`. Mi primer intento metió un
+    `Row` ANIDADO para el rótulo y ese se llevó el match: la "fila encontrada"
+    dejó de contener las celdas de números y 4 tests se cayeron. **La fila tiene
+    que quedar PLANA.** Está comentado en el código.
+  · **PENDIENTE:** los 7 tests de `dashboard_numeros_test.dart`, el arreglo del
+    generador para TT-07, y las tarjetas 2 a 5 (apagadas tras
+    `dashboard.pendientes_visible`).
+
+- **(2026-08-27 e) — el Resumen queda en 5 tarjetas y es solo
+  del admin. Paso 0 del rework.**
+  · **RUBÉN FRENÓ EL TRABAJO:** *"la UI y UX está muy mal... se mira muy
+    desordenado todo, habíamos aceptado que de todas solo 5 métricas se iban a
+    quedar y dejaste todo visible, además que íbamos a ir de a 1 en 1"*. Tenía
+    razón: se venían puliendo los rótulos de la tarjeta 1 sobre una pantalla que
+    seguía mostrando los 11 bloques. Así "de a una" es invisible. **El flag no
+    era el paso siguiente, era el paso CERO.**
+  · **LO QUE QUEDA, en el orden de su lista:** 1 Cobertura del ciclo · 2 Mora 6
+    ciclos · 3 Proyección · 4 Recuperación por cobrador y comunidad · 5 Top
+    cobradores. Recuperación estaba DESPUÉS de Top cobradores, al revés.
+  · **CÓMO SE APAGA EL RESTO SIN TOCAR PRODUCCIÓN** (pedido explícito: se itera
+    local, sin migraciones ni UPDATE): clave nueva `dashboard.extras_visible`,
+    default `false` y **deliberadamente NO sembrada**. `settingValue` cae al
+    default cuando la fila no existe (`settings_repo.dart:186`), así que las
+    seis nacen apagadas en TODOS los tenants sin escribir un registro. Cambiar
+    el default de las otras seis `dashboard.*_visible` **no habría servido**:
+    ya tienen fila (0133) y gana la fila — verificado contra la base, los tres
+    tenants en `true` salvo sparkline.
+  · **SOLO ADMIN:** se cierra en los DOS lugares porque uno solo no alcanza —
+    `adminOnly: true` esconde la card y `/admin/resumen` en `soloAdmin` del
+    router bloquea la URL directa. Resultado real: lo ven **admin, super_admin y
+    `lectura`** (este último pasa los gates de rol por diseño documentado);
+    quedan afuera `admin_cobranza` y `admin_usuarios`.
+  · **RED NUEVA:** test que fija que por defecto se ven las 5 y ninguna de las
+    otras 6. Y el harness ganó `extras: true` — 4 tests se rompieron al ocultar
+    la caja y **uno pasaba por accidente** (*"admin_cobranza no ve la caja"*,
+    que ahora nadie ve). Los 9 del widget test en verde.
+  · **VERSIÓN 0.36.7** para que el MSIX local actualice sin desinstalar (con la
+    misma versión Windows lo rechaza y el uninstall te hace re-loguear).
+  · Commits `f655b981`, `2a054d2e`, `87a0fff0`. Instalado en la PC de Rubén como
+    `com.sitecsa.crm` — Telecable (0.35.2) y Telenet (0.27.0) sin tocar.
+  · **PENDIENTE:** los 7 tests de `dashboard_numeros_test.dart` (valores del
+    escenario de 15 clientes), y seguir de a una con las tarjetas 2 a 5.
+
+- **(2026-08-27 d) — la tarjeta de Cobertura hablaba dos
+  idiomas. Ahora uno solo, el del dueño.**
+  · **EL PEDIDO:** *"los rótulos tienen que ser cobros, recuperado y por
+    recuperar"*, con un mockup hecho por él en Excel, y *"los textos están muy
+    extensos, tienen que ser más compactos y directos"*.
+  · **DOS DIAGNÓSTICOS MÍOS SALIERON MAL, LOS DOS POR NO MIRAR LA RAMA QUE
+    RENDERIZA.** Primero inventé una sub-fila ("abonos a cuotas que siguen
+    debiendo") que la app no tiene, para que cerrara mi mockup. Después dije que
+    la tarjeta mostraba las mismas cifras en DOS tablas. Falso: `_TablaSummary`
+    elige UNA por si la consulta trae `comp_c`, y `resumenCobros` lo trae. La
+    otra tabla —la que tiene los tres rótulos que él pedía y la columna
+    Servicios— es la que dibuja la tarjeta de **Mora**. Lo cazó el panel.
+  · **O SEA QUE LO QUE HABÍA QUE RENOMBRAR ERA OTRA COSA:** no las sub-filas
+    `:527`/`:1373` (que no se dibujan nunca en un ciclo con datos) sino los
+    `fila3` de la tabla de partición. Ahora: Cobros / Recuperado / ↳ venían de
+    mora / Por recuperar / ↳ ya vencidas.
+  · **TRES BUGS DEL REDISEÑO, NINGUNO EN LA CALLE, LOS TRES SE PUBLICABAN:**
+    (1) la leyenda de la gráfica de Mora imprimía el token crudo
+    `$metaLabel (100%)` —un `\$` escapado mató la interpolación; es REGRESIÓN,
+    la publicada lo tiene bien—; (2) `admin_cobranza` leía "Tu rol no muestra
+    montos cobrados" con el monto cobrado arriba: `ocultarRecaudado` estaba solo
+    en la tabla genérica; (3) el título decía "(monto C$)" sobre un eje en
+    porcentaje.
+  · **`estaban en mora` vs `están en mora`** convivían a seis líneas, mismo
+    naranja, dos letras de diferencia, significados opuestos.
+  · **NO se usó "cobrado en mora"** aunque él lo aprobó: ese número es el
+    FACTURADO de esas cuotas, no lo que entró tarde. Queda "venían de mora".
+  · **El (i)** describía columnas `Entró`/`Falta` y "dos cortes del mismo 100%"
+    que la tabla no dibuja: reescrito, de 3.337 a 1.688 caracteres.
+  · Commit `f556dc0`. `analyze` limpio; tests 29 ✅ / 7 ❌ — los mismos 7 de
+    antes, todos en `dashboard_numeros_test.dart` (valores del escenario viejo).
+  · **PENDIENTE:** los 7 tests, traer la tarjeta de Mora de 6 ciclos desde la
+    rama publicada, el flag de Dev para las otras 7 tarjetas, y compilar el MSIX
+    local para que Rubén lo vea.
+
+- **(2026-08-27 c) — la columna del Resumen decía "Usuarios" y
+  contaba servicios. Ahora dice lo que cuenta.**
+  · **EL RECLAMO ERA VIEJO:** *"los números de clientes y cuotas no hacen match,
+    siempre había más cuotas que clientes"*. Al ir a arreglarlo apareció que la
+    CUENTA ya estaba corregida desde el 2026-08-24 —cuenta contratos a propósito,
+    para que la columna cierre contra "Cuotas"— y el propio comentario de
+    `dashboard_query.dart` lo documenta citando ese reclamo. **Lo único que
+    quedó sin arreglar fue el RÓTULO**, que siguió diciendo "Usuarios".
+  · **Casi lo rompo:** iba a cambiar la cuenta a personas, que es exactamente lo
+    que el fix del 24/08 había descartado con la medición al lado (con contratos
+    las tres filas dan 1:1 en 21 de 26 ciclos vivos). Lo frenó leer el comentario
+    antes de editar.
+  · **QUÉ SE TOCÓ:** el encabezado de la tarjeta (`tendencia_cobros_card`), la
+    nota del panel (i), el pie del Excel —que decía "N usuarios" y ahora dice
+    "N servicios"— y el comentario de `dashboard_query` que afirmaba
+    "la etiqueta sigue diciendo Usuarios por decisión de producto", ya falso.
+    **Ningún número cambió**: solo el nombre de la columna.
+  · **DECISIÓN ESTRUCTURAL TOMADA:** el rework se hace sobre `main`. La versión
+    publicada tiene 28 bloques de SQL pegados con `date('now')` fijo —imposible
+    de testear—; la de `main` es la MISMA tarjeta con las consultas extraídas y
+    `hoy` como parámetro, que es lo que sostiene las 641 líneas de pruebas.
+    **No son dos dashboards: es el mismo, refactorizado.** La excepción es la
+    tarjeta de Mora de 6 ciclos, que solo existe en la publicada y hay que
+    traerla (main tiene "Recaudo y mora" en su lugar, que va al flag de Dev).
+  · **PENDIENTE:** los 7 tests con valores esperados del escenario de 15
+    clientes. Y decidir qué pasa con "Cuotas por cobrar" del Resumen, que sigue
+    incluyendo el colchón futuro.
+
+- **(2026-08-27 b) — el escenario del dashboard pasa de 15 a 60
+  clientes, con cobradores y comunidades, y con la forma real de una cartera.**
+  · **QUÉ SE PIDIÓ:** rework del dashboard. Rubén eligió quedarse con 5 tarjetas
+    (Cobros del ciclo · Mora 6 ciclos · Proyección por cobrador · Recuperación
+    por cobrador y comunidad · Top cobradores) y pidió sembrar el Test Tenant
+    con data realista, *"100% correcta según la arquitectura contable"*.
+  · **QUÉ SE HIZO:** `supabase/escenarios/poblacion.py` (nuevo) genera 45
+    clientes de población por PERFIL DE PAGO; los 15 curados no se tocan. Los
+    dos generadores aprendieron `cobrador`, `comunidad` y `cliente_activo`. Se
+    crearon 6 comunidades con nombres reales (las que había eran "QA-SCROLL
+    Barrio"). Reparto: 18/16/16 entre los tres cobradores + 9 sin asignar.
+  · **LA CURVA QUE PRODUCE**, medida contra la base: recuperación **98 → 94,4 →
+    86,8 → 78,8 → 52,2 → 10,7%** en los 6 ciclos, con el facturado CRECIENDO
+    (35.680 → 40.385). Es casi calcada de la real de Mairena (98 → 43).
+  · **VERIFICACIÓN:** los 32 invariantes de dinero corren y el Test Tenant queda
+    en **CERO violaciones** (las 2 que quedan son el baseline viejo de Mairena).
+    El cruce caja-vs-arqueo cierra: **C$28.195 = C$28.195**.
+  · **🔴 CINCO INVARIANTES QUE EL ESCENARIO ROMPIÓ AL PRINCIPIO, y qué enseñan:**
+    (a) **INV21 oldest-first** — había diseñado clientes que "saltean un ciclo y
+    siguen pagando" para dar variación. Eso la app NO lo permite
+    (`_validarOldestFirst`). La variación se rehizo con gente que deja de pagar
+    en ciclos distintos. (b) **INV32** — el caso curado TT-10 era
+    "CANCELADO CON DEUDA", que la regla del 24/08 **abolió**: describía el mundo
+    viejo, igual que el filtro que sacamos. Se actualizó. (c) **INV8** — el hash
+    del cobrador usaba el código del contrato y TT-05a/TT-05b son dos contratos
+    del MISMO cliente. (d) **INV17** — el colchón arrancaba en fecha fija.
+    (e) **INV27** — el seed no emitía `op_log`; ahora sí, como hace la app.
+  · **🔴 LA DIVERGENCIA DE LOS DOS SEEDS, EN VIVO:** los dos filtraban
+    `startswith('TT-')`, así que los 45 de población entraban al de Postgres y
+    **no al de SQLite** — 59 clientes contra 14, sin fallar. Es exactamente
+    contra lo que advierte el mapa de impacto. Los dos arreglados; hoy los dos
+    dan 59/343/245, idéntico a la fuente.
+  · **🔴 Y UN TEST QUE PASABA POR CASUALIDAD:** "la caja del dashboard da IGUAL
+    que el arqueo" comparaba el arqueo `BETWEEN 15/08 y 14/08` contra una caja
+    `>= 15/08` **sin tope**. Pasaba solo porque el escenario viejo no tenía
+    pagos después del 14. Con data nueva falló por C$5.300 — que no era una
+    diferencia de plata, sino de ventana. Acotado igual, cierra.
+  · **PENDIENTE (Fase 4 del plan):** 7 tests siguen rojos porque sus valores
+    esperados están calculados a mano para el escenario de 15 clientes. Hay que
+    reescribirlos ANTES de tocar las tarjetas — si se anota lo que salió, el
+    escenario deja de verificar nada.
+
+- **(2026-08-27) — PUBLICADO: v0.36.6 está en manos de los
+  usuarios. Todo lo de esta semana llegó a los dos ISPs.**
+  · **Release:** https://github.com/rubenmaltez/sitecsa-updates/releases/tag/v0.36.6
+    (Latest, 8 assets branded, manifests apuntando a 0.36.6). Rama
+    `release/v0.36.6` (`a8b7b4a`) pusheada. `main` en `54f20c5`.
+  · **Lo que llegó:** el recibo congela su mes (`0262`) · la deuda suspendida
+    entra al Resumen y al reporte de Mora (Telenet +17,6% de mora visible) · el
+    saldo a favor alcanza al contrato suspendido · el rol `lectura` ya no mueve
+    plata desde ese botón · desactivar condona (`0260`/`0261`) · fuera el filtro
+    "Cancelado con deuda". Migraciones ya estaban aplicadas antes de publicar.
+  · **🔴 EL APRENDIZAJE DE LA SESIÓN, y no es técnico:** afirmé que el rediseño
+    del dashboard estaba enredado con los reportes porque
+    `reportes_admin_screen → arqueo_query → dashboard_query`. **Era falso.**
+    `arqueo_query.dart` no importa nada: la mención a `dashboard_query.dart`
+    está en un COMENTARIO de su cabecera. Leí un hit de grep como si fuera un
+    import, y sobre ese diagnóstico Rubén aprobó una opción que no hacía falta.
+    Lo cazó abrir el archivo. **Regla: `grep -rn "^import.*x.dart"`, nunca
+    `grep -rn "x.dart"`.** Quedó escrito en `1b-Armar-la-rama-de-release.md`.
+  · **Lo segundo que se destapó:** el dashboard publicado NO compila contra los
+    providers de `main`, así que armar el release exige volver también
+    `dashboard_providers.dart` y **reaplicar a mano** lo que main le hizo esa
+    semana. Ahí `flutter analyze` cazó que mi reemplazo se había comido el
+    predicado de "Vencimientos próximos". Sin analyze, salía roto.
+  · **Receta escrita:** `Install Steps/1b-Armar-la-rama-de-release.md` +
+    referencia desde el paso 1. Incluye el gotcha de OneDrive (`git merge` falla
+    con `couldn't set 'ORIG_HEAD'` — es el rename del lock, no permisos).
+  · **v0.36.5 NO se borró**, contra la política de "solo el release vigente":
+    es el rollback si algo sale mal en la calle. Borrarlo cuando 0.36.6 esté
+    confirmado funcionando.
+  · **PENDIENTE:** el `main` LOCAL sigue en `3c34308` — hay que hacerle
+    `git pull` en el worktree principal. Y sigue abierto por qué el papel de
+    Gloria dice "Julio" (se cierra preguntándole a Harinton la versión).
+
+- **(2026-08-26 m) — el recibo ya no puede contradecirse a sí
+  mismo: congela el mes que imprime (`0262`).**
+  · **EL CASO:** Byron reportó que el recibo **HL-00230** de Telecable Mairena
+    (cliente R20014, Gloria María Larios) dice **"Julio 2026"** en manos del
+    cliente y **"Junio 2026"** en la app. Mismo cobro, misma plata, correlativo
+    usado UNA sola vez — verificado: cero correlativos duplicados en el tenant.
+  · **LA CAUSA, simple:** `recibos` **no guardaba el mes**. Lo recalculaba en
+    CADA impresión desde `cuota.periodo` + `contrato.dia_pago`. Esa regla cambió
+    3+ veces en 2026 (una de ellas duró 19 horas), así que un papel viejo y una
+    reimpresión de hoy pueden decir meses distintos.
+  · **QUÉ SE HIZO:** columna `recibos.periodo_label`, escrita al emitir el recibo
+    (los 3 sitios de `pagos_repo`), leída por los 3 renderers. `NULL` = recibo
+    viejo o sin período impreso → se calcula, igual que antes. **Ningún número de
+    plata cambia**; es solo el rótulo.
+  · **NO se hace backfill A PROPÓSITO:** para los ~49 recibos impresos en la
+    ventana 31/07–01/08 el rótulo de hoy NO es el de su papel, y el original no
+    quedó guardado. Rellenarlo sería escribir una mentira con cara de dato.
+  · **Dos trampas que el mapa de impacto destapó y se cerraron:** (a) el helper
+    corre DENTRO del `writeTransaction` del cobro → si lanzaba, el cobrador no
+    podía cobrar; va con `try/catch` + `tryParse` y tiene test propio; (b) el
+    seed usaba `to_char(...,'TMMonth')` y la base está en `lc_time=en_US`, así
+    que generaba **"June 2026"** — se cambió por nombres en español a mano.
+  · **VERIFICADO:** 102 tests de `pagos_repo` en verde (4 nuevos) · 53 de
+    `formatters` · migración aplicada y chequeada por CONTENIDO · los 5 buckets
+    de sync usan `SELECT *`, así que la columna viaja sola (**no hubo que tocar
+    las sync rules ni reiniciar el VPS**) · los DOS seeds regenerados y alineados.
+  · **DE PASO, el estado del mes de servicio quedó auditado:** las 15 superficies
+    que rotulan una cuota usan la MISMA función; los 6 usos de `Fmt.mes()` crudo
+    son fechas de calendario (nombre de export, eje de gráfica, encabezado de
+    reporte) y están bien; y aplicando la regla a **54.685 cuotas reales de 5.466
+    contratos hay CERO meses repetidos** dentro de un contrato.
+  · **PENDIENTE:** merge a `main` + release. Sigue abierto por qué el papel de
+    Gloria dice "Julio" si figura impreso 7 h antes de que existiera esa regla —
+    se cierra preguntándole a Harinton la versión de su app. Y `app_dispositivos`
+    solo registra 2 de los 6 usuarios de Mairena: los cobradores de campo, que
+    son quienes imprimen, no aparecen.
+
+- **(2026-08-26 l) — el saldo a favor ya alcanza al suspendido, y
+  se destapó que el titular del dashboard cuenta 20.038 cuotas que no vencieron.**
+  · **SALDO A FAVOR (hecho, commiteado).** El botón "Aplicar" solo ofrecía cuotas de
+    contratos ACTIVOS: un cliente con crédito y un contrato suspendido con deuda no
+    podía usar su propia plata contra la deuda que se le está cobrando. Ahora entra
+    `suspendido`. **NO se pasó a LEFT JOIN** —era la otra mitad de mi propuesta y el
+    panel la tumbó—: `saldos_favor.contrato_id` es NOT NULL, así que alcanzar los
+    cargos sueltos reventaría con 23502 EN EL SERVER después de que SQLite ya escribió
+    local; offline-first ⇒ el usuario ve el crédito aplicado y el sync lo rechaza.
+    Queda escrito en el código y en R17 para que nadie lo "arregle".
+  · **De yapa, dos cosas que salieron del mismo barrido:** el rol **`lectura` podía
+    apretar "Aplicar"** y escribir cargo + `saldos_favor` + `op_log` a su nombre
+    (`verDinero` lo incluye a propósito, pero `_aplicar` nunca chequeaba
+    `soloLecturaProvider`) → cerrado con doble red; y si la consulta del saldo fallaba
+    **la tarjeta desaparecía entera**, indistinguible de "no tiene crédito" → ahora lo
+    dice. Más el callejón "No hay cuotas pendientes", que no explicaba qué pasa con la
+    plata.
+  · **ALCANCE REAL:** 7 clientes tienen crédito (5 Mairena, 2 Telenet, ~C$1.525) y
+    **ninguno estaba bloqueado hoy** — el fix es preventivo, no recupera plata. En
+    producción `saldos_favor` no tiene **ni una fila `aplicado`**: el botón nunca se
+    usó con éxito, y no hay tests ni seeds que lo cubran.
+  · **⏸️ PARQUEADO POR RUBÉN — EL TITULAR DEL DASHBOARD.** Se le presentaron 3
+    opciones y decidió: *"si esto toca el dashboard de momento vamos a omitir"*, en
+    línea con que el rediseño del dashboard y WhatsApp esperan a que el flujo de
+    dinero esté consistente. **Lo único que se tocó fue el texto del (i)**, que decía
+    "TODO lo que nos deben" sobre un número donde 4 de cada 5 córdobas no vencieron —
+    era una afirmación escrita ese mismo día y falsa. Cero números, cero consultas.
+    El diagnóstico completo quedó en ARQUITECTURA §3.5-4 para quien retome el
+    rediseño. **EL HALLAZGO, para no perderlo:** Rubén reportó que había
+    más cuotas que clientes, contra la lógica del período. Medido: de las 24.242
+    cuotas del titular, **20.038 (C$19.022.568,61) todavía no vencieron** — son el
+    COLCHÓN (3 meses pre-generados por contrato indefinido para que el cobrador pueda
+    adelantar offline; los fijos generan todo el plazo, hay cuotas hasta 2028).
+    Lo que realmente se debe hoy son **4.202 cuotas / C$3.515.614,50**. Sacando el
+    colchón la cartera se lee bien: 1,85 cuotas por deudor en Mairena, 1,59 en Telenet.
+    **NO se tocó:** cambiar qué mide ese titular arrastra la columna "Saldo" de la
+    tarjeta de cliente, el reporte "Estado de clientes" (PDF+Excel), el Padrón, los
+    tres campos de plata del export de clientes y el desglose "De eso, suspendido"
+    (que dejaría de ser subconjunto). Mover uno solo rompe el invariante #10.
+  · **Panel:** 4 especialistas + escéptico, 50 hallazgos → **21 confirmados, 27
+    corregidos, 2 falsos**. El escéptico mató el susto de que el titular no filtrara
+    `tenant_id` (es la convención de todo el archivo, y el caso del super_admin se
+    resuelve en otro lado).
+  · **También quedó verificado el modelo de Rubén:** CERO clientes con 2 contratos
+    activos en los dos ISPs (Mairena 4.409 con exactamente 1, Telenet 1.011).
+
+- **(2026-08-26 k) — la deuda SUSPENDIDA entró al número que el
+  dueño mira primero: Telenet tenía 17,6% más de mora del que veía.**
+  · **QUÉ SE PIDIÓ:** verificar que los estados de contrato se traten igual en
+    dashboard, arqueo y listas. Rubén cerró el modelo: *"lo que ya no se debe
+    filtrar es los clientes desactivados o contratos cancelados; los suspendidos
+    todavía mantienen deuda cobrable, entonces eso sí debería aparecer"*.
+  · **POR QUÉ ESTABA MAL:** el titular "Cuotas por cobrar"/"En mora" y las 3 queries
+    del reporte de Mora carvaban `!= 'suspendido'`. Eso era coherente **antes** del
+    2026-08-24, cuando suspender y cancelar hacían casi lo mismo. Desde que
+    suspender significa *"se fue debiendo y le vamos a seguir cobrando"*, era la
+    deuda MÁS cobrable que hay y la única que no entraba al número principal.
+  · **QUÉ SE HIZO:** se sacó el filtro del titular, de las 3 queries de Mora (PDF,
+    Excel, tarjeta) y de **Recuperación por cobrador y comunidad** + su drill-down
+    (esta última NO estaba en el pedido: se movió porque es el desglose de la mora
+    y si no, la misma pantalla mostraba "En mora C$X" arriba y C$X−92.374 abajo →
+    invariante #10). El KPI dejó de ser un cuarto balde: ahora se llama **"De eso,
+    suspendido"** = desglose de cuánto no sale en la ruta del día.
+  · **NÚMEROS (medidos contra vxxz):** Mairena mora C$1.893.987 → **C$1.896.881**;
+    Telenet mora C$508.678 → **C$598.158 (+17,6%)**. Cancelados y desactivados
+    aportan **0 cuotas** — por eso se pudo sacar el filtro sin esconder nada.
+  · **QUEDA AFUERA A PROPÓSITO:** "Vencimientos próximos", la lista de Cobros, el
+    mapa y el cron de `notificaciones_mora`. Son RUTA (a quién visitar) y a un
+    contrato sin servicio no se lo visita por su cuota nueva. Escrito en el
+    `noIncluye` de cada panel y en ARQUITECTURA §3.5-4.
+  · **LO QUE ESTO DESTAPÓ (más importante que el fix):** el índice de la regla
+    `suspension` **no traía ninguna de las superficies que había que tocar** — sus
+    símbolos indexan cómo se EJECUTA la suspensión, no dónde se VE su deuda. Se le
+    agregaron 8 símbolos (`saldoSuspendido`, `saldo_suspendido`, los `kInfo*`…) y
+    pasó de 38 a 43 superficies. **El índice tenía un agujero del tamaño del pedido.**
+  · **INV32 nuevo:** "contrato cancelado sin deuda viva", la premisa de la que ahora
+    depende el titular. Sin filtro, un cancelado con deuda ya no queda escondido: se
+    SUMA. Da 0 hoy; puede dar >0 (ya pasó: 44 contratos de Mairena con build viejo).
+  · **PENDIENTE:** nada de esto está en manos de los usuarios — falta merge a `main`
+    y release. Promover INV32 al panel del super_admin necesita migración (no se hizo
+    sin aprobación). CI en rojo por 2 jobs previos. Colisión `0260` con la rama de
+    WhatsApp.
+
+- **(2026-08-26 j) — SE CERRÓ EL HILO: el filtro que abrió todo
+  esto ya no existe, y no puede volver.**
+  · **QUÉ:** fuera el filtro **"Cancelado con deuda"** de la lista de clientes — el
+    caso exacto que Rubén reportó el primer día. Se mantuvo vivo a propósito mientras
+    existieron los 5 contratos de Telenet (era la única forma de encontrarlos); al
+    condonarlos (`0261`) quedó **estructuralmente vacío**: devolvía **0 clientes** y no
+    puede volver a tener ninguno. Su vecino "Suspendido con deuda" se queda: devuelve
+    **30 clientes reales** y es correcto — son opuestos, no variantes.
+  · **RECIÉN AHORA entró como PATRÓN PROHIBIDO.** Antes habría sido una alarma que
+    suena siempre (checklist #14). Probado: con el identificador de vuelta el
+    verificador sale 1; en limpio, 0. **El CI falla si alguien repone la categoría.**
+  · **LO QUE NO SE SACÓ, Y ES DELIBERADO:** el chip "debe C$X fuera de ruta", los dos
+    exports con la fila "Fuera de ruta — cancelados" y la ruta de Recuperación del
+    cobrador **siguen incluyendo `cancelado`** en su consulta. Hoy aportan cero, pero
+    si la condonación alguna vez falla esa deuda aparece ahí en vez de desaparecer en
+    silencio. **Es una red, no código muerto — escrito en la ficha para que nadie la
+    "limpie".**
+  · **⚠️ CHOQUE QUE VA A APARECER SOLO:** la rama `feature/whatsapp-mora-meta` tiene
+    `0260_whatsapp_mora_meta.sql` y esta rama tiene `0260_desactivar_cliente_...`.
+    **Dos migraciones con el mismo número**: hay que renumerar una ANTES de mergear
+    esa rama.
+  · **DECISIÓN DE RUBÉN (2026-08-26): el rediseño del DASHBOARD y el WHATSAPP quedan
+    para después.** No son pendientes sueltos: se retoman **cuando el flujo de dinero
+    esté optimizado y consistente**. Ese es el disparador.
+
+- **👉 NUEVO (2026-08-26 i) — EL "HUECO DE LOS SEEDS" ERA MI MALA LECTURA;
+  el hueco REAL era otro y ya está cerrado.**
+  · **CORRECCIÓN, importante para el próximo que lea la bitácora.** Reporté que tres
+    reglas "no aparecen en ninguno de los dos seeds". **Era falso.** `regla.py`
+    marcaba esas capas vacías porque los símbolos de esas reglas son funciones de
+    **Dart** (`ventanaServicio`, `_validarOldestFirst`, `arqueoSql`), que jamás
+    podrían aparecer en un seed SQL. Leí la ausencia como falta de cobertura, dos
+    veces seguidas.
+  · **LA REALIDAD, medida:** el escenario tiene **16 clientes y 31 casos borde
+    declarados**, con días de pago 1, 2, 5, 8, 10, 12, 14, 15, 18, 20, 22, 25 y 28
+    — o sea que el bug del `dia_pago = 1` YA está cubierto. **oldest-first** tiene un
+    grupo entero de tests (`chokepoint oldest-first (#4)`) más 3 en cobros, y
+    **mes-servicio** tiene su propio `prorrateo_test.dart`.
+  · **ARREGLADO EL FALSO NEGATIVO en `regla.py`:** si TODOS los símbolos de una regla
+    son identificadores de Dart, las capas de SQL/YAML vacías se reportan como
+    **ESPERADAS**, con la explicación de que eso no dice nada sobre la cobertura.
+    Las reglas con símbolos snake_case (como `cancelacion`) siguen preguntando.
+  · **EL HUECO DE VERDAD:** el trigger de `0260` **nunca había disparado** — el
+    backfill llamó a la función directo, no al trigger. **Probado end-to-end contra
+    produccion, sin escribir:** `suspendido -> cancelado`, deuda `C$248,23 -> 0,00`,
+    **pagos vivos 31.462 -> 31.462**. Guardado como artefacto reusable en
+    `supabase/tests/probar_baja_cliente.sql`, con qué tiene que dar y qué significa
+    cada forma de fallar.
+
+- **👉 NUEVO (2026-08-26 h) — `tools/estructura.py`: lo que se declara
+  COMPLETO ahora se verifica solo.**
+  · **EL PROBLEMA DE FONDO, no el caso.** Las dos tablas de ARQUITECTURA que se
+    declaran completas —el mapa por tabla (§3.6.1) y los buckets (§3.8)— se
+    mantienen a mano y **las dos se atrasaron**. Arreglarlas a mano deja el mismo
+    problema para dentro de un mes.
+  · **LA CLAVE DEL DISEÑO: corre sin tocar la base.** Deriva las tablas de las
+    migraciones (`CREATE TABLE` menos `DROP TABLE`) y los buckets del yaml, así que
+    **el CI puede correrlo sin credenciales**. La derivación se validó contra
+    producción: **50 derivadas del repo, 50 reales, cero diferencias en ambas
+    direcciones**. Sin eso el chequeo habría quedado como script local, o sea
+    dependiendo otra vez de que alguien se acuerde.
+  · **PROBADO EN LOS DOS SENTIDOS** (checklist #14): con una tabla sin documentar
+    exit 1, con un bucket sin documentar exit 1, en limpio exit 0. Puede dar >0 y
+    puede satisfacerse.
+  · **Enchufado al CI** como paso del job `reglas-de-negocio`, y `AGENTS.md` → regla
+    de oro §1 ahora lista **las tres herramientas** (impacto / regla / estructura)
+    con qué contesta cada una y cuándo se corre.
+  · **LÍMITE ESCRITO:** verifica que la tabla ESTÉ listada, no que su fila diga la
+    verdad. Las FKs, triggers y policies de §3.6.1 siguen siendo a mano.
+
+- **👉 NUEVO (2026-08-26 g) — BARRIDO DE DOCUMENTACIÓN: dos tablas que se
+  declaraban completas y no lo eran.**
+  · **§3.6.1, el "mapa EXHAUSTIVO por tabla":** decía estar generado del schema real
+    (03/07) y **le faltaban 5 tablas** creadas después — `app_dispositivos`,
+    `dashboard_pins`, `recibo_correlativos`, `recibos_huecos_ignorados` y
+    `sync_rechazos`. Agregadas con sus FKs y policies REALES (consultadas a
+    producción, no inferidas), más un aviso de que se mantiene a mano, la consulta
+    para chequearlo y la nota de que lo sano sería generarlo con un script.
+  · **§3.8, los buckets de sync:** no existía tabla; estaban sueltos en prosa y
+    **cinco no se nombraban en ningún lado**, incluido `todo_tenant_lectura` — el del
+    rol que §3.9 describe entero. Ahora están los **15**, con el rol al que responde
+    cada uno, verificados contra el yaml.
+  · **Lo que NO se tocó, y por qué:** los "33 triggers" de `audit_log` son un hecho
+    histórico correcto, y el "20 chequeos" de AGENTS es la REGLA citando el mal
+    ejemplo, no un conteo. Re-"arreglarlos" habría sido romperlos. Lo de
+    "Ajustes > Impresora" ya estaba corregido; solo sobrevive en la bitácora como
+    relato.
+  · **Pendiente de fondo:** las dos tablas se mantienen A MANO y las dos se
+    atrasaron. Generarlas con un script desde `pg_tables`/`pg_trigger`/`pg_policies`
+    y el yaml es la salida real; queda anotado en §3.6.1.
+
+- **👉 NUEVO (2026-08-26 f) — LAS 6 REGLAS DE NEGOCIO YA TIENEN FICHA
+  (antes había UNA) + dos decisiones de rol registradas.**
+  · **POR QUÉ:** hasta hoy solo la cancelación tenía ficha, así que el verificador
+    frenaba los cambios de ESA regla y de ninguna otra — no porque las demás
+    estuvieran bien, sino porque nadie las miraba. Es exactamente el origen de las
+    contradicciones que aparecieron en el análisis de hoy.
+  · **FICHAS NUEVAS:** `suspension` (38 superficies) · `oldest-first` (8) ·
+    `mes-servicio` (29) · `credito-excedente` (46) · `cobrador-organizativo` (18).
+    Verificador en verde con las 6; el CI las cubre a todas.
+  · **HALLAZGO QUE EL ÍNDICE DESTAPÓ SOLO:** **tres reglas no aparecen en ninguno de
+    los dos seeds** — oldest-first, mes de servicio y cobrador organizativo. El
+    escenario de prueba no las ejercita, y los seeds ya divergieron de producción
+    tres veces. Pendiente.
+  · **DECISIÓN — `coordinador`:** sí debe poder asignarse, **pero todavía no**: el
+    módulo donde trabaja no está habilitado. Pasa de "incoherencia" a **pendiente con
+    disparador**, con los dos lugares exactos anotados en `PRODUCTO.md` (el Edge
+    `invitar-cobrador` y `set_cobrador_rol`).
+  · **DECISIÓN — la cola de aprobaciones:** aprobar **sigue siendo solo del `admin`**.
+    Riesgo aceptado y medido: **un solo admin activo por empresa** para ~15
+    solicitudes diarias (313 Mairena + 143 Telenet en 30 días). Hoy va al día —cero
+    pendientes— pero es cuello único. Si alguna vez se abre, hay que impedir la
+    auto-aprobación o el permiso no sirve de nada.
+
+- **👉 NUEVO (2026-08-26 e) — LA CONDONACIÓN SIN CORTE POR FECHA + LA
+  MATRIZ DE ROLES.**
+  · **`0261` APLICADA.** El corte `cancelado_en >= 2026-08-24` de 0259 no representaba
+    ninguna regla: existía solo para proteger los 5 de Telenet, y Rubén levantó esa
+    protección. **La norma es universal: si está cancelado, no queda nada pendiente.**
+    Backfill con la MISMA función del trigger. Verificado: **0 contratos cancelados con
+    deuda**, 23 filas de `op_log` por **C$19.147,81** exactos, **INV19 en CERO**, el gate
+    devuelve `true` para bajas de julio (ejecutado, no grepeado) y la plata idéntica
+    (31.442 pagos vivos, 31.444 recibos, C$28.112.883,66 antes y después).
+    **Cambio de criterio respecto de `0258`**, que los había preservado a propósito
+    porque el ISP los cobraba; Rubén lo confirmó dos veces sabiendo eso.
+  · **MATRIZ DE PERMISOS → `PRODUCTO.md`**, referencia canónica, con índice desde
+    ARQUITECTURA §0. Decisión de Rubén registrada: **`admin_cobranza` NO solicita bajas
+    de cliente; eso es de `admin_usuarios`** — y hoy ya se cumple.
+  · **DOS INCOHERENCIAS ENCONTRADAS, NO RESUELTAS** (anotadas en `PRODUCTO.md` para que
+    no se redescubran como bugs nuevos): **el rol `coordinador` no se le puede asignar a
+    nadie** — existe entero (CHECK, RLS, trigger, bucket, shell, dropdown) pero ni el
+    Edge de invitación ni `set_cobrador_rol` lo tienen en su allowlist, **verificado
+    contra producción**—; y **`admin_cobranza` no llega a la cola de aprobaciones**
+    aunque la RLS y su bucket se lo permiten, lo que con el permiso nuevo puede
+    acumular la cola si el admin no está.
+  · **Roles vivos hoy** (medido): 3 `admin`, 3 `admin_cobranza`, 3 `admin_usuarios`,
+    8 `cobrador`, 1 `super_admin`. `lectura`, `tecnico`, `admin_tickets` y
+    `coordinador` están construidos y sin un solo usuario.
+
+- **👉 NUEVO (2026-08-26 d) — CLIENTE DESACTIVADO = TODO CONDONADO.
+  COMPLETO: SERVER, APP, TESTS Y DOC.**
+  **REGLA NUEVA (Rubén, 2026-08-26):** un cliente desactivado no puede tener nada
+  pendiente: sus contratos vivos —incluso los SUSPENDIDOS— pasan a cancelado y la
+  deuda se condona. Solo el histórico cuenta.
+  · **APLICADA A PRODUCCIÓN: migración `0260`.** Saca el guard de `0220` (bloqueaba
+    desactivar con deuda: la regla vieja, al revés de esta), instala
+    `cancelar_contratos_por_baja_cliente` + el trigger `zz_clientes_baja_cancela_contratos`
+    y backfillea. **Verificado por contenido:** guard eliminado, trigger y función
+    instalados, **9 contratos cancelados**, **0 clientes desactivados con contrato vivo**,
+    y la plata IDÉNTICA antes y después (31.430 pagos vivos, 31.432 recibos,
+    C$28.098.268,66). Probada antes en una transacción auto-revertida.
+  · **QUEDAN C$10.277,88** en clientes desactivados: son **2 de los 5 contratos
+    históricos de Telenet** (MV0167 y QH0073, cancelados en julio), protegidos por el
+    corte de fecha de 0259 y pendientes de la decisión de la notificación.
+  · **LA MITAD DART, YA ENTREGADA.** (1) **Desactivar pide APROBACIÓN** — el `admin`
+    ejecuta, el resto solicita (`TipoSolicitud.desactivarCliente`, que volvió a estar
+    en uso). **Reactivar sigue siendo directo**: no mueve plata. (2) Diálogo de
+    confirmación con el monto real y **motivo obligatorio**, que se guarda como fila
+    propia de `op_log` (`tipo_op: baja_cliente`). (3) La tarjeta del aprobador ahora
+    SÍ dibuja la deuda de una baja de cliente — antes devolvía vacío y se aprobaba a
+    ciegas. (4) Salieron los DOS guards de la app (contratos activos y deuda): eran de
+    la regla vieja y bloqueaban el efecto buscado. (5) El subtítulo del switch decía
+    *"NO frena la facturación"* y ahora es lo que más la frena.
+  · **`previewBajaCliente`** espeja al server: suma los contratos vivos y **deja
+    afuera los ya cancelados**, porque el gate por fecha de 0259 no los toca y
+    prometerlos condonados sería mentir. Test nuevo que lo fija.
+  · **LA LÍNEA GENERAL, escrita donde se carga sola:** `AGENTS.md` principio 6 —
+    *toda acción con repercusión monetaria pide autorización del admin*, quien autoriza
+    ve el número calculado con el MISMO criterio que la mutación, y **al cambiar lo que
+    una acción HACE hay que revisar quién puede hacerla** — que es exactamente cómo
+    `admin_usuarios` terminó pudiendo condonar una cartera con un toggle.
+  · **Doc:** ARQUITECTURA (§0 + §Clientes), MODULOS, la guía de usuario con su mockup
+    regenerado y la ficha de la regla (37 superficies). analyze sin errores ni
+    warnings; 8 tests verdes en el grupo de cancelación.
+  · **Hallazgo del escéptico que sostiene el (1):** cuando en julio se decidió que
+    desactivar fuera directo, la justificación escrita fue *"no saltea la regla porque
+    el guardado bloquea"* — o sea que el permiso se apoyaba en el guard que 0260 acaba
+    de sacar. Tumbó 3 de 6 hallazgos del panel (la trampa de fecha, "la cascada no puede
+    firmarse" y lo del super_admin).
+
+- **👉 NUEVO (2026-08-26 c) — EL QUE AUTORIZA UNA CANCELACIÓN VEÍA UN
+  NÚMERO QUE NO ERA EL QUE SE BORRABA.** Primer pedido atacado con el protocolo
+  `/pedido` completo: índice → panel de 4 especialistas → escéptico → propuesta con
+  mockup → aprobación → implementación.
+  **DÓNDE RETOMAR:** falta decidir/ejecutar lo de los **5 contratos de Telenet**
+  (abajo) · falta publicar (el cambio está en la rama, sin release).
+  · **EL HALLAZGO.** `previewDeudaCancelacion` delegaba **literalmente** en
+    `_calcularDeudaSuspension`, o sea calculaba con la regla ANTERIOR al 24/08:
+    descartaba las cuotas futuras pendientes y prorrateaba la del mes en curso.
+    La mutación no clasifica por ventana: pone en cero el saldo ENTERO de toda cuota
+    viva. Resultado: **quien autorizaba la baja aprobaba un monto MENOR que el que el
+    sistema borraba**, y ese mismo monto viajaba al snapshot, al **documento que se le
+    entrega al cliente** y a la tarjeta del contrato. Cuatro superficies.
+  · **Y el rótulo decía lo contrario.** En el camino por SOLICITUD —el del rol que
+    decide la mayoría de las bajas— quien pide y quien aprueba leían *"Deuda que
+    quedaría cobrable"* también al cancelar, y no veían **ninguno** de los textos
+    nuevos ("es PERMANENTE", "se CONDONA", "usá SUSPENDER").
+  · **QUÉ SE HIZO.** `_calcularDeudaCancelacion` nueva, que espeja la mutación
+    cláusula por cláusula · rótulos **por tipo** en las 3 pantallas · el PDF pasa a
+    "Constancia de condonación" / "Condonado" / "Total condonado" · `cancelarContrato`
+    pierde `fechaCancelacion`/`precioMensual` (sin prorrateo no dependen de nada) ·
+    guía de usuario y sus 2 mockups regenerados · R16 y la ficha al día.
+  · **LA RED QUE FALTABA:** el test se llamaba *"el snapshot guarda lo condonado"* y
+    **nunca miraba `snap['total']`**. Ahora sí, más un test nuevo con vencida + en curso
+    + futura que fija que se cuentan las tres enteras.
+  · **EL PANEL PAGÓ: el escéptico tumbó 2 de 6 hallazgos.** Cayeron "el corte por fecha
+    de 0259 es un defecto" (es la protección declarada) y "admin_cobranza puede cancelar
+    directo por RLS" (aceptado y parqueado con su condición de disparo).
+  · **🔻 LOS 5 DE TELENET (C$19.147,81) — DECISIÓN TOMADA, EJECUCIÓN PENDIENTE.**
+    Rubén aprobó condonarlos, con este diseño: **que a Telenet le llegue una
+    notificación para que EVALÚE caso por caso** si se condona o se conserva. Medido:
+    **4 de los 5 tienen un solo contrato** (el cancelado); **MV0167 tiene dos — uno
+    SUSPENDIDO**, que es justo la herramienta de "se fue debiendo y le seguimos
+    cobrando". Los 5 conservan su estado previo, así que Telenet puede resolverlo
+    desde su propia app (revertir + volver a cancelar). **`0258` los había dejado
+    afuera A PROPÓSITO** porque el ISP los está usando para cobrar — releer eso antes
+    de ejecutar. **Descartada `super_admin_ejecutar_baja_deuda`**: opera por CLIENTE,
+    cancelaría contratos vivos y desactivaría al cliente.
+  · **QUEDA AFUERA, con su disparador:** los textos de ayuda del dashboard, los
+    reportes que suman la deuda cancelada a la cartera y la ruta de "Recuperación" del
+    cobrador **siguen siendo ciertos mientras los 5 existan**; se corrigen cuando se
+    resuelvan. Y el CI sigue rojo por dos jobs preexistentes.
+
+- **👉 NUEVO (2026-08-26 b) — EL SISTEMA PARA QUE UN CAMBIO NO DEJE
+  SUPERFICIES MINTIENDO. Rubén paro el trabajo hasta resolver esto; CERO cambios en la app.**
+  **DÓNDE RETOMAR:** hay que **reiniciar la sesión** para que `/pedido` y los hooks
+  tomen efecto (antes no existía `.claude/settings.json`, la herramienta no lo lee en
+  caliente) · falta decidir si la rama se mergea a `main` · faltan las otras 5 fichas
+  de regla · sigue pendiente la decisión sobre el filtro "Cancelado con deuda".
+  · **EL DIAGNÓSTICO, con evidencia.** El filtro sigue vivo en
+    `clientes_admin_screen.dart:33`. `ARQUITECTURA.md` **sí** se actualizó (R16 quedó
+    bien reescrita), pero R16 lista los archivos que **ejecutan** la cancelación y el
+    filtro vive en uno que R16 no nombra: leyendo la doc entera y al día no había forma
+    de llegar. Los docs indexan por módulo y por tabla; lo que se rompe es una **regla**.
+    Y nada verifica que la doc diga la verdad: si envejece no falla nada.
+  · **LO QUE SE CONSTRUYÓ (4 commits, sin tocar `lib/`):** `AGENTS.md` → **LA REGLA DE
+    ORO** (barrer superficies conectadas · ejecutar completa · las TRES LISTAS · el
+    criterio solo SUMA · mockups antes/después) — vivía solo en el bloque de estado de
+    esta bitácora, o sea programada para desaparecer. **`tools/regla.py`**: la ficha
+    declara a mano ~10 renglones (símbolos + prohibidos) y el script encuentra las
+    superficies contra el código de hoy; `--verificar` falla si aparece una que la ficha
+    no contempla. **Job de CI** que lo corre. **`.claude/`**: `/pedido`, 6 especialistas
+    senior + el escéptico (sin Bash/Edit/Write a propósito) y 3 hooks, el de cierre con
+    dientes: niega el cierre si hay código sin `.md`.
+  · **LA PRUEBA:** `python tools/regla.py cancelacion` escupe el filtro sin buscarlo, y
+    de paso apareció una **cuarta superficie** que nadie había listado
+    (`diagnostico_screen.dart`) y un hueco real: **los dos seeds no ejercitan ningún
+    contrato cancelado**, o sea que el escenario de prueba no cubre la regla del mes.
+  · **`.claude/` estaba GITIGNOREADO** — la config compartida no habría viajado en el
+    repo. `.claude/` pasó a `.claude/*` con negaciones para `agents`, `skills` y
+    `settings.json`; los worktrees siguen ignorados.
+  · **Los hooks se probaron pasandoles el JSON a mano** (5 casos de ruta + 5 del cierre).
+    El de `al_editar` quedaba **MUDO** con rutas absolutas: `relpath` tira `ValueError`
+    entre `/c/Users` y `C:/Users`. Lo cazó el pipe-test, no la lectura.
+
+- **👉 CHECKPOINT (2026-08-26) — DÓNDE RETOMAR CON CONTEXTO NUEVO.**
+  **Todo commiteado y en GitHub.** `main` = `origin/main` = `b234011`. La rama
+  `feature/whatsapp-mora-meta` está subida con 4 commits.
+  · **PUBLICADO Y ANDANDO:** v0.36.5+265 en las dos empresas (manifiestos, MSIX
+    `0.36.5.0`, APK `versionCode 265`, firma `28fe9404…`). Único release en el canal.
+  · **EN PRODUCCIÓN:** la migración `0259` está aplicada — cancelar condona la deuda
+    y ahora lo enforça el SERVER, así que vale aunque el dispositivo tenga una app
+    vieja. Quedan solo los 5 contratos de Telenet preservados a propósito
+    (C$19.147,81, los cortados por falta de pago, todos anteriores al 24/08).
+  · **🔻 LO QUE ESTÁ A MEDIAS — WhatsApp para Telenet (rama `feature/whatsapp-mora-meta`):**
+    - `84456c9` + `d2fd932` + `ad573c7`: **WhatChimp eliminado** del código (edge
+      function 416→300 líneas, más el selector y 7 ramas de la UI). Analyze limpio,
+      684 tests.
+    - `758292a`: **migración `0260` ESCRITA PERO NO APLICADA.** Arregla que el
+      mensaje decía el DOBLE que la app (120 de 200 clientes en Telenet), valida
+      teléfonos en SQL (hay 1 número de Costa Rica que se entregaría a un
+      desconocido), agrega `error_code`/`meta_message_id`, corrige las plantillas
+      que Meta rechazaría y separa las horas.
+    - **FALTA:** reescribir el modo `lote` de la edge function — hoy manda de a uno
+      esperando cada respuesta (200 clientes no entran en los 150 s del techo) y un
+      solo error de Meta quema los 200 envíos. Y la observabilidad: nadie se entera
+      si el lote falla.
+    - **NADA DE ESTO AFECTA A NADIE HOY:** el envío está apagado en los 3 tenants.
+    - **Del lado de Telenet:** todo el trámite con Meta (guía completa en
+      `Install Steps/WhatsApp-Meta-alta-y-setup.md`, 618 líneas). Con ~64 envíos/día
+      entran bajo el techo de 250 de cuenta sin verificar → pueden empezar mientras
+      la verificación está en trámite.
+  · **⚠️ CÓMO TRABAJAR DE ACÁ EN ADELANTE (feedback de Rubén, 2026-08-26).** Pidió
+    parar por desvíos y por entregas incompletas. El caso: al cambiar la regla de
+    cancelación no se barrieron las superficies CONECTADAS — el filtro seguía
+    ofreciendo "Cancelado con deuda", el chip decía "Sin contrato" a un suspendido, y
+    los docs afirmaban lo contrario en SEIS lugares. **Una regla de negocio no vive
+    solo en el repo que la ejecuta: vive en los filtros, chips, conteos, exports,
+    textos y documentación.** Antes de dar un cambio por hecho: `grep -rn '<tabla>'
+    lib/` y revisar cada filtro/chip/conteo/export/doc preguntándose *¿esta pantalla
+    sigue diciendo la verdad?*. Y: responder DIRECTO, siempre con **mockups del
+    ANTES y el DESPUÉS**, y cuando elige una opción ejecutarla COMPLETA.
+  · **PENDIENTES SUELTOS:** los 2 posibles cobros dobles (LC0046 de Mairena, QH0066
+    de Telenet con los códigos `00561`/`0561`) · las 10 cuotas de baja sin prorratear
+    · el dashboard sin publicar con sus 2 decisiones de producto · el flujo de release
+    sigue bumpeando la versión SOLO en las ramas `release/*`, así que `main` va a
+    quedar atrás de nuevo en el próximo release.
+
+- **👉 NUEVO (2026-08-25 b, ÚLTIMO) — v0.36.5 PUBLICADA: el chip y los planes.**
+  **DÓNDE RETOMAR:** falta avisarle a Telenet lo de suspender vs cancelar · quedan
+  3 releases en el canal (la política es dejar solo el vigente) · INV20=1 sin tocar.
+  · **QUÉ LLEVA:** el chip **"Sin contrato"** ahora dice el estado real ("1
+    suspendido" / "1 cancelado") — mentía en 70 clientes — y los **planes** se
+    ordenan por precio dentro del mismo nombre, muestran cuántos contratos usa cada
+    uno, y se encuentran tipeando el monto **con o sin** separador de miles.
+  · **El reporte "faltan planes" era un falso positivo, pero el problema era real.**
+    No faltaba ninguno (sync sin filtro + el diálogo excluye el plan actual = 24 de
+    25). Lo que pasaba es que **18 de los 25 planes de Mairena comparten nombre** —7
+    se llaman "CATV"— y solo los separa el precio, que era justo lo único que NO se
+    podía buscar: tipear `1282` no encontraba "1.282,00 C$" porque el punto parte el
+    substring. **Test nuevo** que fija esa regla (5 casos), porque es de las que
+    vuelven a romperse en silencio. El arreglo vive en el SELECTOR, no en
+    `foldBusqueda`, que la usa media app.
+  · **VERIFICADA por contenido:** manifiestos `0.36.5` en las dos empresas · MSIX
+    `0.36.5.0` con los package names correctos · APK `versionCode=265` /
+    `versionName=0.36.5` · firma `28fe9404…` (la keystore de release, no debug).
+    Tests **648 en la rama de release, 684 en main**, cero fallas.
+  · **El build falló la primera vez y lo diagnostiqué mal la vez anterior.**
+    `fatal: unable to write new index file` al restaurar el branding entre un tenant
+    y el otro. NO es disco (184 GB libres) ni Gradle: **`C:/sc-release` está fuera de
+    OneDrive pero es un WORKTREE**, así que su `.git` apunta adentro y OneDrive le
+    bloquea el índice. Ya había pasado en v0.36.3. Salida: `git checkout --
+    pubspec.yaml`, borrar los artefactos parciales y relanzar (el script es
+    idempotente). **Arreglo de fondo: que `C:/sc-release` sea un CLON, no un
+    worktree.** Anotado en memoria.
+
+- **👉 NUEVO (2026-08-25, ÚLTIMO) — LA REGLA DE CANCELACIÓN AHORA VIVE EN EL SERVER.**
+  **DÓNDE RETOMAR:** falta que Rubén AVISE a Telenet · falta que reinicien la PC de
+  Mairena · el chip nuevo y el fix de "Usuarios" están en `main` sin publicar.
+  · **EL DESCUBRIMIENTO:** el dueño reportó que el filtro "Cancelado con deuda" seguía
+    mostrando gente. **El filtro no mentía: la data estaba sucia.** La regla del
+    2026-08-24 vivía **solo en el Dart**, y al APROBAR una solicitud el trabajo lo
+    ejecuta **el device de quien aprueba**. En Mairena ese equipo corre **0.36.2**
+    (con la app abierta desde el día anterior, así que `app_dispositivos.visto_en`
+    ni siquiera lo delataba) → **44 contratos cancelados con C$102.834,54 de deuda
+    viva**, y creciendo: de 37 a 44 en las horas que duró el análisis.
+    **Corrección a mi primer diagnóstico:** dije "la regla nueva no corrió ni una
+    vez". Falso — **corre bien en Telenet**, cuyos admins están en 0.36.4. La firma
+    está en el `op_log`: Mairena escribe una fila `monto 1.282 → 41,35` con motivo
+    *"Prorrateo por cancelación"* (el código viejo prorratea el mes en curso);
+    Telenet no la tiene.
+  · **0259 APLICADA Y VERIFICADA.** Gate + función de condonación + trigger en
+    `contratos` + trigger en `pagos` (para la plata que aterriza DESPUÉS de la baja)
+    + backfill. Resultado medido: **49 → 5 contratos** con deuda (los 5 de Telenet,
+    que **el corte por fecha** protege — NO el flag), **C$121.982,35 → C$19.147,81**,
+    y **la plata intacta**: 31.397 pagos y 31.397 recibos vivos, C$28.067.532,66,
+    idénticos antes y después. Rastro: 146 filas de `op_log` + 44 de `data_ops_log`.
+  · **TRES ramas, no dos.** La del medio es la que faltaba y la tenían mal los 3
+    diseños: una cuota cuyo único pago está **en cuarentena** NO se toca. Anularla
+    mata un cobro real en cascada; condonarla la deja en una **trampa permanente**
+    (al aprobar la cuarentena, el guard de sobrepago la devuelve una y otra vez).
+  · **Por qué se reescribe `monto` y no se inserta un descuento:** `_previasValidadas`
+    aborta el revert si cambia `cargos_neto`, así que un descuento inyectado por el
+    server dejaría **toda baja sin vuelta atrás**, incluidas las de los builds viejos.
+    `monto` es el único campo que ni `cuotas_forzar_derivados` ni la guarda del
+    revert miran.
+  · **La revisión adversarial pagó: entraron 6 parches.** Los dos serios:
+    **(A)** la decisión de anular se tomaba con un `EXISTS` calculado **abajo del
+    LockRows** (verificado con EXPLAIN contra la base viva) → un cobro concurrente
+    podía caer en la rama de anular y la cascada le mataba el pago **y** el recibo;
+    el `NOT EXISTS` pasó a ir DENTRO del UPDATE.
+    **(B)** el gate usaba `setting_bool`, que hace `(valor)::boolean` y **revienta
+    con 22P02** si el valor quedó JSON-quoteado — **ya hay 2 filas así en producción**.
+    Como el gate corre en el camino de TODO cobro y 22P02 es no-retryable, un valor
+    mal escrito habría **volteado cada cobro del tenant**. Ahora lee tolerante.
+  · **DECISIÓN DE RUBÉN: encendida en las DOS empresas**, contra la recomendación de
+    apagarla en Telenet. Lo que protege sus 5 deudas viejas es el corte por fecha (el
+    más nuevo queda 12 días antes), no el flag. **De acá en adelante Telenet tiene que
+    usar SUSPENDER para "se fue debiendo" — hay que avisarles.**
+  · **También salió:** el chip **"Sin contrato"** mentía en **70 clientes** que sí
+    tienen contrato (30 suspendidos + 40 con solo cancelados) y chocaba con el filtro
+    homónimo, que exige CERO contratos (94 contra 24). Arreglado el CHIP, no el
+    predicado — así los dos convergen sin solaparse con las categorías que ya existen.
+  · **Planes "que no aparecen" (reporte del ISP): NO falta ninguno.** Sync sin filtro
+    + el diálogo excluye el plan actual = 24 de 25. El problema real es que **18 de
+    los 25 planes de Mairena comparten nombre** (7 se llaman "CATV", 5 "COMBO
+    INTERNET+CATV 20MB"), el orden dentro del mismo nombre es azaroso, y buscar
+    `1282` no encuentra `1.282,00` (la búsqueda no ignora el separador). Telenet no
+    tiene nombres repetidos. **Pendiente de aprobar el fix.**
+  · **INV20=1 NO es de esta migración** (verificado: 0 filas suyas para ese cliente;
+    el único divergente no fue tocado). Es residuo de un cancelar+recrear de la app.
+
+- **👉 NUEVO (2026-08-24 e, ÚLTIMO) — LOS NÚMEROS DEL RESUMEN CUADRAN · v0.36.4 PUBLICADA.**
+  **DÓNDE RETOMAR:** falta que Rubén actualice y confirme en pantalla · queda sin
+  decidir si se borra el release v0.36.3 · sigue pendiente el dashboard.
+  · **EL FIX, y era de tres palabras:** la columna "Usuarios" hacía
+    `COUNT(DISTINCT cliente_id)` — contaba PERSONAS mientras la de al lado contaba
+    CUOTAS. Una persona con dos servicios (CATV + COMBO) genera dos cuotas, así que
+    las dos columnas **no podían cerrar nunca**. Pasa a
+    **`COUNT(DISTINCT COALESCE(contrato_id, id))`** en las **6** ocurrencias: las 3
+    de "Cobros del mes" y las 3 de "Mora del ciclo", que tienen que usar el mismo
+    criterio o muestran universos distintos. Medido contra producción, el ciclo en
+    curso da **1:1 en las tres filas de las dos empresas** (Mairena 4.429 = 4.429,
+    Telenet **971 = 971** — el número exacto de la captura del dueño).
+  · **El `COALESCE` NO es adorno, y tapó un bug latente:** un **cargo manual** es una
+    cuota con `contrato_id` NULL y `COUNT(DISTINCT)` ignora los NULL → sin él, cada
+    cargo sumaría en "Cuotas" pero no en "Usuarios" y el descuadre volvía por otra
+    puerta. Estaba invisible porque **los dos ISPs tienen CERO cargos manuales**; el
+    Test Tenant tiene uno y con el COALESCE sus 8 ciclos cuadran, contra 7 sin él.
+    (Mismo patrón que las reglas 1c y 1d del AGENTS: el caso normal esconde el bug.)
+  · **Lo que NO cuadra y está BIEN:** 5 de 26 ciclos difieren porque un contrato tuvo
+    **dos vencimientos en la misma ventana 15→14** (el 14/6/2026 cayó domingo y
+    `calcular_fecha_pago` corrió el vencimiento al lunes 15) — son dos cobros reales.
+  · **RUBÉN TENÍA RAZÓN en el fondo:** los 5 clientes que descuadraban el ciclo en
+    curso NO tienen dos servicios de verdad. Los 5 son **un contrato cancelado + uno
+    activo = un cambio de plan hecho como cancelar+recrear**: CF0190, CNC011, PI0059,
+    R20072 (Mairena) y AS0026 (Telenet). Y **las 5 cuotas de cierre están PAGADAS**
+    (C$2.572,32 cobrados) → no hay deuda colgando. Por eso el conteo las cuenta como
+    servicios en vez de esconderlas: **esconderlas borraría C$2.572,32 de cobros
+    reales** del Resumen. El origen lo corta el permiso que va en el mismo release.
+  · **v0.36.4+264 PUBLICADA Y VERIFICADA** (canal `sitecsa-updates`, 8 assets).
+    Verificado por CONTENIDO, no por timestamp: manifiestos `0.36.4` en los dos
+    tenants · MSIX `Version=0.36.4.0` con los package names correctos · APK
+    `versionCode=264` / `versionName=0.36.4` · firma **`28fe9404…`** (la keystore de
+    release de siempre, no debug). Tests **643 en la rama de release, 679 en main**.
+  · **Se cerró una MINA en `main`:** su `pubspec` decía `0.34.2+256` mientras la calle
+    corría `0.36.3+263`, porque los bumps se venían commiteando SOLO en las ramas
+    `release/*`, que nunca se mergean de vuelta. Publicar desde main habría
+    **CONGELADO el canal** de los 11 equipos productivos (`_isNewer` compara
+    major.minor.patch con `>` estricto → las apps creerían estar al día para
+    siempre). Corregido con una línea (`dd3502b`). **NO se mergea `release/*` a
+    main**: borraría el dashboard en curso.
+  · **PENDIENTE que encontró la auditoría:** el strip del dashboard de v0.36.2
+    revirtió `dashboard_providers.dart` por debajo del merge-base y **borró el fix
+    multi-tenant del "Top cobradores"** — hoy ese ranking no filtra por empresa en lo
+    publicado. Solo muerde en el equipo del super_admin (el único que sincroniza más
+    de un tenant). Son 4 líneas, verificadas, sin aplicar.
+
+- **👉 NUEVO (2026-08-24 d, ÚLTIMO) — "usuarios ≠ cuotas": la causa era un PERMISO, y los
+  pagos retroactivos NO son doble cobro.**
+  **DÓNDE RETOMAR:** falta build para que salga el permiso · quedan 2 casos puntuales de
+  posible doble cobro (abajo) · quedan sin hacer las otras dos patas del fix de fondo.
+  · **LA RESPUESTA A "que los números concuerden": YA CONCUERDAN.** Octubre cierra **1:1
+    exacto** en las dos empresas (Mairena 4.424 = 4.424, Telenet 963 = 963). El desfase de
+    septiembre es facturación LEGÍTIMA: la cuota de cierre del plan viejo, prorrateada a los
+    días servidos, al centavo. Borrarla sería sub-facturar.
+  · **LA CAUSA RAÍZ, y es de una línea (`9a9c8b3`):** `admin_usuarios` veía "Solicitar
+    cancelación" pero **NO "Cambiar plan"**, así que para un cambio de servicio su única
+    salida era cancelar+crear — y eso parte al cliente en dos contratos con dos cuotas.
+    Medido: ese rol metió **61 cancelaciones y 207 contratos nuevos, y CERO cambios de
+    plan**. Es el MISMO bug que el comentario del provider ya describía para
+    `admin_cobranza`: se arregló para ese rol y quedó abierto para el que hace ~90% de la
+    gestión. **Sin migración**: el rol PIDE el cambio y el server ya lo acepta.
+    **Test nuevo que fija la REGLA DE PRODUCTO**, no la implementación: *todo rol que pueda
+    pedir una cancelación tiene que poder pedir un cambio de plan*. Recorre los 7 roles.
+  · **LO QUE FALTA del fix de fondo** (decisión: por ahora solo el permiso): una acción
+    **"Corregir el plan desde el inicio"** que re-valúe TODAS las cuotas vivas —hoy
+    `cambiarPlan` solo toca las futuras, y el motivo más frecuente es "se cargó mal desde el
+    día uno", por eso hasta quien SÍ ve el botón sigue cancelando (Telenet canceló+recreó 4
+    contratos el 24/08)— y el **permiso de cambio de fecha de pago**, que no tiene ninguno de
+    los 12 usuarios de los dos tenants (3 de los 4 casos también cambiaron el día).
+  · **🔻 EL HILO DE LOS PAGOS RETROACTIVOS — CERRADO, Y MI ALARMA ERA EXAGERADA.** Un lente
+    lo reportó como *"plata que puede no haber entrado nunca a caja"* (C$160.985) y yo lo
+    repetí acotado a C$74.946. **Las dos cifras eran falsas alarmas.** Lo que hay:
+    223 pagos en cuotas superpuestas, **134 cargados +30 días después** de su fecha (hasta
+    204 días), pero **103 de esos 134 se concentran en 10 días de carga** → es carga en lote
+    de historia, consistente con la migración desde Excel. Y el discriminante decisivo: de
+    **121 pares (cliente, mes) con dos cuotas, 119 tienen montos distintos y 108 planes
+    distintos** → son **dos servicios reales** (CATV + COMBO), no duplicados. Los 223 pagos
+    tienen recibo vivo, 0 sin respaldo.
+    **Solo 2 pares quedan en duda** (mismo plan, mismo monto): **LC0046** de Mairena (dos
+    COMBO, enero, los dos pagados C$1.282 → probable doble cobro) y **QH0066** de Telenet
+    (contratos `00561` y `0561` — los que difieren solo por ceros a la izquierda; uno pagado
+    y el otro se le está volviendo a cobrar). Esos dos sí conviene consultarlos.
+  · **Tests 679/0.** El pico de julio del Resumen (145 de más) **no es un problema**: el 14
+    de junio cayó domingo, `calcular_fecha_pago` corrió el vencimiento al lunes 15 y entró en
+    la ventana junto al de julio. Es calendario. **Vuelve a pasar en abril y diciembre 2027.**
+
+- **(2026-08-24 c) — CANCELAR UN CONTRATO YA NO DEJA DEUDA · PUBLICADO
+  EN v0.36.3.**
+  **DÓNDE RETOMAR:** testing manual de Rubén sobre **v0.36.3** (build **263**) · decidir si a
+  los **5 morosos** que quedaron afuera se les hace algo · el dashboard sigue sin liberar.
+  · **PUBLICADO:** canal con SOLO `v0.36.3` (v0.36.2 borrado, release y tag). Tag de código
+    `v0.36.3` = `5825e77` (rama `release/v0.36.3`, cherry-pick de los 2 commits de código
+    sobre `v0.36.2`). **Diff contra v0.36.2: exactamente 4 archivos, ninguno de dashboard.**
+    Verificado antes de publicar: firma `28fe9404…` en las dos empresas · build 263 > 262 ·
+    versión 0.36.3 **adentro** del APK y del MSIX de AMBAS · branding correcto (Telecable
+    Mairena S.A. / Telenet) · los dos manifiestos sirviendo 0.36.3 desde `/latest/`.
+    Suite de la rama: **629/0**.
+  · **GOTCHA DEL BUILD (anotar):** el script falló con `exit 128` en
+    `git checkout (restaurar branding telenet)` — el ÚLTIMO paso, después de generar los
+    binarios. Es un **lock transitorio** (Gradle soltando archivos); correr el mismo checkout
+    a mano da exit 0 y el árbol queda limpio. **Los artefactos ya estaban bien**: se
+    verificaron los 4 antes de publicar. Si vuelve a pasar, no rebuildear: verificar y seguir.
+  · **EL REPORTE:** un contrato CANCELADO seguía apareciendo con deuda. Era el diseño viejo
+    —cancelar dejaba cobrable lo cumplido y prorrateaba el mes en curso—, o sea que hacía
+    casi lo mismo que suspender. **Regla nueva del dueño:** cancelar condona todo; suspender
+    conserva la deuda y es reversible. Ahora los dos botones significan cosas distintas.
+  · **LA MEDICIÓN QUE DEFINIÓ EL ALCANCE:** 51 contratos cancelados arrastraban
+    **C$120.234,28**, y el **79% era ATRASO** (meses viejos), no el mes de la baja. Al
+    clasificar por motivo apareció el matiz: **36 de los 51 siguen siendo clientes** con
+    otro contrato activo (recontrataron, migraron, o el contrato estaba mal cargado) — su
+    deuda es residuo administrativo. Pero **5 se cortaron por falta de pago**, ninguno
+    recontrató, y el ISP había escrito a mano *"quedó pendiente con mes junio"*: están
+    usando el sistema para seguir esa deuda. **Se limpiaron 46 (C$101.086,47) y esos 5
+    quedaron intactos** (C$19.147,81), por decisión explícita.
+  · **LA REGLA INVIOLABLE QUE CONDICIONÓ EL DISEÑO:** anular una cuota con plata dispara
+    `cuotas_anular_pagos_asociados_trg`, que anula EN CASCADA sus pagos y sus recibos —
+    borraría plata cobrada y un comprobante que el cliente tiene. Por eso: sin pago → anular;
+    **con pago → `monto = monto_pagado` + `cargos_neto = 0` + `'pagada'`** (saldo 0 sin tocar
+    la plata). Verificado tras aplicar: **0 pagos y 0 recibos anulados**.
+  · **Textos:** el diálogo prometía *"la deuda real queda COBRABLE"* y ahora avisa que se
+    condona todo, con una línea en rojo: *"¿El cliente se va debiendo y le vas a seguir
+    cobrando? Entonces usá SUSPENDER"*. La tarjeta decía *"Deuda al cancelar (cobrable)"* —
+    mandaba a buscar una deuda inexistente— y pasa a *"Deuda condonada"*.
+  · **Un test viejo se cayó, y estuvo bien:** afirmaba que cancelar un suspendido no tocaba
+    las cuotas. Se **reescribió** en vez de borrarlo, porque protegía algo real (re-prorratear
+    le SUBÍA el monto al cliente): la garantía sigue fijada con un `lessThanOrEqualTo`.
+  · **Tests 664+, invariantes 31 filas con el baseline de siempre** (INV11=3, INV19=7).
+  · **AGENTS: invariante 6b** con la regla y la prohibición de anular cuotas con pago.
+
+- **(2026-08-24 b) — DASHBOARD: tarjeta "Recaudo y mora" (formato de la
+  referencia del dueño), en prueba local sobre el Test Tenant.**
+  **DÓNDE RETOMAR:** Rubén la está probando con el MSIX local (identidad genérica
+  `com.sitecsa.crm`, NO pisa la app de Mairena instalada; canal de release intacto). Tras su
+  OK quedan las DOS DECISIONES que las líneas punteadas esperan: ¿quién configura la **meta
+  de recaudo** (hoy 100% de lo facturado) y el **límite de mora** (hoy 10%, supuesto del
+  mockup)? Constantes `kMetaRecaudoPct`/`kLimiteMoraPct` en `recaudo_mora_card.dart`,
+  marcadas PROVISORIAS.
+  · **Qué es** (`c7d2613`): la tarjeta calca las capturas que trajo el dueño — 4 líneas
+    (recaudado real/meta, mora real/límite), vistas **Mensual/Acumulado**, 4 KPIs, tabla de
+    indicadores con % del total, 6 ciclos navegables — pero con la SEMÁNTICA CORREGIDA que
+    se validó contra producción: `facturado = recaudado + por recaudar + mora` por ciclo,
+    con "por recaudar" = saldo aún en plazo o gracia y "mora" = saldo que cruzó la gracia
+    (disjuntos; la tabla suma 100% sin plata doble). En Acumulado la mora de cada ciclo es
+    la viva HOY de las cuotas de ESE ciclo — acumular no duplica. La trampa que se evitó:
+    en la referencia, con nuestra fila "Pendientes" el 100% habría sumado 33,9% de más
+    (medido en Mairena).
+  · `serieRecaudoMora` en `dashboard_query.dart` (clave de ciclo calcada de `periodoDe`,
+    período 15→14). `admin_cobranza` no monta la tarjeta (es 100% montos). El gráfico marca
+    el primer ciclo cuya mora rebasa el límite.
+  · **Tests: 660/0** (los 5 nuevos: identidad por ciclo y acumulada, mapeo de períodos,
+    relleno de huecos, y el cross-check con `resumenCobros` — dos tarjetas del mismo
+    dashboard no pueden dar números distintos del mismo ciclo).
+  · **Data simulada: NO hizo falta sembrar** — el Test Tenant ya tiene el escenario de
+    `supabase/escenarios/dashboard_seed.sql` (14 clientes TT-*, 132 cuotas feb–nov 2026).
+    NO se re-corrió el seed: su DELETE arrasa el tenant y se llevaría el caso de cuarentena.
+  · El dashboard SIGUE sin liberar: esto vive en `main` y sale cuando el dueño diga.
+
+- **(2026-08-24 a) — v0.36.2 EN LA CALLE + la doble facturación cerrada.**
+  **DÓNDE RETOMAR:** testing manual tuyo sobre v0.36.2 · el dashboard sigue en desarrollo y
+  sale cuando vos digas (bump ≥0.37.0) · el resto del bloque B del plan de consistencia.
+  · **PUBLICADO:** canal `sitecsa-updates` con SOLO `v0.36.2` (v0.36.1 borrado, release y
+    tag). Tag de código `v0.36.2` = `74559c9` (rama `release/v0.36.2` en `C:\sc-release`).
+    **Build esperado en login/sidebar/perfil: `0.36.2`** (build 262).
+  · **QUÉ LLEVA** (8 archivos, sin dashboard — el diff contra v0.36.1 se verificó):
+    **B1**, el único que le cambia el día a día al cobrador: el rastro del cobro rechazado
+    se guarda ANTES de que la cola se destruya. Es el que protege el caso Derling. Más el
+    conteo del historial de Operaciones, el antes→después de los cambios de plata, y los
+    textos del panel.
+  · **VERIFICADO ANTES DE PUBLICAR** (la lista que conviene repetir siempre): firma Android
+    `28fe9404…` idéntica en las dos empresas (si no coincide, Android rechaza la
+    actualización) · build **262** > 261 · versión **0.36.2 adentro** del APK **y del
+    MSIX**, en las DOS empresas — incluida Telenet, que es la segunda del loop y donde
+    pegaría el bug que el guard nuevo previene · manifiestos apuntando al instalador
+    correcto · el `version-mairena.json` servido desde `/releases/latest/` ya devuelve
+    `0.36.2` · suite de la rama **624/0**.
+  · **DEUDA FANTASMA CERRADA:** 11 cuotas por C$10.257 anuladas (`577cb27`) + `0257`
+    repuso `cancelado_en` en 36 contratos desde el `op_log`. INV25 volvió a 0.
+  · **NO TOCAR:** `pubspec` de main sigue en `0.34.2+256` A PROPÓSITO (el bump va en la
+    rama de release). Y OJO: OneDrive bloquea la escritura de refs — no se puede crear un
+    tag local en esa carpeta; el tag se empuja directo con
+    `git push origin <sha>:refs/tags/vX.Y.Z`.
+
+- **(2026-08-23) — RED DE CONSISTENCIA: 31 invariantes, y las 4
+  operaciones de dinero que pasaban sin dejar rastro ya no pasan.** Migraciones
+  `0248`-`0254`, TODAS aplicadas y verificadas contra `vxxz` (producción).
+  **DÓNDE RETOMAR:** nada de esto necesita build para funcionar — el registro y los
+  guards son server-side y ya están vivos. Lo que SÍ espera build es el bloque B del
+  plan (`docs/PLAN-CONSISTENCIA-2026-08-23.md`), empezando por **B1: el rastro del
+  rechazo se guarda sin esperar confirmación y justo después se destruye la evidencia**
+  (`transaction.complete()`); si el teléfono muere en ese instante queda el recibo en
+  papel y cero rastro.
+  · **HALLAZGO DE ARRANQUE: el backlog del 08-08 estaba 8/8 CERRADO.** Se fue aplicando
+    sin tacharse y mintió dos semanas. Incluso la que yo iba a proponer como estrella —el
+    rechazo mudo— **ya estaba y ya se pagó sola**: al volverse ruidosa destapó el colchón
+    de indefinidos que se rechazaba en silencio desde el día uno (→ 0241). Se tachó con
+    la evidencia de cada cierre. **Lección de proceso: el backlog se tacha en el mismo
+    commit que lo cierra.**
+  · **Y una CORRECCIÓN de lectura, no de número:** el bullet de "clientes sin salida por
+    condonación" (40 / C$108.512) estaba bien contado y mal leído — **28 de esos 40
+    (C$89.153, el 82,9%) están SUSPENDIDOS, o sea mora normal y COBRABLE**. La propuesta
+    que salía de ahí habría condonado C$89.000 cobrables. La población real son 11
+    clientes por C$18.429, y la salida ya existe desde 0244/0245.
+  · **31 INVARIANTES (`90e882f` + `0248`).** 11 nuevos, los 11 arrancando en CERO. El que
+    más importa vigila **no cobrar salteándose la cuota más vieja** (#11 de AGENTS), el
+    único invariante del negocio que no tenía NINGUNA red — por decisión de producto no
+    hay trigger server y el guard del teléfono es ciego al multi-device offline. `0248`
+    los porta a la RPC del panel (decía 20, el archivo 31 — divergir es justo lo que 0220
+    vino a cerrar), pasa el orden a NUMÉRICO (antes: INV1, INV10, INV11… INV2) y hace que
+    el cartel verde derive el conteo del resultado: el número fue 17, 20 y 31, y el texto
+    quedaba viejo cada vez. Las 11 entradas humanizadas van en `kInvInfo`.
+  · **BARRIDO DE ATRIBUCIÓN (`0249`-`0251`, `0254`).** (1) 14 duplicados auto-anulados sin
+    historial, repuestos con el `pago_original` que el borrador perdía — sin él la fila
+    dice "se anuló un duplicado" sin decir duplicado DE QUÉ. (2) Las **5 RPC del panel del
+    Dev** no escribían nada: ahora sí, y las 3 de `cobradores` **se ven solas, sin build**;
+    de paso queda registrada la pérdida silenciosa de `prefijo_recibo` al degradar un rol.
+    (3) El **corrector de invariantes NO CONVERGÍA** — reproducido en vivo: "corrige" 2
+    filas, no cambian, y la pasada siguiente vuelve a "corregirlas". No escribía plata
+    fantasma (el trigger BEFORE la atajaba), pero sumarle el registro nuevo habría
+    estampado filas de corrección con antes = después en el historial de esas cuotas en
+    cada apretón. (4) **Dar de baja un contrato ahora exige quién y por qué.**
+  · **LA LECCIÓN QUE MÁS SE VA A REUSAR (AGENTS #13/13b/13c):** el plan pedía un `CHECK
+    NOT VALID` para (4). Al medirlo, habría dejado **93 clientes imposibles de reasignar**
+    — un CHECK evalúa el ESTADO, no la TRANSICIÓN, y `NOT VALID` solo salta el escaneo
+    inicial. Va como trigger de transición, con la rama del **UPSERT** (PowerSync sube los
+    `put` con upsert y el BEFORE INSERT corre ANTES del conflicto: `TG_OP` dice `'INSERT'`
+    aunque la fila exista).
+  · **ADEMÁS:** `0252` historial de avisos de sync + motivo al descartar (declarar perdido
+    un cobro real ahora deja constancia); `0253` índice único parcial que impide el mismo
+    aviso N veces sin bloquear la reincidencia legítima.
+  · **PENDIENTE ANOTADO:** el worktree `.claude/worktrees/app-status-check-850cf6` está
+    PODRIDO (v0.28.0, migración 0203, dos meses atrás). Tres de las cuatro lentes del
+    análisis lo leyeron y "probaron" bugs que en producción ya no existen, con evidencia
+    que parecía real. **Borrarlo** (`git worktree remove ... --force`) antes de la próxima
+    sesión de análisis.
+  · **AUDIT FASE 4 DE LA PROPIA TANDA (`0255` + `f4a5cc8`).** 7 lentes + refutación
+    adversarial de cada hallazgo (17 agentes). **Veredicto: ningún invariante calculaba
+    plata mal** — lo que fallaba era el SISTEMA DE MEDICIÓN. En un panel que es el cierre
+    no-negociable de todo fix de plata, un cero falso vale igual que un bug. Cuatro
+    chequeos corregidos, y los tres primeros arrancan y terminan en cero (arreglan
+    latentes, no cambian el presente):
+    **INV3** adopta el canon del trigger `cuotas_forzar_derivados`, que es la autoridad —
+    su banda propia de ±0.01 marcaba como violación un estado que el propio server
+    produce, y el corrector no podía apagarla porque el trigger revertía su UPDATE.
+    **INV28** compara contra la caja de la EMPRESA y no la del usuario: devolver es acción
+    de oficina, y el predicado pedía caja de calle (2 de las 10 disposiciones reales
+    habrían marcado rojo, una de C$30.516, sin forma de bajar la bandera).
+    **INV29** pierde `recibo_id`, una condición que NINGÚN camino del sistema puede
+    satisfacer — la primera devolución real dejaba rojo permanente con un texto que
+    mandaba a completar un campo inexistente.
+    **Y el corrector** suma un filtro `despues IS DISTINCT FROM antes`: `RETURNING` trae
+    el valor POST-trigger, así que si el trigger revertía, la fila contaba como corregida
+    sin cambiar y estampaba `op_log` con antes = después.
+  · **🔻 INV25 = 6 — LO ÚNICO CON VÍCTIMAS, Y ESPERA TU DECISIÓN.** El comentario de INV25
+    juraba ser copia exacta del trigger 0234 y no lo era: el trigger hace COALESCE de la
+    fecha de baja a hoy-Nicaragua, el chequeo no. **Justo ahí vivía la deuda fantasma.**
+    37 contratos cancelados SIN fecha quedaban fuera del chequeo, y con ellos **6 cuotas
+    por C$6.154,00** en 3 contratos de Telecable Mairena (R10072, IV0161, SE0092) con
+    ventana de servicio que arranca en **sep/oct 2026** sobre contratos YA CANCELADOS —
+    servicio que no se va a prestar, hoy listado como cobrable. El panel decía "0
+    violaciones"; ahora dice 6. **La data NO se tocó**: anular cuotas es operación de
+    dinero. Se cierra desde Operaciones → estado de cuota (preview + motivo + respaldo).
+    Hasta entonces el baseline suma INV25 = 6, marcado como PENDIENTE, no como aceptado.
+  · **Y un dato que no era código:** las dos funciones de `sync_rechazos` filtraban la
+    identidad del super_admin al ISP — sus `LEFT JOIN` a `cobradores` no tienen condición
+    de tenant y son `SECURITY DEFINER`, así que resolvían contra la fila del dueño del
+    SaaS. Enmascarado del lado de la LECTURA (tocar el write reescribiría historia).
+  · **Invariantes tras cada migración: 31 filas · baseline INV11=3, INV19=7 · INV25=6
+    pendiente. RPC y archivo canónico dan IDÉNTICO en los 4 tenants.**
+  · **✅ B1 CERRADO (`a9b26fe`) — el rastro del cobro rechazado ya no corre una carrera
+    contra el borrado.** Cuando el server rechaza un write, el connector disparaba el
+    aviso local con `unawaited` y seguía; poco después corre `transaction.complete()`,
+    que **borra las ops de la cola para siempre** (verificado en `powersync_core` 1.8.0).
+    Si la app moría en esa ventana quedaba el recibo en papel y CERO rastro — y el
+    `opData` de esa op es el ÚNICO registro del contenido con el que se reconstruye el
+    cobro a mano. Eran **tres** los call sites, no dos (el plan se comía el `delete`).
+    Ahora `_registrarRechazo` devuelve el Future del rastro LOCAL, `uploadData` los junta
+    y los vacía **una vez** antes de `complete()`, con timeout de 5 s — no un `await` por
+    rechazo: adentro del loop, un cambio de policy que rechace cientos de ops retendría
+    el batch entero. Va solo ahí y **no en un `finally`**: si el loop sale por excepción,
+    `complete()` no corre, las ops siguen en la cola y no hay evidencia que perder.
+    **Test nuevo** que fija la garantía de la que depende todo: esperar esos Future deja
+    los avisos EN DISCO (se leen de prefs, no de memoria) con su `data` completa.
+  · **✅ DEUDA FANTASMA CERRADA (`577cb27`) — 11 cuotas, C$10.257, anuladas.** Con
+    `super_admin_cuota_estado_impl` (preview + motivo + respaldo + triple registro), una
+    por una, con un guard que abortaba todo si el conteo no daba 11. Verificado: 11 cuotas,
+    C$10.257,00, 11 operaciones registradas, 11 respaldos, 11 filas de historial. **Es
+    reversible** ("revivir" desde la misma pantalla). Y **`0257` repuso `cancelado_en` en
+    36 contratos** desde la fecha real del `op_log` — sin inventar nada; el único sin
+    rastro (1 de 37) se queda con NULL honesto, y `cancelado_por`/`motivo` NO se rellenan
+    porque una atribución falsa es peor que el vacío. **INV25 volvió a 0**; el baseline
+    queda en INV11=3 e INV19=7, los dos de siempre.
+  · **🔻 EL DETALLE — el número cambió, y lo empeoró.** Al mirar caso por
+    caso apareció el porqué: esos contratos se terminaron con el estado viejo
+    **`'completado'`** (que después se eliminó como alias de `'cancelado'`), por un camino
+    que NO escribía la atribución; una migración posterior los mapeó a `'cancelado'` sin
+    reponer la fecha. **El `op_log` SÍ tiene la fecha real** (36 de 37). Con las fechas
+    verdaderas no son 6 cuotas / C$6.154 sino **11 cuotas / C$10.257**, en **5 clientes de
+    DOS empresas** (Mairena 8 / C$7.949 · Telenet 3 / C$2.308) — mi INV25 usa "hoy" como
+    respaldo y por eso contaba de menos.
+    **Lo decisivo: los 5 recontrataron y se les cobra el mismo mes DOS VECES.** Tomasa
+    Ríos (IV0161) debería deber C$513/mes por su contrato nuevo y se le piden **C$1.795**,
+    porque el contrato terminado sigue facturando C$1.282. Si el cobrador va y ella paga,
+    esa plata entra a una cuota que no correspondía. Ojo SP0024: tiene **dos** contratos
+    viejos (00255 y 0523, los que difieren solo por ceros a la izquierda).
+    **Espera decisión de Rubén** (toca plata). Salida: anular las 11 desde Operaciones →
+    estado de cuota (preview + motivo + respaldo). Complemento recomendable: **backfillear
+    `cancelado_en` desde `op_log`** — no inventa nada, reconstruye un timestamp del
+    historial registrado, y deja de depender del respaldo "hoy".
+  · **Nota de método:** `flutter test` **se cuelga** en la carpeta de OneDrive (se clava en
+    el primer archivo, `dart` al 0% de CPU). La misma suite corre en **1:13** desde un
+    worktree en `C:\sc-release`. **647 pasando · 4 salteados · 0 fallas.**
+
+- **(2026-08-22) — AUDIT INTEGRAL (47 hallazgos) + paquetes A y B
+  aplicados: el prorrateo ya no puede subirle la deuda a quien se da de baja.**
+  **DÓNDE RETOMAR:** **v0.36.1 publicada** con el fix crítico (ver abajo) → el riesgo del
+  prorrateo está cerrado en cuanto los equipos actualicen. Sigue: paquete C (6 casos con
+  víctima contada) y paquete D (la columna `precio_base`, el fix de fondo, que además
+  cierra el lado de sub-cobro).
+  · **EL AUDIT** (`docs/AUDIT-INTEGRAL-2026-08-22.md`, 7 lentes + refutación de los 12 más
+    severos): **1 CRÍTICA · 4 ALTA · 18 MEDIA · 24 BAJA**. Los dos veredictos que importan:
+    **la plata CIERRA al centavo** (18/20 invariantes en cero, los 2 restantes son los ya
+    declarados; 57.003 cuotas sin un derivado desalineado; la deuda del tenant cierra por
+    tres cortes; las 6 fórmulas de saldo dan idéntico) y **el ciclo offline es PRECISO**
+    (41 triggers comparados con su espejo Dart, los 4 escenarios de conflicto cubiertos,
+    0 pagos vivos sobre cuota anulada en 879 anulaciones).
+  · **PAQUETE A (código, commit 07ef412).** (1) El **clamp del prorrateo**: al suspender/
+    cancelar se prorrateaba con el precio LIVE del plan contra una cuota que es SNAPSHOT
+    de su momento, y solo se clampeaba por abajo → **darse de baja podía salir más caro
+    que el mes entero** (SE0338: C$513 → C$1.075 por 26 días; ya consumado en SE0294 el
+    11/08: 479,90 → 496,45; 16 cuotas vivas expuestas). Ahora se acota por arriba al monto
+    de la cuota **en los tres puntos, incluido el preview** — sin ese tercero el diálogo
+    mostraba un número y la app escribía otro. 4 tests nuevos fijan la REGLA.
+    (2) **reactivarContrato** revivía filtrando por el string `'Suspensión temporal'`, pero
+    por suspensión se anula con TRES motivos (app, trigger 0234, backfill 0234): las otras
+    dos quedaban anuladas para siempre (el unique contrato+periodo impide regenerarlas).
+    Hoy hay 3 cuotas por C$2.748 así. Se filtran los 3; los de cancelación quedan fuera.
+    Suite: **647/647**. **Publicado en v0.36.1** (`release/v0.36.1` = tag `v0.36.0` +
+    cherry-pick del fix: el diff contra el release anterior son exactamente 2 archivos,
+    `contratos_repo.dart` y `prorrateo_test.dart` — el dashboard sigue afuera y byte-idéntico
+    a v0.35.2). Suite de la rama: 616/616 (612 + los 4 tests nuevos).
+  · **PAQUETE B (docs, commit 396c363).** La guía de Troubleshooting SQL estaba 15% ciega:
+    le faltaban 13 triggers, entre ellos el que **anula cuotas en masa** al cambiar el
+    estado de un contrato (0234) — quien la seguía borraba deuda sin enterarse. Además el
+    control post-fix decía "INV1-INV17 en 0" cuando el script emite **20**, y los 3 que
+    quedaban fuera incluían INV19 (7 vivas). Se agregó la **línea base** (INV11=3, INV19=7
+    aceptados: la regla es "tu fix no puede AUMENTAR ningún contador") y la query para
+    regenerar la tabla de triggers (42 hoy). ARQUITECTURA §3.5: la "regla de oro" definía
+    el total de contrato fijo como `precio × meses`, contradiciendo al invariante #5 y a su
+    propia R22 — corregido a `Σ cuotas vivas` con el porqué.
+  · **LO QUE QUEDA:** paquete C (estados de cuenta de Telenet con deuda ya perdonada · el
+    mes del recibo se re-etiqueta al cambiar la fecha de pago, 27 recibos entregados · el
+    período de servicio que se muestra al cobrar, 165 cuotas · el cierre de caja sin filtro
+    de empresa · el aviso de rechazo sin `await`) y paquete D (`cuotas.precio_base`, que
+    cierra también el lado de **sub**-cobro).
+
+- **👉 NUEVO (2026-08-21 tarde, ÚLTIMO) — CUADERNO DE TELENET ejecutado (la parte probada)
+  + guía de WhatsApp con Meta.**
+  **DÓNDE RETOMAR:** mandarle a Telenet los 2 entregables de `docs/cuadernos/`
+  (`Telenet-consultas-2026-08-21.md` con las 9 preguntas y
+  `Telenet-contratos-por-decidir-2026-08-21.xlsx` con 49 contratos / C$154.174). Sin sus
+  respuestas no se toca una cuota más. Pendiente aparte: los pagos duplicados (C$23.185).
+  · **EJECUTADO (verificado):** 70 cuotas anuladas por **C$59.595,51** en 27 contratos, en UNA
+    transacción. Lotes: A=29 cuotas (contrato re-tipeado: mismo servicio cargado dos veces con
+    la misma fecha de alta y los meses ya pagados en el hermano), B=19 (cola FUTURA de
+    contratos dados de baja — uno facturaba hasta enero 2027), C=5 (mes ya pagado en el
+    contrato vigente), D=17 (mes facturado en los dos; se conserva el del vigente).
+    Triple registro completo: 27 backups con los uuid adentro (el de Mairena no los tenía y el
+    undo fue arqueología) · op_log 70 cuotas + 27 contratos DENTRO de la transacción (en
+    Mairena se backfilleó 4h después) · data_ops_log poblado (en Mairena quedó vacío) ·
+    snapshot de deuda en los 6 del lote B ANTES de anular. **0 cuotas con plata cobrada
+    tocadas** (no había ninguna en los 47 contratos: verificado). Invariantes: los mismos 2
+    preexistentes (INV11=3, INV19=7), sin aumentar. SQL en
+    `docs/cuadernos/telenet-ejecucion-2026-08-21.sql`.
+  · **CONGELADO C$102.860 (63% del cuaderno)** porque no se puede probar desde la base: en 6
+    contratos de "mala fecha" el contrato bueno arranca MESES después y esos meses no los
+    factura nadie (¿hubo servicio o no?); los 10 "cliente cortado" son deuda REAL declarada por
+    el ISP. **Regla que se aplicó: si no está probado, se pregunta — no se borra.**
+  · **Lo que el cuaderno NO contemplaba y salió del cruce:** (1) el problema SE SIGUE
+    GENERANDO — 29 contratos nuevos por C$90.437 cayeron en el mismo estado entre el 12 y el
+    18/08 por una campaña de cortes; vale investigar por qué cortar deja el contrato así.
+    (2) C$23.185 de **pagos duplicados** en 7 clientes (uno ni figura en el cuaderno) inflando
+    la caja 0,44%: se arregla revirtiendo el PAGO, no anulando cuotas, y primero el pago.
+    (3) Marcela QH0066 tiene TRES contratos; el tercero está activo, debe C$5.128 y nunca pagó.
+  · **Trampa del dato:** los códigos de contrato de Telenet se distinguen SOLO por ceros a la
+    izquierda (561 / 0561 / 00561 son TRES contratos del mismo cliente). Todo se resolvió por
+    UUID explícito y se verificó código por código antes de ejecutar (dry-run: 70 cuotas /
+    C$59.595,51 exacto). El SQL del análisis traía 2 errores que lo habrían hecho fallar
+    (`op_log.actor` no existe; `diff` es TEXT y necesita `::text`).
+  · **WhatsApp/Meta:** guía completa en `Install Steps/WhatsApp-Meta-alta-y-setup.md` + PDF de
+    25 páginas (sin marca SITECSA). Parte A la hace el ISP, Parte B nosotros, y cierra con los
+    4 datos que nos tienen que pasar. Precio verificado: US$0,0113 por mensaje Utility.
+
+- **👉 NUEVO (2026-08-21, ÚLTIMO) — v0.36.0 EN LA CALLE: se cerró la FUGA CROSS-TENANT
+  del super_admin impersonando (la bandeja de un ISP mostraba datos de OTROS).**
+  **DÓNDE RETOMAR:** testing manual de Rubén sobre v0.36.0 (guía abajo). Después: el
+  dashboard sigue en desarrollo y sale cuando él diga (bump ≥0.37.0) · Excel de cruce a
+  Franklin · talonario de Derling (8) y LT 110 de Lester · WhatsApp (falta la tarjeta en
+  Meta) · los 3 "Ignorar" de huecos históricos de Mairena (SA 2-4, SA 17-43, HL 3).
+  · **PUBLICADO:** canal `sitecsa-updates` con SOLO v0.36.0 (v0.35.2 borrado, release y
+    tag); tag de código `v0.36.0` = `e5a141c` (rama efímera de release en `C:\sc-release`).
+    Maniobra: release creado como DRAFT con los 8 assets → verificado que subieran los 8
+    completos → `--draft=false --latest` (flip atómico, para que ningún device pida el
+    manifest a medio subir). Manifests verificados por URL (0.36.0 en mairena y telenet) y
+    descargas en HTTP 200. APK firmado con la llave real (SHA-256 idéntico al de v0.35.2 →
+    actualiza sobre lo instalado). Dashboard y reportes byte-idénticos al tag v0.35.2
+    (`git diff` vacío), EXCEPTO los 3 fixes de seguridad de `reportes_admin_screen`, que se
+    re-aplicaron a mano sobre la versión revertida. Suite de la rama: 612/612.
+  · **GUÍA DE PRUEBA (build esperado 0.36.0, identidad Dev/super_admin):** (1) Dev →
+    Test Tenant → Cobros a revisar: la sección Talonario NO debe aparecer (TT no tiene
+    huecos); (2) Dev → Mairena: SÍ debe verse, 5 huecos (SA/HL); Telenet: 3 (COL) — si
+    alguna queda vacía, se fue de más; (3) sin impersonar, panel Dev → ícono de
+    diagnóstico → Talonarios: los 8 huecos CON el nombre de la empresa + 14 series;
+    (4) consola → Radiografía `SS0036` y Configuración → Operaciones (impersonando).
+  · **EL BUG (reportado por Rubén con captura).** Impersonando Test Tenant, «Cobros a
+    revisar» listaba 4 huecos de talonario: 2 de Telecable Mairena y 2 de Telenet, sin
+    decir de qué empresa, y su botón Ignorar fallaba siempre (la ESCRITURA sí estaba
+    anclada desde 0242 — se cerró la escritura y quedó abierta la lectura, en el mismo
+    archivo). Ojo con el dato que confunde: **«System Admin» es el nombre de un COBRADOR**
+    (hay uno en Mairena y otro en Telenet), no el tenant System.
+  · **CAUSA RAÍZ, un patrón en 3 funciones:** el gate se escribió
+    `is_super_admin() OR (tenant = current_tenant_id() AND is_admin_or_cobranza())` y el OR
+    cortocircuita → para el super_admin el filtro de tenant NUNCA se evalúa. Relajaba el
+    TENANT cuando debía relajar el ROL. **Regla nueva escrita en AGENTS §1.**
+  · **NO HUBO FUGA ENTRE ISPs** (lo más importante): para todo rol que no sea super_admin
+    el filtro ya era estricto. Verificado simulando 4 identidades reales: admin Telenet ve 3
+    huecos (solo Telenet), admin_cobranza Mairena 5 (solo Mairena), cobrador 0, admin TT 0.
+    Hay UNA sola cuenta super_admin. El barrido cubrió RPCs, SQLite local, sync rules,
+    RLS/Storage y UI (16 agentes, 10 hallazgos, ninguno ISP→ISP).
+  · **0246 (aplicada y verificada en prod, sin build):** `recibos_huecos()` anclada +
+    `recibos_huecos_todos()` para la consola + `super_admin_diag_talonarios()` apuntada a la
+    global (los 3 JUNTOS: anclar la primera sola dejaba /super/diagnostico diciendo «sin
+    huecos» con 27 recibos faltantes en Mairena — falso todo-en-orden sobre plata) ·
+    `sync_rechazo_autorizado()` anclada conservando la rama del rechazo huérfano ·
+    `log_cobertura()` anclada · policy `sync_rechazos_super_all` anclada (el botón Descartar
+    ya no puede apagar el aviso de un cobro perdido de otro ISP; forense: nunca pasó) ·
+    `sync_rechazo_descartar()` nueva. **El INSERT permisivo de `sync_rechazos` NO se tocó**
+    a propósito (endurecerlo perdería avisos — razón en la migración).
+    Números antes→después: super impersonando 8 huecos ajenos→0 · admin Telenet 3→3 ·
+    Mairena 5→5 · consola 8 huecos/14 series SIN cambios · log_cobertura 31.391→88 ·
+    rechazos visibles para el super 11→4. Invariantes 18/20 en cero (INV11/INV19 son
+    preexistentes de la limpieza del cuaderno).
+  · **App (viaja en v0.36.0):** Descartar por RPC anclada · filtro de empresa en las listas
+    de personal (Personal, Rutas, los 3 selectores de cobrador, ranking del dashboard) ·
+    unicidad de prefijo por empresa · `SettingsRepo.read()` exige tenantId (53 claves
+    colisionan entre empresas) · dbEpoch en 4 providers globales · guard de empresa al
+    guardar cliente y al reasignar en masa. **El sync gate NO se tocó** (endurecerlo puede
+    trabar el arranque de todos); queda documentado que al saltar entre empresas grandes se
+    ve la anterior unos minutos, con las acciones de plata ya bloqueadas.
+  · **Trampa que costó una vuelta:** con `ref.read` en `initState` el filtro de empresa
+    quedaba congelado en null y la lista salía VACÍA para siempre → patrón `_rehacerStream()`.
+  · **AUDIT DE FASE 4 (3 agentes; el primero murió por límite de sesión y se relanzó) —
+    9 hallazgos, TODOS aplicados.** Del código (7): **quedaba un 4º selector de cobrador sin
+    filtrar y es el que ESCRIBE** (ficha del cliente → Asignar cobrador; sin guard de
+    impersonación, dejaba al cliente con un cobrador de otro ISP = fuera de su lista y su
+    mapa) · mi guard del form había **reabierto la ventana de doble-submit** que el fix #7
+    cerró (un `await` por encima del `setState` que deshabilita el botón) · la reasignación
+    masiva **mentía**: decía "50 actualizados" aunque los salteara a todos (ahora cuenta los
+    aplicados y explica los omitidos) · el **Excel de Eficiencia no filtraba y su PDF sí**
+    (dos vistas del mismo reporte, dos listas — consistencia #10) · filtro de cobrador de la
+    lista de cobros · selector de técnico de tickets (ticket asignado a alguien de otro ISP
+    que nunca lo ve, con el SLA corriendo). Descartado: "el fix de reportes está sin
+    commitear" (el agente leyó el árbol un minuto antes del commit).
+  · **0247 — los gates dejan de FALLAR ABIERTO (los 2 hallazgos del SQL, ambos reales).**
+    SQL tiene lógica de TRES valores: `if not <expr>` NO entra si `<expr>` es NULL y el
+    guard se saltea EN SILENCIO. (a) regresión que introduje en 0246: `sync_rechazo_descartar`
+    contra una fila HUÉRFANA llamada por un admin daba NULL y caía al UPDATE → un admin de
+    cualquier ISP podía apagar el aviso de un cobro huérfano; (b) preexistente de 0237:
+    `sync_rechazo_autorizado` devolvía NULL para todo JWT sin fila en `cobradores` (incluido
+    anon) y `sync_rechazo_registrar` la consume con `if not` → **insertaba pagos, recibos y
+    op_log** con el guard salteado. Sin exposición viva (0 huérfanos, 0 rechazos sin resolver,
+    anon no puede enumerar ids), pero cerrado igual + revoke de anon/service_role en las 6
+    funciones del circuito. **Regla nueva en AGENTS §12b** (gate total con `coalesce(...,
+    false)`; probar SIEMPRE con una identidad sin fila en `cobradores`, porque con usuarios
+    normales el bug es invisible).
+  · **Veredicto de regresión: NO se rompió nada para los ISP reales**, verificado con la
+    comparativa antes/después por identidad sobre data de producción: Telenet 3→3 huecos,
+    Mairena 5→5, Test Tenant 0→0, rechazos autorizados 1→1 / 6→6 / 4→4, log_cobertura
+    idéntico. El único que ve números distintos es el super_admin — que es el bug arreglado.
+    Suite 643/643 (dos corridas). Ojo: `dashboard_resumen_widget_test` es **inestable dentro
+    de la suite completa** (aislado pasa siempre, también en commits anteriores); es del
+    dashboard en desarrollo y no entra en este build.
+
+- **(2026-08-20 trasnoche) — SELF-SERVICE DEL DEV: consola de
+  diagnóstico (/super/diagnostico) + 3 operaciones de dinero en el panel Operaciones.**
+  **DÓNDE RETOMAR:** el SERVER ya está vivo (0243/0244/0245 en prod, E2E ×2 en TT,
+  invariantes en 0); la UI viaja en el **build v0.36.0 junto con el dashboard** (cuando
+  Rubén lo libere) — hasta entonces no hay nada visible en la app. Decisión parqueada:
+  INV11 vs anulaciones Dev en fijos activos (por ahora el preview avisa; ver commit).
+  · **QUÉ ES (pedido de Rubén: self-service para los casos puntuales del cliente).**
+    Diagnóstico (solo lectura, cross-tenant, online): radiografía de cliente con
+    veredicto (cuarentenas/rechazos/vencidas sin pago/anuladas 30d), invariantes por
+    tenant, talonarios (series+huecos+ignorados), fantasmas de sync. Operaciones (en el
+    panel de siempre, impersonando): **Registrar pago histórico** (caso Jimmy: fecha real
+    + atribución + comprobante obligatorio + recibo CRM), **Revivir/anular cuota** (caso
+    SS0036, motivo obligatorio, REACTIVADA en verde) y **Baja de deuda del que se va**
+    (flujo cuaderno: snapshot→cancelar→anular→desactivar; bloquea parciales y
+    cuarentenas). Preview y ejecutar corren la MISMA validación (una _impl por op);
+    triple registro server-side: op_log «System Admin» + data_ops_log + backup.
+  · **PROCESO:** Fase 4 con 2 agentes → 8 hallazgos, todos aplicados (0245). El estrella:
+    el trigger 0215 PISA el correlativo del recibo con el contador → el número reportado
+    podía no ser el real (drift CT/RA verificado en prod); fix con RETURNING + estimador
+    por contador, probado contra el drift. También: grants reales de Supabase (default
+    privileges daban EXECUTE a anon incluso en las _impl), op_log de cuotas futuras en la
+    baja (trigger 0234), parseMonto M8 en el monto. Suite 642 ✓ (solo falla el test del
+    dashboard WIP, preexistente). Commits d91ff02 + 0b87085, pusheados a main.
+
+- **(2026-08-20 noche) — v0.35.2 EN LA CALLE: el paquete «bandeja
+  humana» (campana animada + lenguaje llano + semáforo). El dashboard sigue en prueba.**
+  **DÓNDE RETOMAR:** testing manual de Rubén (build esperado 0.35.2; campana y bandeja se
+  prueban como ADMIN real — el Test Tenant tiene 2 cuarentenas + 2 rechazos demo que la
+  hacen sonar). Después: Excel de cruce a Franklin · talonario de Derling (8) y LT 110
+  de Lester · liberar dashboard cuando Rubén diga (bump ≥0.36.0).
+  · **QUÉ SALIÓ (pedido de Rubén: interacción entendible, sin bloquear cobradores).**
+    Campana en el AppBar del admin: visible en TODAS las pantallas, se sacude cada 8 s
+    SOLO con plata pendiente (anti-fatiga: 6 sacudidas por conteo, silencio parado en la
+    bandeja, revive con conteo nuevo), refresh propio de 60 s, tap → Cobros a revisar
+    (go, regla #12). Badge de cards de plata con latido. Bandeja: ROJO solo pagos/recibos
+    con lenguaje llano («El cobro no pudo entrar: …»); avisos internos (cuotas/fontanería)
+    en GRIS («se corrige solo al sincronizar; verificá antes de descartar») con jerga como
+    detalle técnico; sección «Resueltos automáticamente» (gemelos auto-anulados, 30 días);
+    auto-refresh 60 s (mata los fantasmas del 20/08); scroll unificado (el día malo dejaba
+    las cuotas inalcanzables en teléfono). Talonario: botón **Ignorar** con registro
+    (0242: tabla + RPC con guard de salto REAL del tenant anclado — cierra cross-tenant
+    impersonando y supresión arbitraria). Historial: labels de limpieza_deuda /
+    duplicado_auto_anulado / anulacion_cuota (anulada vs reactivada). Pagos: chip
+    EN REVISIÓN. anularPago: espejo no resta pagos en cuarentena (F6).
+  · **PROCESO:** Fase 4 con 2 agentes (código + UX/regresión) → 13 hallazgos, TODOS
+    aplicados (el estrella, de ambos: la campana congelaba su conteo — avisaba resueltos
+    y callaba nuevos). Suite 612/612 ×2. Release desde rama efímera con dashboard
+    byte-idéntico a v0.35.1 (verificado contra el tag; el rezagado dashboard_providers
+    en data/ lo cazó la suite). Canal: solo v0.35.2 (v0.35.1 borrado, tags movidos).
+  · Migraciones nuevas EN PROD: 0241 (policy colchón) y 0242 (huecos ignorados + guard).
+
+- **(2026-08-19) — LIMPIEZA MASIVA de deuda de Mairena (cuaderno INV19
+  ejecutado) + WhatsApp automático a UNA tarjeta de distancia + guía de clonado.**
+  **DÓNDE RETOMAR:** (1) mandar a Mairena `Reporte-limpieza-Mairena-2026-08-19.xlsx` (hoja
+  Repaso: 13 casos que deben confirmar) y a Telenet su cuaderno nuevo (65 contratos, solo
+  deuda VENCIDA). (2) WhatsApp: falta SOLO la tarjeta en Meta (error 131042) — al cargarla,
+  limpiar `whatsapp_envios` del TT y re-disparar el lote.
+  · **CUADERNO MAIRENA (lo grande).** Mairena devolvió el Excel de deuda-por-estado con 123
+    decisiones + 2 columnas propias (CORTADO = fecha real del corte; observación mes a mes) —
+    ORO: permitió anular con bisturí. Ejecutado en 1 transacción: **383 cuotas anuladas
+    (C$322.888)** por reglas A (al día = fantasma total), B (solo posteriores al corte real),
+    C (cancelar contrato viejo); **+65 cuotas de deuda real dada de baja documentada
+    (C$41.127)** — el guard de 0220 (desactivado ⇒ sin deuda viva) obligó a elegir: se anuló
+    CON registro triple (snapshot en contrato + data_op_backups `limpieza_cuaderno_2026_08` +
+    reporte). **54 clientes desactivados**, contratos → cancelado con
+    `cancelacion_deuda_snapshot`, op_log `limpieza_deuda` por contrato. Guard 0220 y CHECK
+    0021 pararon 2 intentos imperfectos (rollback atómico ambos) — el sistema se defendió.
+  · **INVARIANTES: INV19 bajó de 40 → 7** (6 son de Telenet pendiente + SM2095 en repaso).
+    INV20 quedó en 0 (recalc canónico; 3 divergencias eran previas, no del run). **INV11=3
+    ACEPTADA**: los fijos reactivados (CT0035/FR0029/PG0169) tienen meses anulados → el
+    conteo exacto no cierra por diseño; su total = Σ vivas (regla #5). Backlog: refinar INV11.
+  · **Lote R (13 casos, NO tocados):** 3 "generar contrato nuevo", 2 titularidad de otra
+    persona, 2 "buscar registro en red", supervisiones y ambiguos — en la hoja Repaso.
+  · **WHATSAPP (día 18-19):** primera prueba REAL contra WhatChimp encontró que su doc mentía:
+    `/send` es solo texto de sesión; plantillas van a **`/send/template` con template_id
+    interno** (fix + resolución por nombre vía `/template/list`, commit 22100dc). El lote
+    además acepta **CRON_SECRET** (la igualdad con SUPABASE_SERVICE_ROLE_KEY dejó de matchear
+    tras la migración de claves de Supabase). **Cron horario INSTALADO y probado** (0239,
+    pg_net + Vault). Resultado: 2/2 aceptados por Meta, entrega bloqueada por **131042 (falta
+    método de pago)** — Rubén ya configuró moneda, falta la tarjeta. Investigación con
+    fuentes: WhatChimp NO cubre las tarifas de Meta (su propia doc), Basic/Pro = 1 número
+    (2 tenants = 2 licencias), promo "Nicaragua 50%" = countdown perpetuo, vendor joven con
+    quejas de cancelación. **Recomendado: Meta directo** (~US$22,6/mes total, 1 pago; el
+    selector ya existe en la app). Plantillas `aviso_gracia`/`aviso_mora` APROBADAS por Meta.
+  · **Guía de clonado:** `docs/traspaso/GUIA-SUPABASE-POWERSYNC.md` (34774e0) — Supabase
+    desde cero + réplica (rol BYPASSRLS, publicación 49 tablas, JWKS) + VPS + gotchas.
+  · **BULLETPROOFING DE RECIBOS Y DUPLICADOS (0240, mismo día — audit adversarial de 2
+    agentes + verificación empírica).** Producción venía LIMPIA (0 recibos duplicados
+    vivos, 0 gemelos sin marcar, 0 huérfanos, 11/11 contadores alineados), pero el audit
+    encontró y 0240 cerró: (1) **ALTA:** recuperar recibos desde la bandeja en orden
+    nuevo→viejo brickeaba la serie (contador debajo de números tomados → 23505 eterno,
+    todo cobro futuro sin recibo) — era EXACTAMENTE el flujo de los 8 recibos de Derling;
+    fix `greatest`. (2) **ALTA:** el guard de sobrepago era solo INSERT: resolver la
+    cuarentena o editar un pago podía re-crear el sobrepago invisible; ahora guard en
+    UPDATE → vuelve a cuarentena con motivo. (3) El recibo del gemelo auto-anulado
+    quedaba VIVO y reimprimible → nace anulado (+ retro: 0 filas). (4) El gemelo
+    auto-anulado era silencio total → op_log `duplicado_auto_anulado` en la cuota.
+    E2E 8/8 en TT (brick simulado con serie DEMO, resolución equivocada re-marcada,
+    legítima limpia, gemelo con rastro); residuo limpio; invariantes estables
+    (INV11=3 aceptada, INV19=7 conocidos, INV17 transitorio del colchón). Detalle en
+    ARQUITECTURA (sección bandeja). Los 2 rechazos reales de Mairena capturados hoy
+    (device de Snay insertando cuota de colchón/cambio-fecha, RLS 42501) quedan como
+    caso a explicar — el server repone el colchón vía cron; revisar el gate de UI.
+  **PENDIENTE:** verbos `limpieza_deuda`, `duplicado_auto_anulado` y `anulacion_cuota` sin label en
+  `historial_op_log.dart` (se ven como "Actualizado" con su motivo; el backfill de 448 filas op_log por cuota anulada —caso SS0036— ya los hace visibles en el relojito de cada cuota) · tanda 3 del audit para próximo build
+  (espejo local de anular-en-cuarentena, rastro de renumeración, marca de cuarentena
+  en lista Pagos) · backlog: heurística duplicado sub-total, banner de cola <30min,
+  push para cuarentenas ·
+  tarjeta Meta → re-test WhatsApp → decidir Meta directo vs WhatChimp antes del 21/08 ·
+  cuaderno Telenet a Telenet · repaso Mairena (13).
+
+- **(2026-08-18) — v0.35.1 EN LA CALLE para los DOS tenants: bandeja de
+  rechazos + fixes de logs. El dashboard nuevo NO salió (sigue en modo prueba).**
+  **DÓNDE RETOMAR:** los pendientes del incidente (entrada de abajo) ya se prueban con la app
+  publicada. Para liberar el dashboard: release nuevo desde `main`, bump a **≥0.36.0**.
+  · **QUÉ SALIÓ.** Todo 0236/0237/0238 (bandeja "Cobros a revisar" con Registrar, rechazos al
+    servidor, talonario, banner de cola atascada), los 5 fixes del audit de logs con sus verbos
+    nuevos, selector WhatsApp por tenant (dormido), cancelar contratos suspendidos y el fix de
+    quitarCargo. SIN el dashboard: rama efímera `release/logs-cuotas` desde main con los archivos
+    del dashboard devueltos al estado publicado (la fecha del canal probó que v0.32.0 se compiló
+    EXACTO de `origin/main` → ningún tenant pierde nada). Suite 612/612 en `C:/sc-release`
+    (los builds y tests NUNCA en OneDrive — lockea archivos y cuelga `flutter test`).
+  · **EL RELEASE QUE NO LLEGÓ (v0.35.0) Y SU CAUSA RAÍZ.** El script compiló los 4 instaladores
+    y murió ANTES de publicar: el check `gh release view` ("¿ya existe el tag?") quedaba FUERA
+    del guard anti-PS5.1 que el propio script ya tenía — su "release not found" ESPERADO se
+    volvía fatal con `ErrorActionPreference=Stop`. v0.35.0 se publicó a mano (draft → publish,
+    atómico, sin ventana de manifests apuntando a assets inexistentes) y v0.35.1 salió con el
+    guard puesto y el script corriendo de punta a punta. Canal: SOLO v0.35.1 (política).
+  · **POR QUÉ "NO LLEGABA EL UPDATE".** En la PC de Rubén conviven 3 apps: `CRM PRUEBA` (build
+    genérico de testing — NO conectado al canal POR DISEÑO: pide `version.json`, que no se
+    publica), Mairena (0.32.0) y Telenet (0.27.0). Solo las brandeadas se actualizan, y el
+    chequeo es one-shot AL ARRANCAR (banner en login; en Android cerrar la app del todo).
+  · **LAYOUT GIT FINAL:** `main` (local = GitHub) tiene TODO, dashboard incluido sin liberar;
+    el tag **`v0.35.1`** marca el código exacto publicado; ramas efímeras borradas. `pubspec`
+    de main queda en `0.34.2+256` A PROPÓSITO: el bump se hace al momento del release
+    (Install Steps §1) — nunca buildear/publicar desde main sin bumpear ANTES.
+  **PENDIENTE:** `GUIA-APP.md` aún no cuenta la bandeja de rechazos (editar `flows_*.py` y
+  regenerar mockups cuando toque).
+
+- **(2026-08-20) — Se cerró EL RECHAZO SILENCIOSO MÁS VIEJO de la app (0241) + caso Jimmy.**
+  · **El "cartel rojo" de Telenet/Mairena** (cambio en Cuotas rechazado): NO era bug nuevo —
+    era el colchón de indefinidos que el DEVICE genera al cobrar adelantado (diseño de v0.2x,
+    `colchon_indefinido.dart`) chocando contra un RLS que NUNCA tuvo policy para permitirlo.
+    Rechazo 42501 silencioso desde el día uno; los INV17 "preexistentes" eran esto. v0.35.1
+    solo lo hizo VISIBLE (7 capturas/2 días: Snay, Lester, Derling — todos la cuota de dic).
+  · **0241:** policy `cuotas_colchon_insert_cobrador` QUIRÚRGICA (tenant + contrato activo
+    coherente + pendiente + sin pago + período >= mes actual + sin cargo manual; SIN exigir
+    asignación — carrera de reasignación con la cola offline, caso real LB0139 sin asignar).
+    Reposición server-side de los colchones rotos → **INV17 = 0 por primera vez**. Bandeja
+    limpia (rechazos de cuotas resueltos; los 4 demo del TT intactos). E2E con identidad
+    REAL de Snay vía `set role authenticated` + claims: su subida exacta ENTRA; una cuota
+    con período pasado REBOTA 42501. Backlog: fórmula del cron 0178 (un mes corta en
+    pago-adelantado) como segunda red.
+  · **Caso Jimmy (LB0226):** pagó "junio" (servicio; período JULIO — ojo regla mes-servicio)
+    el 26/07 con recibo N. 5367 del sistema ANTERIOR; nunca entró al CRM. Registrado
+    retroactivo: pago C$1.282 fecha real 26/07 atribuido a Oficina Telenet, recibo CRM
+    COL-00166, op_log `cobro_recuperado` citando el papel viejo. **Puede no ser el único:**
+    generado Excel `Telenet-cruce-talonario-viejo` (359 cuotas ≤ julio de 231 clientes
+    activos, C$344.517) para que Franklin cruce contra su talonario viejo — los "SI pagó"
+    se registran en lote.
+  **PENDIENTE:** Excel de cruce a Franklin · su devolución → registro en lote.
+
+- **(2026-08-17) — INCIDENTE: 10 cobros de Telenet perdidos y nunca detectados.
+  2 recuperados. Migración 0236 + `sync_rechazos` YA EN PRODUCCIÓN.**
+  **DÓNDE RETOMAR:** faltan **8 recibos** (`COL-00020..24, 26, 27, 29`) — hay que pedirle el
+  talonario a Derling. Y falta la **prueba decisiva**: que abra su app y vea si a Rosa Emilia le
+  figura julio pagado.
+  · **QUÉ PASÓ.** El 28-29/07 Derling Merlo cobró, imprimió los recibos `COL-00020..29` y se los
+    dio a los clientes. Las filas nunca llegaron al servidor. Se supo el 17/08 porque una clienta
+    reclamó por WhatsApp que le seguían cobrando julio. **19 días ciegos.** No hay pérdida de
+    plata para el ISP (el efectivo lo recibió el cobrador) — es un problema de REGISTRO, pero los
+    clientes figuraban morosos habiendo pagado.
+  · **CÓMO SE DETECTÓ EL ALCANCE.** El correlativo del talonario saltaba. Primer conteo: 80
+    faltantes en Mairena — **falso**: 21.538 de sus 25.095 recibos son IMPORTADOS del sistema
+    viejo (`created_at` a medianoche UTC, sin hora) y sus huecos son del talonario anterior. Se
+    delatan porque el recibo "siguiente" tiene fecha ANTERIOR al previo. Filtrando eso: **6 huecos
+    reales**, y de esos solo 2 con perfil de cobro en calle (Telenet `COL` 20-29 y Mairena `LT`
+    110). El resto son tandas de testing (clientes `PRUEBA` y `Juan Diaz Perez`).
+  · **POR QUÉ SE PERDIERON (lo probado y lo que falta).** DESCARTADO: borrado de la app (el
+    contador siguió en 30, no reinició en 20), rol `lectura` (siempre fue `cobrador`) y cambio de
+    permisos (el único cambio del 29 fue renombrarlo). QUEDA EN PIE: el server los rechazó y
+    `connector.dart` los descartó — el único camino por el que un write encolado desaparece.
+    **PowerSync NO falló**: hizo lo que le pedimos. La decisión de descartar es NUESTRA y está
+    bien fundada (si no, la cola se traba y ese cobrador no sincroniza nunca más). Lo que estaba
+    mal es que el aviso se quedara en el device. **El motivo exacto del rechazo solo existe en el
+    teléfono de Derling** (`RechazosSyncService`, tope 50 avisos, los nuevos pisan a los viejos).
+  · **RECUPERADOS 2 de 10** (C$2.930): Rosa Emilia `VQ0018` C$916 (`COL-00028`) y Gerald Mairena
+    `AL0043` C$2.014 (`COL-00025`), con su número ORIGINAL para que coincida con el papel.
+    OJO al hacerlo: el trigger `recibos_asignar_correlativo` (0215) **pisa** el correlativo del
+    INSERT — hubo que corregirlo por UPDATE después y devolver el contador. Invariantes de dinero
+    corridos: **0 violaciones** en todo lo que toca el cambio.
+  · **LO CONSTRUIDO (0236).** `sync_rechazos`: los rechazos suben al SERVIDOR con el payload
+    completo. Su INSERT es **permisivo a propósito** (`authenticated`, `with check (true)`) — con
+    las condiciones de `pagos`, el aviso podría ser rechazado por el mismo motivo que el cobro.
+    `_subirRechazo` NO pasa por la cola de PowerSync (es lo que acaba de descartar el write).
+    Y `recibos_huecos()`: detecta huecos reales excluyendo importados y testing.
+  · **HALLAZGO DE CONTEXTO.** Desde **0215 (01/08)** el correlativo lo asigna el SERVER, tres días
+    después del incidente. Valida el diagnóstico (el 29/07 numeraba el device) y ya cerró la
+    familia de bugs de colisión. Su propia doc registra que **esto ya había pasado**: los
+    `OF-12292..12311` se backfillearon a mano.
+  · **PREEXISTENTES que aparecieron al correr invariantes** (NO son de este cambio, todos Mairena):
+    INV17 = 4 contratos indefinidos sin colchón de cuotas futuras · INV19 = 40 clientes
+    desactivados con deuda.
+  · **CERRADO EL CIRCUITO (0237, mismo día):** la bandeja es accionable — "Cobros a revisar"
+    gana las secciones ONLINE "Rechazados al sincronizar" (botón **Registrar**: RPC definer
+    re-inserta el pago, el guard 0218 decide cuenta/cuarentena/duplicado, el recibo conserva
+    el número IMPRESO) y "Talonario" (`recibos_huecos()`, ahora gateada por tenant). Badge =
+    cuarentena local + rechazos online. `ColaAtascadaBanner` en shells admin+cobrador: cambios
+    sin subir >30 min CON conexión (la falla que el server no puede ver). E2E en TT: pago 615
+    entra y cuenta, cuota pagada por trigger, recibo TESTREG-00007 preservado, contador
+    devuelto, doble-toque rechazado; residuo limpiado, invariantes 0 (INV17=5 e INV19=40
+    preexistentes; el 5º de INV17 es NA0023 Telenet, operación viva de hoy). El cron nocturno
+    se REEMPLAZÓ a propósito por badge-al-abrir: un cron sin canal de aviso no avisa a nadie.
+  · **AUDIT DE LOGS (2026-08-18, pedido de Rubén):** el núcleo de op_log FUNCIONA (39.485
+    filas); los huecos eran 5 y puntuales. F1: registrar desde la bandeja no emitía op_log — el
+    historial de la cuota quedaba MUDO (disparador probable del reclamo); ahora emite
+    'cobro_recuperado' (E2E: «Cobró C$615 (recuperado) · Ruby Admin · pendiente→pagada»).
+    F2: resolver cuarentena emitía solo entidad 'pagos' que NINGUNA pantalla consulta → fila
+    'revision_resuelta' en la cuota. F3: reimpresión de recibo (solo si ya había impresión).
+    F4: foto de comprobante que se pierde. F5: log_cobertura(días) (0238) — actividad vs rastro
+    por concepto, para detectar el próximo silencio con datos. CLEAN: tickets/inv/red emiten
+    pero tienen ~0 uso; visitas/etiquetas/fotos/cargos loguean bajo el padre por diseño.
+    Build v0.34.2 (256) instalada.
+  **PENDIENTE:** los 8 recibos de Derling · la prueba de 2 min en su teléfono (¿julio figura
+  pagado?) · si aparece el código exacto del rechazo, decidir si su clase merece trato especial.
+
+- **(2026-08-16) — WhatsApp: se elige el proveedor POR TENANT (Meta directo o
+  WhatChimp). Migración 0235 y las 2 edge functions YA EN PRODUCCIÓN; el envío sigue apagado.**
+  **DÓNDE RETOMAR:** build de prueba **v0.33.0 (`6f2adc6`)**. Falta que Rubén cargue la clave de
+  su cuenta WhatChimp y cree las 2 plantillas con `{{1}}..{{4}}`. Destino de prueba listo:
+  **TT-12 Iveth, tel `82218473`** (Test Tenant).
+  · **EL PEDIDO.** *"queremos que se mande de manera automática en vez de abrir la app de WhatsApp
+    y darle enviar"*. Se verificó a fondo (20 agentes, doc oficial) que **NO existe camino gratis
+    y automático**: `wa.me` solo abre y prellena —no tiene parámetro de auto-envío— y automatizar
+    el click cae en "auto-messaging" de los ToS (baneo del número, detección por ML). Las listas
+    de difusión mandan a 256 pero **solo llegan a quien te tiene agendado**, en silencio si no.
+    La Cloud API tampoco tiene free tier: las 1.000 conversaciones gratis murieron el 1-jul-2025.
+  · **LO QUE SE CONSTRUYÓ.** `cobranza.notif_api_proveedor` (0235, default `meta` = lo de antes).
+    `whatsapp-enviar` bifurca SOLO el pedido de salida; elegibilidad, frecuencia, tope y log son
+    compartidos. Tres diferencias reales de WhatChimp: token como parámetro `apiToken` (se manda
+    por POST, no por GET como su doc, para que no quede en logs), variables **POSICIONALES**
+    `{{1}}..{{4}}`, y éxito por `status == "1"` **en el body** (devuelve 200 aunque falle).
+  · **LA TRAMPA DE LAS POSICIONALES.** El envío manda SIEMPRE las 4; si la plantilla usa menos,
+    los datos salen corridos. `ORDEN_VARIABLES` (edge function) y `_orden` (editor) son el MISMO
+    contrato y el editor AVISA si falta alguna. Las plantillas NO son intercambiables.
+  · **NÚMEROS REALES de producción** (para dimensionar): a notificar hoy **Mairena 1.529 · Telenet
+    466**; utility a Nicaragua = **USD 0,0113** (CSV oficial, "Rest of Latin America") → ~USD 90/mes
+    entre los dos. Meta NO cobra renta ni por número. Los escalones son 250 → **2.000** → 10.000
+    (no 1.000, como decía la doc de terceros) y cuentan **clientes únicos**, no mensajes.
+  · **HALLAZGO NO PEDIDO:** **632 clientes de Mairena tienen el teléfono en `0`** (placeholder del
+    import de Excel) = 19% de los morosos, inalcanzables por cualquier canal. Otros ~24 tienen dos
+    celulares pegados en 16 dígitos, recuperables partiéndolos.
+  · **ARQUITECTURA §Avisos corregida:** decía que Meta usa variables posicionales; usa **con
+    nombre** (`parameter_name`). Estaba mal desde 0137.
+  **PENDIENTE PARA QUE ANDE:** el cron `whatsapp-lote-hourly` **NO está instalado** → hoy solo
+  funciona el botón "Probar". Subir el tope diario (200 no alcanza para 1.529). Y nada de esto se
+  probó nunca contra la API real de WhatChimp — se escribió contra su doc de feb-2026.
+
+- **(2026-08-14) — Cobertura del ciclo vuelve a 3 filas · mapa de impacto ·
+  26 skills instaladas. SIN PUBLICAR (nada fue a producción; 12 commits en `main` sin pushear).**
+  **DÓNDE RETOMAR:** build de prueba **v0.32.0 (8140055)** instalado como `CRM PRUEBA` —
+  Rubén todavía no lo probó. Reiniciar Claude Code para que carguen las skills nuevas.
+  · **LA TARJETA.** Terminó en las 3 filas de su Excel original: `Cobros / Recuperado /
+    Por recuperar` × `Usuarios | Cuotas | Monto | Cumplimiento`. Las tres columnas de conteo
+    SUMAN porque cada una usa una definición disjunta (un cliente debe o no debe; una cuota
+    está saldada o tiene saldo; un córdoba entró o falta): 5+8=13 · 7+8=15 · 5.800+5.400=11.200.
+    El gráfico pasó a eje **%** (0-100) para hablar la misma unidad que la columna Cumplimiento.
+  · **QUÉ SE APRENDIÓ (el porqué de 8 iteraciones).** La causa raíz del "siento que los números
+    no cuadran" era que **la columna % medía PLATA mientras el ojo cuenta CUOTAS**: "7 cuotas ·
+    42%" invita a calcular 7/15=47%, y fallaba por 5 puntos en toda la columna — lo suficiente
+    para parecer error de cuenta. Segunda causa: dos particiones apiladas con conteos distintos
+    (7/2/6 y 5/2/7/1) que reconciliaban sin decirlo. **Regla que queda: una tarjeta, una unidad.**
+  · **LA MORA SALIÓ de Cobertura**, por pedido explícito ("quitemos de momento la data de la mora
+    para luego re-evaluarla"). NO se borró: `cortesDelCiclo` y `serieMoraDiaria` siguen en
+    `dashboard_query.dart` **con sus tests pasando**; lo que se quitó es el cableado a la UI.
+    Re-enchufarla no exige rehacer matemática.
+  · **EL EXCEL NO SE TOCÓ** (decisión de Rubén): sigue con el detalle fino — fila por cuota,
+    columna Tipo (mensualidad/cobro puntual), servicios en su bloque con subtotal, y las 4
+    columnas de mora. Es donde vive el desglose que la tarjeta ya no muestra.
+  · **`tools/impacto.py` (lo más importante de la sesión).** Dado `cuotas.cargos_neto` recorre
+    las 8 capas donde una tabla vive y avisa de lo que rompe callado. Nace del reclamo: *"se
+    piden cambios que por jerarquía van encadenados con otras tablas, esas tablas se quedan
+    fuera y esos cambios dañan la interacción"*. **Obligatorio en Fase 2.** AGENTS gana además
+    la sección "Cómo se DELEGA" con las 8 capas y qué se puede delegar.
+  · **26 SKILLS** en `.claude/skills/` (gitignored): ui-ux-pro-max (7), superpowers (14, **solo
+    las skills, NO sus hooks**, para que no compitan con AGENTS.md), obsidian-skills (5).
+    gsd-core se instaló **global** en `~/.claude/` con **17 hooks, 7 de ellos PreToolUse** —
+    corren en TODOS los proyectos; rollback en `~/.claude/gsd-file-manifest.json`.
+    claude-mem quedó instalado con el worker APAGADO y **sin sync a la nube**.
+  **PENDIENTES:** seed nuevo (solo mensualidades, reemplaza al actual → hay que recalcular a
+  mano los esperados de 18 tests) · botones de selección rápida en los KPIs de caja · el guard
+  de `quitarCargo` (plata real: quitar un cargo ya cobrado deja la cuota sobrepagada sin
+  acreditar nada) · los 5 contratos con C$4.898 de `costo_instalacion` que nunca se facturaron ·
+  `tickets` no está en el bucket `por_cobrador` de las sync rules (el recibo sale distinto según
+  quién lo abra; invisible hoy porque hay 0 tickets).
+
+- **(2026-08-12) — El Resumen: matemática verificada, export a Excel, y la
+  reconciliación Excel ↔ gráfica. SIN PUBLICAR (falta bump + build).**
+  **EL RECLAMO:** *"este módulo de dashboard está confuso, esta data no está siendo real"*.
+  · **Math del ciclo.** El eje de la curva daba "2k · 2k · 1k · 578" (ticks no redondos);
+    `porrec_m` se calculaba por RESTA, así que una cuota sobrepagada le comía deuda a los demás
+    → ahora se CONSULTA con el saldo canónico clampeado, y el test lo verifica en vez de que
+    cierre por construcción. Los porcentajes imprimían 101% (dos redondeos independientes) → se
+    redondea uno y el otro se deriva. El filtro de suspendidos escondía C$99.972 de ciclos
+    cerrados en Mairena: eliminado.
+  · **Mora = últimos 6 ciclos** (antes el ciclo suelto + una barra aparte). Las tres filas de
+    cobertura pasan a **Pago Completado / Parcial / Pendiente**, particionando las cuotas en
+    grupos disjuntos que suman el total en las 4 columnas.
+  · **Export a Excel de las dos tarjetas** (pedido del dueño): el detalle exacto que hay detrás
+    del número, con el **código de contrato** por fila para distinguir a quien tiene varios; el
+    de mora sale segmentado por ciclo con subtotal. Las cuotas anuladas van en su propia hoja
+    ("Excluidas") con motivo — hoy no aparecen en ningún lado.
+  · **El Excel no cuadraba con la gráfica** (22.150/18.265 vs 21.950/18.065). **Ninguno estaba
+    mal: medían cosas distintas.** Cobertura mide lo FACTURADO del ciclo; mora mide lo que CAYÓ
+    EN ATRASO. Un abono hecho DENTRO de la gracia cuenta en la primera y no en la segunda — la
+    brecha de C$200 era un solo pago así (TT-06, abonó el 05-ago sobre una cuota con gracia
+    hasta el 09). Yo había reusado las columnas de cobertura en la tabla de mora. Ahora el
+    detalle de mora trae **En mora / Recuperado tarde / Sigue impago** con las mismas
+    expresiones SQL que su tarjeta (+ Facturado / Pagado a tiempo como contexto, que son los
+    que explican la diferencia). **Regla nueva en ARQUITECTURA §Dashboard.**
+  · **Dos bugs que el audit encontró y yo no vi.** (1) El corte de "hoy" se evaluaba en DOS
+    momentos: la tarjeta es un `watch` que PowerSync solo re-ejecuta al cambiar `cuotas`/`pagos`,
+    el Excel un `getAll` al hacer clic → cruzar la medianoche con el dashboard abierto los
+    desincronizaba (medido: Mairena +58 cuotas y **+C$42.680**, Telenet +26 y +C$25.840). Pasa a
+    ser un PARÁMETRO que la tarjeta calcula y le pasa al Excel, + re-arme a medianoche vía
+    `diaNicaraguaProvider`. El comentario que decía "resolver `now()` en SQL evita que quede
+    congelado" era **falso** y estuvo vivo meses. (2) En `meta_m` el término de pagos tardíos no
+    llevaba el guard de "hoy" que sí tiene `rec_m`: no cambia un centavo hoy, pero la identidad
+    `meta_m = rec_m + porrec_m` dependía de que ningún pago tuviera fecha futura.
+  · **Contratos cancelados "generando" cuotas** (reporte del dueño): los gates del cron estaban
+    bien; era una carrera cliente/servidor (huecos de 1 y 6 minutos). **0234** = trigger
+    `z_contratos_anular_cuotas_futuras` + reparación de 9 cuotas (C$7.364). **Corrida en PROD.**
+  · **Infraestructura de verificación.** El SQL salió del widget a `dashboard_query.dart` (los
+    tests corren la consulta de PRODUCCIÓN, no una copia); escenario de 15 clientes en 6 ciclos
+    con esperados calculados A MANO; el test del export abre el `.xlsx` generado y lee las
+    celdas. **639 tests.** Los de mora ahora fijan el día de corte → dejan de depender de cuándo
+    se corran. `Install Steps/test-local.ps1`: build de prueba que VERIFICA que el binario lleva
+    el cambio (busca los marcadores en `app.so` en UTF-8 y UTF-16) — nació de un "no hubo ningún
+    cambio visual" que era una app branded vieja abierta por error.
+  **AUDITS:** 15 agentes (6 casos borde + refutación) sobre la reconciliación → 4 findings;
+  7 agentes sobre la implementación → 1, y era mío: tomaba el día del valor CACHEADO del
+  provider, que puede ser de ayer hasta 60s pasada la medianoche, y hacía RETROCEDER el corte.
+  **Commits:** `4af8be7` (.xlsx + código de contrato) · `7401411` (el año salía dos veces en el
+  nombre del archivo) · `d5738dc` (reconciliación) · `4a56b5a` (el corte sale del reloj + doc).
+  **PENDIENTE:** botones de selección rápida en los KPIs de caja (con dos trampas conocidas:
+  `VentanaCaja` no tiene cota superior y `desgloseCajaProvider` clasifica siempre contra el ciclo
+  actual) · **el guard de `quitarCargo`** (`cuotas_repo.dart:387`): quitar un cargo de una cuota
+  ya cobrada puede dejarla sobrepagada sin acreditarle nada al cliente — es plata real, se
+  difirió a propósito por tocar escritura de dinero · bump + build · los 40 de INV19.
+  **Nota de proceso:** NO correr `dart format` en este repo (usa el estilo pre-Dart 3.7);
+  reformateó 5 archivos ajenos, incluido el seed GENERADO. Revertido y verificado.
+
+- **(2026-08-10) — Notas internas, se elimina la suspensión por lote, y la deuda
   a la vista al pedir/aprobar un corte. SIN PUBLICAR (falta bump + build).**
   Tres pedidos del dueño del tenant, atacados en orden.
   · **Nota del CLIENTE (0227, nueva)** — contexto de la PERSONA ("atiende la hija después de las 3",
@@ -373,6 +3200,376 @@ real es exactamente lo que costó las 3 rondas perdidas.
 ---
 
 ## 📜 Historial del bloque de estado (sesiones anteriores)
+
+### El rework del Resumen — el detalle de las 7 sesiones del 2026-09-01
+
+> Consolidadas arriba en un solo checkpoint. Se conservan enteras porque
+> cada una guarda el POR QUÉ de una decisión y el bug que la trajo.
+
+- **👉 NUEVO (2026-09-01 g, ÚLTIMO) — los dos ejes del tiempo, y los Excel
+  con contexto para un principiante.**
+  · **EL CASO QUE LO TRAJO:** el dueño abrió el ciclo de septiembre, pasó el
+    mouse por el **16 de agosto** y el globo dijo *"Sin cobros este día"*. Ese
+    día habían entrado **C$1.000**: dos cuotas que vencían el 10 y el 14 de
+    agosto (PB-16 y PB-06), cobradas dentro de la ventana de septiembre.
+  · **NO ERA UN ERROR DE CUENTA.** El Resumen mide el tiempo de **DOS maneras**
+    y ninguna pantalla lo decía: **Cobertura y Mora** cuentan por el
+    **VENCIMIENTO** de la cuota (qué se facturó en el ciclo); **Caja y Quién
+    cobró** por la **FECHA DE PAGO** (qué plata entró por la ventanilla). Por
+    eso el mismo dinero está en Cobertura de agosto y en Caja de septiembre, y
+    no aparece en Cobertura de septiembre. **Los tres números eran correctos.**
+  · **Medido, y no es un caso raro:** en Mairena, **15 de los 31 días** del
+    ciclo tienen cobros de otros ciclos — **1.337 cuotas, C$1.159.734**. Por eso
+    se DESCARTÓ marcar día por día en la gráfica: media curva marcada es ruido,
+    no referencia.
+  · **Lo que se hizo (opción A, elegida por el dueño):** el globo pasa a decir
+    *"Sin cobros de ESTE CICLO"* y suma un renglón *"de otros ciclos"* los días
+    que hubo. **La curva NO se toca** — esa plata no pertenece al ciclo, y el
+    renglón existe para que el globo deje de afirmar algo falso, no para
+    cambiar un total. Test que fija el límite: lo de otros ciclos y lo del
+    ciclo **parten** toda la plata de la ventana, así que no puede contarse dos
+    veces.
+  · **LOS EXCEL, con el criterio que pidió el dueño** (*"contexto suficiente
+    para entender todo en 1 solo vistazo… manteniendo los detalles de todas las
+    cuotas para que sea 100% trackeable"*): para entender una fila sin saber
+    nada del sistema hacen falta **de quién, qué cuota (de qué mes), cuándo,
+    cuánto** y un **identificador**.
+    · **Cobertura** → `Recibo`, `Fecha de cobro` (era "Último pago") y
+      `Ciclo del cobro` con nombre y rango: *"Septiembre 2026 (15 ago – 14
+      sep)"*.
+    · **Quién cobró** (el peor) → `Recibo`, `Vence`, `Ciclo de la cuota`.
+    · **Mora por zona** y **Proyección** → `Ciclo de la cuota`, `Estado`.
+  · **"Último pago" → "Fecha de cobro".** El dueño preguntó qué significaba. El
+    nombre venía de que una cuota PUEDE recibir varios abonos; medido: de
+    **32.609 cuotas cobradas** en los tres tenants, **ninguna** tiene más de
+    uno. Siempre fue la fecha de cobro.
+  · **🔴 LA COLUMNA "COBRADOR" SIGNIFICABA DOS COSAS.** En Mora por zona y
+    Proyección es el **ASIGNADO** (`cuotas.cobrador_id`, organizativo); en Quién
+    cobró es **QUIEN REGISTRÓ** el pago (`pagos.cobrador_id`). Es un invariante
+    del proyecto —reasignar un cliente no cambia quién cobró en el pasado— y el
+    Excel lo perdía bajo un mismo encabezado, invitando a sumarlas. Ahora son
+    **"Cobrador asignado"** y **"Cobró"**.
+  · **🔴 VALIDACIÓN NUEVA `LibroExcel.desparejas()` — y encontró un bug MÍO
+    en el acto:** las filas de cierre se arman a mano con un `''` por columna, y
+    al agregar `Recibo` y `Ciclo del cobro` el TOTAL de Cobertura quedó con
+    **13 celdas para 15 columnas** — el total corrido dos casillas, en silencio.
+    **No lo caza `analyze`** (las filas son `List<Object?>` y aceptan cualquier
+    largo) **ni ningún test de datos**: el archivo se genera igual y se abre
+    igual. Salta como `assert` en debug; en release no está, porque un subtotal
+    corrido no es motivo para dejar a nadie sin su Excel.
+  · **🔴 EL ESCENARIO NO TENÍA RECIBOS.** El test encontró la columna nueva
+    vacía: 245 pagos y **CERO** recibos, contra el **100%** de producción. Un
+    escenario que no se parece a producción no prueba lo que uno cree. Sembrados
+    en los **DOS** generadores —Dart y SQL, 242 cada uno— porque ya divergieron
+    tres veces.
+  · **784 tests en verde** (la suite COMPLETA del repo, no sólo dashboard).
+    Commits `ed2d2369`, `16a311a5`.
+
+- **👉 NUEVO (2026-09-01 f, ÚLTIMO) — las cifras de "Estado actual" vuelven a
+  formar UNA columna.**
+  · **REPORTE DEL DUEÑO con capturas:** *"no está bien alineada la información,
+    como que el formato visual no tiene boundaries y se va out of bounds…
+    ¿podemos revisar que el UI y UX sea muy bien responsive?"*. **Medido ANTES
+    de tocar nada:** a 1900px las cifras terminaban en **SIETE bordes derechos
+    distintos**.
+  · **LA CAUSA NO ES OBVIA, y conviene tenerla escrita.** Cada fila tenía en el
+    MISMO `Row` un **`Flexible`** (el hint) y un **`Expanded`** (la cifra). Los
+    dos son flex y **se reparten el espacio libre en partes iguales**; el
+    `Flexible` es *loose*, así que usa sólo lo que su texto necesita y **el
+    resto de su parte queda como hueco**, que el `Expanded` nunca ve. La cifra
+    termina donde termina su fracción — un lugar distinto por fila, según cuán
+    largo sea el hint. **La prueba estaba a la vista:** "Clientes activos" era la
+    única fila SIN hint y la única cuya cifra llegaba al borde.
+  · **LA FORMA CORRECTA: UN SOLO `Expanded`, y que sea el de la IZQUIERDA.**
+    Absorbe todo el sobrante; la cifra va sin flex, con su ancho natural, o sea
+    pegada al borde derecho. **1 solo borde** a 360, 800 y 1900px.
+  · **Los CUATRO armadores de fila se unificaron en uno** (`_Fila`). Que cada
+    uno tuviera su propio `Row` ERA la razón de que no formaran columna: cuatro
+    implementaciones de lo mismo se alinean de cuatro maneras.
+  · **Responsive de verdad:** en teléfono la fila **apila** (rótulo arriba,
+    cifra abajo a la derecha) en vez de espichar el hint a dos letras y escalar
+    la cifra hasta que no se lee.
+  · **🔴 Y un overflow que apareció con el arreglo:** el rótulo no tenía
+    `Flexible`, así que uno largo sin hint —"de eso, de contratos
+    suspendidos"— rompía el `Row` a 360px **por 128px**. Un rótulo no puede
+    romper el layout: si no entra, se trunca.
+  · **TEST NUEVO `alineacion_test.dart`:** mide los bordes derechos de todas
+    las cifras a **360 / 800 / 1900px** y exige que sean UNO. Esto **no lo caza
+    `flutter analyze` ni ningún test de datos**: no hay excepción, el widget se
+    dibuja, y sólo se nota mirando a un ancho concreto — el de la PC del dueño,
+    que no es el que usaba ningún otro test.
+  · **El globo NO tenía este problema** y se verificó: sus tres renglones tienen
+    la misma estructura, así que el hueco es idéntico en los tres y las columnas
+    coinciden igual.
+  · **104 tests de dashboard en verde.** Commits `ebb2b4dc`, `83139025`.
+    Build de prueba: **CRM TEST 0.38.4**.
+
+- **👉 NUEVO (2026-09-01 e, ÚLTIMO) — el globo parte el día en sus dos
+  mitades, y un overflow viejo que salió a la luz.**
+  · **EL PROBLEMA NO ERA EL TEXTO, ERA QUE NO SE VEÍA LA SUMA.** Con "Cuotas
+    cobradas 4" en grande y un renglón suelto de mora, había que DEDUCIR que
+    las otras 3 entraron en fecha. Rubén: *"no me termina de convencer… cómo se
+    complementan con las cuotas normales"*.
+  · **Ahora son TRES RENGLONES QUE SUMAN**, con la misma forma que la tabla de
+    arriba de la tarjeta: `a tiempo 3 · C$1.600` / `venían de mora 1 · C$500` /
+    `cobradas 4 · C$2.100`, en columnas alineadas. Elegido de **cuatro
+    propuestas** (mini tabla / número grande + barra / chips / lo de hoy más su
+    contraparte). El trade-off que se aceptó: se pierde el número grande de
+    "Cuotas cobradas", que había sido un pedido anterior del mismo dueño — ahora
+    el total es la fila de cierre.
+  · **LA MITAD "A TIEMPO" SALE DE RESTAR, sin consulta nueva.** La mora es un
+    subconjunto ESTRICTO del mismo universo (los mismos pagos del día, con una
+    condición más), así que `total − mora` es exactamente lo que entró en fecha.
+    Verificado contra producción: 4 = 3 + 1 y C$2.100 = 1.600 + 500.
+    Un día sin mora **no se parte**: una suma de un solo sumando es ruido.
+  · **🔴 OVERFLOW PREEXISTENTE, destapado por el test nuevo:** `_tooltipRow`
+    tenía los dos textos pelados con `mainAxisSize.min`, o sea que el `Row`
+    pedía su ancho INTRÍNSECO y rebalsaba la caja de 250px del globo (33px y
+    229px, medidos). Ya había pasado —el comentario del código cuenta que la caja
+    se agrandó de 200 a 250 por *"Después del ciclo 2 cuotas · C$1.000,00"*— y
+    **agrandar la caja sólo corre el límite**: el renglón siguiente que sea un
+    poco más largo vuelve a rebalsar. Ahora los dos van en `Flexible` con
+    ellipsis y el rótulo se encoge primero.
+  · **EL TEST QUE FALTABA:** hasta ahora sólo estaba probado que el globo **NO**
+    aparece sin hover — la mitad barata: un globo que directamente no se dibuja
+    pasaba los dos tests de "no aparece" y nadie lo cazaba. El nuevo TOCA todos
+    los días del ciclo hasta encontrar uno con mora y ahí verifica las tres filas
+    juntas. Los días 0 y último son los únicos que muestran "antes/después del
+    ciclo", que eran justo los que desbordaban.
+  · **Dos vueltas para encontrar el lienzo del gráfico en el test:** buscarlo
+    como "el `CustomPaint` más ancho" daba un fondo de **1200×2400** —hay 9 en la
+    pantalla— y los taps caían en el medio de la nada, con el test fallando por
+    la razón equivocada. Se identifica por su ALTO: 180px, el `chartHeight`.
+  · **101 tests de dashboard en verde.** Commits `454a02e2`, `62656b86`.
+    Build de prueba: **CRM TEST 0.38.3**.
+
+- **👉 NUEVO (2026-09-01 d, ÚLTIMO) — la mora se reparte ADENTRO de la
+  jerarquía, y el renglón del globo se muda a su lugar.**
+  · **LOS MOMENTOS SON LA JERARQUÍA PRINCIPAL** (pedido de Rubén): la mora deja
+    de ser una fila hermana y se desglosa dentro de *antes / en / después del
+    ciclo*. Lo mismo en "Por recuperar", dentro de sus dos líneas (*con abono
+    parcial* / *sin ningún pago*).
+  · **LA FILA CAMBIA DE LUGAR, NO DE NÚMERO.** El monto sigue siendo el
+    facturado de esas cuotas (`cm_f`), o sea lo mismo que mostraba la fila
+    única. Dos tests nuevos verifican que las partes SUMAN el total que
+    reemplazaron — en cuotas y en córdobas, en los dos lados.
+  · **Y SE VE ALGO QUE LA FILA ÚNICA TAPABA:** en el escenario, las 2 cuotas de
+    *"después del ciclo"* **NO** estuvieron en mora — pagaron pasado el 14 pero
+    dentro de la gracia de su propia cuota. Ahora ese momento no dibuja renglón
+    rojo, y **esa ausencia es el dato**. "Después del ciclo" y "en mora" no son
+    lo mismo y hasta hoy no había forma de notarlo.
+  · **🔴 DOS COSAS DEL CÓDIGO VIEJO, encontradas al mudarlo:**
+    la fila hermana se dibujaba con `recuperadoCuotas > 0` —"hay algo
+    recuperado"— y no con "hay mora", así que en un ciclo limpio mostraba
+    **"venían de mora 0"**; y el argumento que yo mismo había escrito para
+    ponerla ahí —*"anidarla pediría un CUARTO nivel"*— era **falso**: `fila3` ya
+    dibuja tres y la mora entra como hermana de "con abono parcial", no debajo.
+    **Un comentario que justifica una decisión de diseño también envejece.**
+  · **EL GLOBO:** el renglón de mora sube ARRIBA del divisor y pasa a decir
+    *"▲ de esas, N venía(n) de mora"*. Estaba abajo, junto al **Acumulado** —que
+    es del PERÍODO— y por eso se leía como un tercer total en vez de como parte
+    de las cuotas del día. Lo reportó Rubén: *"no está a como me habías
+    presentado en el mockup"*. No era el texto: era el LUGAR.
+  · **EL CRUCE QUE PIDIÓ, con test:** lo que el globo suma día a día tiene que
+    dar la fila de la tabla. Hoy no divergen —medido contra producción:
+    **13.507 cuotas con pago tardío** en los 3 tenants, historia completa, y
+    **CERO** sin saldar— pero podrían: la curva cuenta toda cuota con pago
+    tardío y la tabla sólo las que además quedaron SALDADAS. El test lo caza en
+    CI antes que Rubén en pantalla.
+  · **🔴 UN TEST MÍO QUE PASABA CON `0 = 0`:** el de "la mora por momento suma"
+    había quedado DESPUÉS del test que reescribe las `fecha_pago` del escenario
+    —los tests del archivo comparten UNA base (`setUpAll`) y ese no la
+    restaura—, así que para cuando corría no quedaba una sola cuota en mora.
+    Movido arriba y con `expect(cm_c, greaterThan(0))` adelante.
+  · **SE PERDIERON** las filas *"se cobraron a tiempo"* y *"todavía en plazo"*:
+    eran el complemento de la mora sobre su fila madre y ahora se leen restando
+    (26 − 7 = 19). Con la mora repartida, replicarlas eran cuatro renglones para
+    decir dos restas. Cómo volver: una fila `nivel2` más por momento con
+    `d.saldadas - d.mora`.
+  · **La mora del momento pide DOS clics** (abrir Recuperado, abrir el momento),
+    donde antes pedía uno. Es el precio de que los momentos manden.
+  · **100 tests de dashboard en verde.** Commits `afc948f4`, `0812bb94`.
+    Build de prueba: **CRM TEST 0.38.2**.
+
+- **👉 NUEVO (2026-09-01 c, ÚLTIMO) — separación clara entre tarjetas del
+  Resumen, y un NaN que apareció de paso.**
+  · **EL PROBLEMA ERA MEDIBLE, no una impresión:** la tarjeta es blanco puro
+    (`#FFFFFF`) sobre un fondo de página `#FAFAFC` —**0,4% de diferencia**— con
+    un filete de 0,5px en `#E5E5EA` que a escala normal casi no se ve, y 16px
+    iguales entre las siete. Se leían como una sola masa continua. Pedido de
+    Rubén: *"que se vea una separación clara entre cada gráfico"*.
+  · **Elegido de tres opciones con mockup: borde de 1px `#D1D1D6` + aire de 16
+    a 28.** Se descartó oscurecer el FONDO del Resumen a `#F2F2F7` (más
+    efectivo, pero dejaba esta pantalla de otro color que el resto de la app) y
+    se descartó tocar el `cardTheme` GLOBAL, que le cambiaría el borde a toda
+    `Card` de la app — clientes, contratos, tickets. El override vive en un
+    `Theme` que envuelve SOLO el Resumen; los diálogos y las hojas del (i) están
+    en el overlay (otro subtree) y conservan el borde del tema.
+  · **NO era lo que se había propuesto primero.** La primera propuesta fue
+    agrupar en tres bloques temáticos con encabezado-pregunta y renombrar tres
+    tarjetas; Rubén la bajó: *"no necesito que sea por bloques"*. Queda anotado
+    porque la idea vuelve sola cada vez que alguien mira el Resumen largo: **lo
+    que pedía era separación VISUAL, no jerarquía.**
+  · **🔴 EL TEST DESTAPÓ UN NaN EN COBERTURA.** El grupo nuevo monta el Resumen
+    con la base **VACÍA** —y resultó ser un caso que nadie probaba—: sin meta,
+    sin cobros y sin mora, `yMax` da 0, `yOf` divide por cero y `drawCircle`
+    recibe un `Offset` NaN. En debug es un assert que tumba el frame; en release
+    el assert no está y el dibujo queda indefinido. **Es el tenant recién creado
+    y el device ANTES del primer sync**, o sea la primera pantalla que ve
+    alguien nuevo. Guard: `if (!(yMax > 0)) return;` después de la grilla (que no
+    usa `yOf`) y después de la punteada de meta (guardada por `meta > 0`, que ya
+    implica `yMax > 0`). El comentario del test avisa que sembrar datos ahí
+    dejaría de probar el caso.
+  · **El test mira el `Material`, no la `Card`:** `Card.shape` es **null** —la
+    forma la resuelve el tema al construir—, así que la primera versión del test
+    habría dado null con el override puesto Y sin ponerlo. Y el hueco se mide
+    entre los RECTÁNGULOS pintados, no leyendo el `SizedBox`: si alguien mete un
+    widget en el medio, el `SizedBox` sigue diciendo 28 y lo que se ve es otra
+    cosa.
+  · **BUILD DE PRUEBA INSTALADO:** `CRM TEST` **0.38.1**, identidad
+    `com.sitecsa.crm.test` — paquete APARTE del Mairena 0.37.1, con su propia
+    sesión y su propia base local. Se lanza con
+    `shell:AppsFolder\com.sitecsa.crm.test_fxkeb4dgdm144!ispbilling`.
+    **Cada build de prueba sube el patch**: `Add-AppxPackage` rechaza un MSIX de
+    la misma versión que el instalado y el uninstall+reinstall a veces limpia el
+    token. Dos tropiezos anotados: el `msix` de esta máquina (3.16.13) pide
+    `--build-windows false`, **no** `--no-build-windows` (`build-release.ps1` lo
+    detecta en runtime; el script de prueba lo tenía hardcodeado mal), y al morir
+    ahí el script dejó `sc-release` en detached con el branding aplicado —
+    restaurado a `release/v0.37.1` con su identidad `com.sitecsa.crm`.
+  · **96 tests de dashboard en verde.** Commits `68b3b427`, `681cf133`.
+
+- **👉 NUEVO (2026-09-01 b, ÚLTIMO) — "Estado actual" vuelve al Resumen y se
+  COME a "Distribución de cuotas".**
+  · **ERAN LA MISMA PARTICIÓN CONTADA DOS VECES.** `Cuotas por cobrar` de una
+    es EXACTAMENTE `al día + en gracia + vencidas` de la otra, y "En mora" salía
+    repetido en las dos con el mismo número. Verificado contra producción ANTES
+    de fusionar (Mairena): `20.217 + 797 + 2.596 = 23.610` cuotas y
+    `18.910.031 + 692.255 + 2.018.102 = 21.620.388` C$, al peso.
+  · **Lo que se gana no es una tarjeta menos: es la PLATA de cada parte.**
+    "Distribución" contaba cuotas y nada más, y un conteo sin monto no dice si
+    2.596 vencidas son C$20.000 o C$2.000.000. Ahora cada parte trae cuotas,
+    córdobas y % — y ese % **se calcula solo**: vivía escrito A MANO en el texto
+    del (i) ("al 26/08/2026, 4 de cada 5 córdobas todavía no vencieron"), o sea
+    congelado el día que alguien lo escribió.
+  · **La consulta pasó a `dashboard_query.dart` y de SEIS subconsultas escalares
+    a UNA pasada.** No es performance: es que el test corra la consulta REAL y
+    que la partición se LEA en el SQL en vez de haber que creerla.
+  · **Bug de fecha que venía de antes:** el provider no miraba
+    `diaNicaraguaProvider`. `date('now','-6 hours')` vive dentro del SQL y
+    `db.watch` sólo re-ejecuta cuando cambia una TABLA, así que a las 00:01
+    clasificaba con el día de ayer hasta que alguien cobrara algo. Con un solo
+    bucket dependiente de la fecha casi no se veía; con tres, una cuota que
+    venció anoche se quedaba en "Al día" a la vista de todos.
+  · **🔴 Y APARECIÓ OTRO, verificando éste: la pantalla de orden de tarjetas
+    nunca guardó nada.** `escribirOrdenTarjetas` ya devuelve JSON y
+    `settingsRepo.update` lo vuelve a codificar → en la base quedaba
+    `"[{\"id\":..}]"`, un string JSON en vez de un array. Al leerlo,
+    `jsonDecode` devuelve un String, no una List, y `leerOrdenTarjetas` cae al
+    orden por defecto. Reordenás, dice "guardado", y el Resumen sigue igual, en
+    silencio. Arreglado de los DOS lados: la pantalla manda la lista cruda
+    (`ordenTarjetasCrudo`) y el lector acepta las dos formas, porque los valores
+    viejos siguen en la base. **De los tres tenants el único con la forma rota
+    es el Test Tenant — el único donde alguien usó la pantalla.**
+  · **El test de la migración también se destrabó de `0263`:** leía un archivo
+    hardcodeado, así que al cambiar el default en una migración nueva habría
+    comparado contra la vieja y dado VERDE con los dos lados separados — justo
+    lo que ese test existe para impedir. Ahora busca la última que define el
+    seed.
+  · **`0266` ESCRITA Y SIN CORRER, a propósito.** Enciende `operativo` para los
+    tenants que ya tienen ajuste guardado, y la app instalada hoy (v0.37.1)
+    tiene el Resumen VIEJO: correrla ahora le haría aparecer la grilla de KPIs
+    vieja a Mairena y a Telenet, que no la pidieron. **Va con el release del
+    Resumen nuevo.** Para probar, el **Test Tenant se encendió a mano**
+    (verificado: Mairena `false`, Telenet `false`, Test Tenant `true`, 11
+    tarjetas cada uno — ninguna se perdió).
+  · **Lo que va a mostrar en el Test Tenant:** Por cobrar 273 cuotas ·
+    C$191.385 → al día 213 · C$149.800 (78%) · en gracia 8 · C$5.400 (3%) · en
+    mora 52 · C$36.185 (19%); de eso, 2 con abono que no alcanzó. Al pie: 58
+    clientes activos y 241 cuotas ya pagadas.
+  · **`distribucion` NO se borró:** sigue en el catálogo, apagada, para quien
+    quiera los conteos sueltos.
+  · **97 tests de dashboard en verde**, 0 rojos. Nuevos: `estado_actual_test`
+    (la partición cierra en cuotas Y en córdobas; el escenario ejercita las tres
+    situaciones — sin eso el primero pasaría con todo en cero),
+    `estado_actual_ui_test` (llega a la pantalla y entra a 360 px) y dos de la
+    doble codificación. Commits `f63c49b7`.
+  · **FALTA del rework:** **Consultar período** con el estilo nuevo, y las dos
+    decisiones chicas pendientes (formato compacto de Proyección, ancho de barra
+    en PC maximizada).
+
+- **👉 NUEVO (2026-09-01, ÚLTIMO) — la mora, COMPLETA en Cobertura: tabla,
+  gráfica y globo.**
+  · **CUATRO REFERENCIAS EN LA MISMA GRÁFICA** (Rubén lo aprobó así: *"me sirve
+    tener de referencia del ciclo solo lo referente a la mora"*): la verde llena
+    (Recuperado) con su punteada (Facturado del ciclo = el 100%), y la **roja
+    llena** (Recuperado de mora) con su **punteada roja** (Cayó en mora = el
+    techo de la roja).
+  · **LA ROJA VA SIN RELLENO Y ENCIMA DE LA VERDE.** Es un SUBCONJUNTO —los
+    mismos cobros con una condición más: entraron pasada la gracia—, así que dos
+    áreas pintadas una sobre otra se leerían como una suma, y no se suman. Encima
+    porque es la de adentro: debajo, la verde la tapa donde se tocan.
+  · **CIERRA EXACTO CONTRA LA TARJETA DE MORA, verificado en producción:** la
+    roja termina en C$513.827 y eso es lo que la tarjeta de Mora llama
+    "Recuperado" en el ciclo en curso de Mairena. Y no es el número de hoy: se
+    compararon las DOS fórmulas (`serieMoraDiaria` cruda vs `cobrado_tarde`
+    clampeado a lo útil) sobre los 3 tenants, historia completa → **0 cuotas
+    difieren**. Dónde SI podrían: un sobrepago hecho tarde levanta la curva y no
+    la punteada — el MISMO caso que la verde ya tenía con su meta, y que el eje
+    ya contempla (`math.max`). Queda escrito en el código para que no se
+    re-litigue.
+  · **La leyenda roja SOLO si el ciclo tuvo atraso** y el renglón
+    "▲ Venían de mora" del globo **solo los días que hubo**: un ciclo limpio no
+    carga con la referencia de una curva que no está dibujada.
+  · **SIN CONSULTA NUEVA:** `serieMoraDiaria` existía desde antes, guardada con
+    sus tests el 2026-08-13 *"para cuando se re-evalúe la mora"*. Estaba
+    desenchufada, nada más.
+  · **`shouldRepaint` era el bug que iba a pasar desapercibido:** el stream de
+    mora llega DESPUÉS del primer pintado, así que sin agregarlo ahí el canvas se
+    quedaba con el frame viejo y la curva nunca aparecía — exactamente el
+    "compiló y no se pinta" que ya pasó en esta tarjeta el 2026-08-11.
+  · **85 tests de dashboard en verde**, 0 rojos. Dos nuevos: que la leyenda
+    llega a la pantalla (un `CustomPainter` no deja texto que buscar, pero su
+    leyenda sí, y sale del MISMO flag que alimenta al painter) y que las cuatro
+    filas de la tabla entran a 360 px.
+  · **FALTA del rework:** rehacer **Estado actual** y **Distribución de cuotas**
+    con el estilo nuevo, y después **Consultar período**. Commits `e9c2ee6d`,
+    `67296aad` en `feature/dashboard-mora`. Producción sigue intacta en v0.37.1.
+
+- **(2026-08-31 e) — la mora YA SE VE en la tabla de Cobertura;
+  falta la gráfica y el globo.**
+  · **CUATRO LÍNEAS NUEVAS, en el nivel 2 y con su propio chevron:** bajo
+    *Recuperado* → `venían de mora` + `se cobraron a tiempo`; bajo *Por
+    recuperar* → `en mora` + `todavía en plazo`. Arrancan **cerradas**, como el
+    resto de los desgloses.
+  · **VAN COMO HERMANAS DE LOS MOMENTOS, no colgando de ellos**, y el porqué
+    importa: los momentos contestan *cuándo entró la plata*; la mora contesta
+    *si se pagó dentro del plazo*. Son dos cortes distintos de las mismas cuotas.
+    Anidarlo pediría un CUARTO nivel —`fila3` dibuja tres— y repetiría el dato
+    en cada momento.
+  · **Sin consulta nueva:** usa `cortesDelCiclo`, que ya devolvía las cuatro
+    categorías y ya tenía su stream abierto en la tarjeta. Los campos se
+    parseaban desde el 2026-08-13 y **nadie los pintaba**.
+  · **🔴 UN BUG QUE CAZÓ EL TEST DE UI, no la lectura:** el chevron de
+    *Recuperado* sólo aparecía si había desglose por momentos. Sin momentos, la
+    fila no se podía abrir y **las dos líneas de mora quedaban inalcanzables** —
+    existían en el árbol y el usuario no podía llegar a ellas. Ahora el chevron
+    mira si hay ALGO adentro: momentos **o** mora.
+  · **Tests: 4 de UI** (`mora_cobertura_ui_test.dart`) que verifican que las
+    líneas **llegan a la pantalla**, que **arrancan cerradas** y que entran a
+    **360 px**; más los 3 de números del commit anterior. **83 verdes** en el
+    dashboard, 0 rojos.
+  · **LA MORA VA EN ROJO** (pedido de Rubén, 2026-09-01), y es el MISMO
+    `0xFFE24B4A` que usan "Por recuperar" acá y la tarjeta de Mora entera: que
+    las dos tarjetas pinten la mora igual deja reconocer de un vistazo que
+    hablan de la misma plata. Estuvo en ámbar —el de "con abono parcial"— y
+    quedaba como un tercer estado entre lo bueno y lo malo; la mora no es un
+    matiz.
+  · **FALTA para cerrar la mora en Cobertura:** las dos líneas de la GRÁFICA
+    (tope de mora punteado + curva de mora recuperada — el dato ya está en
+    `cortes.recuperadoTarde` y `cortes.moraFacturadoReal`) y el renglón del
+    GLOBO al pasar el mouse.
+
 
 > Lo que sigue son los bloques de estado de sesiones pasadas, tal como se escribieron: valen como
 > **historia** (el porqué de cada fix), NO como estado de hoy. Los "⚠️ sigue ABIERTO" de julio sobre el
@@ -4596,7 +7793,70 @@ Branch checkpoint: `pre-mvp-v1` (commit `48111e5`).
 
 ## 📌 Backlog vivo (lo REALMENTE pendiente — no re-flagear lo resuelto)
 
-**🔴 AUDITORÍA DE ROLES Y FLUJOS (2026-08-08) — findings abiertos, ninguno aplicado todavía.**
+**🔵 DEL AUDIT DEL 2026-09-03 (abiertos):**
+
+- **`app_dispositivos` es ciega al campo.** 38 filas, **ninguna de un cobrador**
+  (0 de 8 activos; también 0 de 3 `admin_usuarios`). **5.582 recibos** emitidos
+  desde equipos que el registro nunca vio, desde 2026-01-10. RLS **descartada
+  empíricamente** (el INSERT con identidad real de cobrador pasa). Causa: la
+  telemetría va DIRECTA por Supabase en vez de por la cola de PowerSync que
+  reintenta, dispara **una vez por proceso** con `_versionReportada = true`
+  puesto ANTES del await, y se traga el error — el cobrador arranca sin señal y
+  esa sesión se pierde para siempre. **Importa porque el paso 1 del triaje de
+  `/pedido` ("¿con qué versión se hizo?") es inaplicable justo en el rol
+  offline-first**, que es el más probable de estar desactualizado.
+  Fix candidato: encolar por PowerSync, o reintentar cuando vuelve la conexión.
+
+- **`solicitudes_screen.dart:457` — `case` duplicado, único warning del repo.**
+  `crearContrato` está agrupado con `desconocido` → `return null`, y el bloque
+  que SÍ está escrito para él (su comentario y su query lo dicen) quedó rotulado
+  `desactivarCliente`, que ya se maneja en la :430. Efecto: la tarjeta de una
+  solicitud "Crear contrato" se muestra **sin nombre ni código de cliente**.
+  Preexistente (está en `3f9385cc`). Hay un task spawneado con el detalle.
+
+- **INV11 va a reportar 3 para siempre** (Mairena). Son las 3 cuotas anuladas a
+  mano en la limpieza del cuaderno de agosto ("cliente al día según ISP, pagos
+  fuera del sistema"). Un chequeo que SIEMPRE da >0 se termina ignorando y tapa
+  el día que haya algo real (regla 14). O se acota el predicado, o se documenta
+  la excepción de forma que el chequeo pueda volver a cero.
+
+- **Los dos generadores de escenario no siembran el camino congelado del
+  recibo.** `plan_label`: 0 referencias en los DOS. `periodo_label`: en el
+  generador SQL sí, en el Dart no. Todo test que renderice un recibo ejercita la
+  rama vieja — o sea justo lo que `0268` vino a cerrar. En producción el 100% de
+  los recibos nuevos lo lleva; en el escenario, 0% (regla 16).
+
+**✅ AUDITORÍA DE ROLES Y FLUJOS (2026-08-08) — CERRADA 8/8, verificada contra la base el
+2026-08-23.** Se fueron aplicando sin tacharse acá, y el backlog quedó mintiendo dos semanas:
+planificar sobre él costaba tiempo en cosas ya resueltas. Estado real de cada uno:
+`#1` cuarentena/cuota fantasma → el trigger ya escucha `en_revision`, 0 fantasmas ·
+`#2` códigos de contrato duplicados → 0 hoy · `#3` writes rechazados mudos → cerrado en
+v0.36.0 (`.select('id')` en patch y delete + `_filaSigueVisible` + triple rastro), **y ya
+pagó**: al volverse ruidoso destapó el colchón de indefinidos que se rechazaba en silencio
+desde el día uno → 0241 · `#4` guard de desactivar → la app espeja literal el guard 0220 y
+frena ANTES del write · `#5` admin_usuarios con Total falso → lee el rol dentro de
+`_ContratoResumen` y muestra conteo de cuotas · `#6` revalidar código al aprobar → valida
+local **y** contra el server · `#7` impersonación + op_log en solicitudes → las dos mitades,
+con cobertura de op_log **0% hasta el 08-10 y 100% desde el 08-12** · `#8` export de Clientes
+→ salieron "Deuda fuera de ruta" y "Deuda total".
+**Lección de proceso: el backlog se tacha en el mismo commit que lo cierra.**
+
+**⚠️ CORRECCIÓN al bullet de "clientes sin salida por CONDONACIÓN" (no borrar, releer).** El
+número (40 clientes / C$108.512,58) es correcto pero la LECTURA estaba mal y la propuesta que
+salía de ahí era peligrosa: **28 de esos 40 (C$89.153, el 82,9%) tienen contrato SUSPENDIDO,
+o sea mora normal, reversible y COBRABLE** — y 32 de los 40 tienen historial de pagos. Prender
+`ajustes_habilitados` y descontarles habría condonado C$89.000 cobrables. La población real
+del problema son **11 clientes por C$18.429,57** (solo cancelados), y la salida YA EXISTE
+desde 0244/0245: `super_admin_baja_deuda_impl`, con preview, motivo, backup y triple registro.
+
+**No re-flagear:** los 177 cobros de julio sin `op_log` tienen causa identificada y cerrada
+(RLS de `op_log` para cobradores: sin policy de SELECT el upsert moría con 42501 en el
+RETURNING y el connector lo descartaba → 0190, 2026-07-17). Firma clara: los dos cobradores
+con 0 filas antes de esa fecha y cientos después; la oficina nunca perdió una. Un solo caso
+posterior en toda la base.
+
+**🔻 Lo que sigue abierto de esa auditoría: NADA.** Lo pendiente vivo está en
+`docs/AUDIT-INTEGRAL-2026-08-22.md` (42 de 47) y `docs/PLAN-CONSISTENCIA-2026-08-23.md`.
 Metodología: 7 ejes en paralelo + sintetizador + crítico adversarial, después 8 specs de
 pantalla con verificador por spec. Todo re-verificado con SELECT contra `vxxz`. El crítico
 tumbó 2 hallazgos falsos del informe (la lista de Clientes YA muestra la deuda fuera de ruta

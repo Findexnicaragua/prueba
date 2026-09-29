@@ -77,6 +77,41 @@ class _FiltroMultiDropdownState extends State<FiltroMultiDropdown> {
   }
 
   void _abrir() {
+    // 🔴 EL PANEL SE ACOTA A LA PANTALLA (2026-09-03).
+    //
+    // Se anclaba SIEMPRE por la izquierda del chip, con un ancho de hasta
+    // 340px y sin mirar dónde estaba el chip. En Android, con el chip "Plan"
+    // —que es el ÚLTIMO de la barra, o sea el más a la derecha— el panel
+    // arrancaba cerca del borde y se cortaba: se veía "COMBO INTER…" y
+    // "2.014,00 C$ · 1 clie…". Los de Cobrador y Zona nunca lo mostraron
+    // porque están a la izquierda y ahí sobra lugar.
+    //
+    // Se calcula el espacio real a cada lado del chip y se elige: si por la
+    // derecha no entra y por la izquierda hay más, el panel se ANCLA POR LA
+    // DERECHA (crece hacia adentro). Y en los dos casos el ancho se clampea a
+    // lo que hay. Es la misma lección del globo de la curva, que también se
+    // salía por anclar sin acotar.
+    final box = context.findRenderObject() as RenderBox?;
+    final anchoPantalla = MediaQuery.sizeOf(context).width;
+    const margen = 8.0;
+
+    var alinearDerecha = false;
+    var maxAncho = 340.0;
+    if (box != null && box.hasSize) {
+      final izqChip = box.localToGlobal(Offset.zero).dx;
+      final derChip = izqChip + box.size.width;
+      // Anclado a la IZQUIERDA del chip, el panel crece hacia la derecha.
+      final espacioDerecha = anchoPantalla - izqChip - margen;
+      // Anclado a la DERECHA del chip, crece hacia la izquierda.
+      final espacioIzquierda = derChip - margen;
+
+      alinearDerecha =
+          espacioDerecha < 250 && espacioIzquierda > espacioDerecha;
+      maxAncho = (alinearDerecha ? espacioIzquierda : espacioDerecha)
+          .clamp(180.0, 340.0)
+          .toDouble();
+    }
+
     _overlay = OverlayEntry(
       builder: (_) => _Panel(
         link: _link,
@@ -85,6 +120,8 @@ class _FiltroMultiDropdownState extends State<FiltroMultiDropdown> {
         seleccionadosIniciales: widget.seleccionados,
         onChanged: widget.onChanged,
         onCerrar: _cerrar,
+        alinearDerecha: alinearDerecha,
+        maxAncho: maxAncho,
       ),
     );
     Overlay.of(context).insert(_overlay!);
@@ -165,6 +202,8 @@ class _Panel extends StatefulWidget {
     required this.seleccionadosIniciales,
     required this.onChanged,
     required this.onCerrar,
+    required this.alinearDerecha,
+    required this.maxAncho,
   });
 
   final LayerLink link;
@@ -173,6 +212,13 @@ class _Panel extends StatefulWidget {
   final Set<String> seleccionadosIniciales;
   final ValueChanged<Set<String>> onChanged;
   final VoidCallback onCerrar;
+
+  /// El panel se ancla por la DERECHA del chip (crece hacia adentro) porque de
+  /// ese lado no entraba. Lo decide `_abrir()` con el espacio real.
+  final bool alinearDerecha;
+
+  /// Ancho máximo ya acotado a lo que queda de pantalla.
+  final double maxAncho;
 
   @override
   State<_Panel> createState() => _PanelState();
@@ -237,18 +283,29 @@ class _PanelState extends State<_Panel> {
         CompositedTransformFollower(
           link: widget.link,
           showWhenUnlinked: false,
-          targetAnchor: Alignment.bottomLeft,
-          followerAnchor: Alignment.topLeft,
+          targetAnchor: widget.alinearDerecha
+              ? Alignment.bottomRight
+              : Alignment.bottomLeft,
+          followerAnchor: widget.alinearDerecha
+              ? Alignment.topRight
+              : Alignment.topLeft,
           offset: const Offset(0, 6),
           child: Align(
-            alignment: Alignment.topLeft,
+            alignment: widget.alinearDerecha
+                ? Alignment.topRight
+                : Alignment.topLeft,
             child: Material(
               elevation: 4,
               borderRadius: BorderRadius.circular(12),
               color: scheme.surface,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                    minWidth: 250, maxWidth: 340, maxHeight: 400),
+                constraints: BoxConstraints(
+                    // El mínimo no puede superar al máximo: en una pantalla
+                    // angosta `maxAncho` puede quedar por debajo de 250 y eso
+                    // sería una restricción imposible.
+                    minWidth: widget.maxAncho < 250 ? widget.maxAncho : 250,
+                    maxWidth: widget.maxAncho,
+                    maxHeight: 400),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

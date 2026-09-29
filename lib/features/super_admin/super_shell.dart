@@ -105,6 +105,12 @@ class SuperShell extends ConsumerWidget {
                     )
                   : const SizedBox.shrink(),
             ),
+          if (loc != '/super/diagnostico')
+            IconButton(
+              icon: const Icon(Icons.troubleshoot),
+              tooltip: 'Diagnóstico',
+              onPressed: () => context.closeModalsAndGo('/super/diagnostico'),
+            ),
           if (!enTenants)
             IconButton(
               icon: const Icon(Icons.business),
@@ -146,6 +152,8 @@ String _backTargetFor(String loc) {
   if (miembroMatch != null) return miembroMatch.group(1)!;
   final tenantMatch = RegExp(r'^/super/tenants/[^/]+$').firstMatch(loc);
   if (tenantMatch != null) return '/super/tenants';
+  // Diagnóstico → volver al home del panel super, no salir a /admin.
+  if (loc == '/super/diagnostico') return '/super/tenants';
   // Default: raíces de super → salir al panel admin.
   return '/admin';
 }

@@ -1,0 +1,5070 @@
+{
+  "clientes": [
+    {
+      "codigo": "SETUP",
+      "nombre": "⚙ PRE-REQUISITOS DEL TENANT (no es un cliente)",
+      "plan_precio": 0,
+      "dia_pago": 0,
+      "estado_contrato": "n/a",
+      "caso_que_cubre": "Antes de sembrar: (1) BORRAR toda la data operativa vieja del Test Tenant (cuotas, pagos, recibos, cargos_extra, saldos_favor, contratos, clientes) — el caso 'Ana Lucía SEED03' de la memoria queda obsoleto. (2) Poner cobranza.dias_gracia = 7 (NO 10). Es indispensable: con 7 el primer frame de las tarjetas usa el 10 hardcodeado y el bug de 'gracia equivocada al arrancar' se vuelve visible y medible (Total mora salta de C$2.550 a C$4.525). (3) Poner cobranza.pago_parcial = true, para que los abonos parciales de TT-06 y de la instalación de TT-13 se puedan cargar y para que se vea que 'Recuperado — Cuotas' cuenta cuotas TOCADAS, no SALDADAS. (4) Fecha de referencia: hoy = 11 ago 2026 (martes). Ciclo en curso = 15 jul – 14 ago 2026. Los 6 ciclos de la histórica: mar=15feb–14mar, abr=15mar–14abr, may=15abr–14may, jun=15may–14jun, jul=15jun–14jul, ago=15jul–14ago. (5) NO crear más cuotas que las listadas (la única fuera de los 6 ciclos es la de TT-01 del 18 ago, que es el adelanto).",
+      "cuotas": []
+    },
+    {
+      "codigo": "TT-01",
+      "nombre": "Ana Lucía Mendoza Ruiz",
+      "plan_precio": 745,
+      "dia_pago": 18,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "CONTROL (cliente al día, paga siempre dentro de gracia) + ADELANTO A CUOTA FUTURA: el 11 ago (hoy) paga por adelantado la cuota del 18 ago, que pertenece al ciclo SEP → no debe aparecer en ninguna fila de las tarjetas del ciclo en curso, pero SÍ en el KPI de caja 'Hoy' y en el balde 'Adelantos a cuotas futuras' del desglose. Sirve para verificar que la ventana del ciclo corta bien por arriba (fin exclusivo 15 ago).",
+      "cuotas": [
+        {
+          "vence": "2026-02-18",
+          "monto": 745,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-02-20",
+              "monto": 745,
+              "nota": "a tiempo (gracia hasta 25 feb)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-03-18",
+          "monto": 745,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-19",
+              "monto": 745,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-18",
+          "monto": 745,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-22",
+              "monto": 745,
+              "nota": "a tiempo (gracia hasta 25 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-18",
+          "monto": 745,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-20",
+              "monto": 745,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-18",
+          "monto": 745,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-19",
+              "monto": 745,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-18",
+          "monto": 745,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-20",
+              "monto": 745,
+              "nota": "CICLO EN CURSO — a tiempo (gracia hasta 25 jul)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-18",
+          "monto": 745,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-11",
+              "monto": 745,
+              "nota": "HOY — adelanto. La cuota vence el 18 ago = ciclo SEP, fuera de la ventana [15 jul, 15 ago). NO debe sumar a ninguna tarjeta del ciclo en curso."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "TT-02",
+      "nombre": "José Ramón Talavera Blandón",
+      "plan_precio": 1150,
+      "dia_pago": 5,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "MOROSO CRÓNICO QUE SIEMPRE SE PONE AL DÍA TARDE — es el motor principal de las 6 barras (aporta mora recuperada en los 5 ciclos cerrados). Su pago del ciclo jul se hace el 6 ago, o sea DESPUÉS del cierre del ciclo (14 jul): eso alimenta el 'tail' de la curva (hallazgo: el salto ficticio del último día). En el ciclo en curso su cuota del 5 ago está IMPAGA pero todavía EN GRACIA (5 ago + 7 = 12 ago > hoy 11 ago) → debe aparecer en 'Por recuperar' de Cobros del mes y NO debe aparecer en la tarjeta de Mora. Es el borde 'vencida pero aún no morosa'.",
+      "cuotas": [
+        {
+          "vence": "2026-03-05",
+          "monto": 1150,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-20",
+              "monto": 1150,
+              "nota": "TARDE (gracia hasta 12 mar)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-05",
+          "monto": 1150,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-18",
+              "monto": 1150,
+              "nota": "TARDE (gracia hasta 12 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-05",
+          "monto": 1150,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-25",
+              "monto": 1150,
+              "nota": "TARDE (gracia hasta 12 may)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-05",
+          "monto": 1150,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-28",
+              "monto": 1150,
+              "nota": "TARDE (gracia hasta 12 jun)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-05",
+          "monto": 1150,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-06",
+              "monto": 1150,
+              "nota": "TARDE y FUERA DEL CICLO jul (que cerró el 14 jul) → cae en el 'tail' de la curva del ciclo jul"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-05",
+          "monto": 1150,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "TT-03",
+      "nombre": "María Elena Pavón Cruz",
+      "plan_precio": 425,
+      "dia_pago": 25,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "BORDE DE LA GRACIA — paga SIEMPRE el último día de gracia exacto (venc + 7). La regla es date(venc,'+7 days') < date(fecha_pago), o sea estricta: pagar el día 7 NO es tarde. En el ciclo en curso: cuota 25 jul, gracia vence el 1 ago, paga el 1 ago → debe contar en 'a tiempo o en gracia' y su cuota NO debe entrar a la tarjeta de Mora (aunque ya cruzó la gracia, está pagada y sin pago tardío). Si aparece en Mora o en la sub-fila 'tarde', el borde está corrido.",
+      "cuotas": [
+        {
+          "vence": "2026-02-25",
+          "monto": 425,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-04",
+              "monto": 425,
+              "nota": "BORDE exacto: 25 feb + 7 = 4 mar → NO es tarde"
+            }
+          ]
+        },
+        {
+          "vence": "2026-03-25",
+          "monto": 425,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-01",
+              "monto": 425,
+              "nota": "BORDE exacto"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-25",
+          "monto": 425,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-02",
+              "monto": 425,
+              "nota": "BORDE exacto"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-25",
+          "monto": 425,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-01",
+              "monto": 425,
+              "nota": "BORDE exacto"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-25",
+          "monto": 425,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-02",
+              "monto": 425,
+              "nota": "BORDE exacto"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-25",
+          "monto": 425,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-01",
+              "monto": 425,
+              "nota": "CICLO EN CURSO — BORDE exacto (25 jul + 7 = 1 ago). NO es tarde, NO entra a Mora."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "TT-04",
+      "nombre": "Denis Alberto Sequeira Munguía",
+      "plan_precio": 880,
+      "dia_pago": 20,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "BORDE 'UN DÍA TARDE' — paga casi siempre 1 día después de vencida la gracia. En el ciclo en curso: cuota 20 jul, gracia hasta 27 jul, paga el 28 jul → TARDE. Es el aporte principal a 'Recuperado' de la tarjeta de Mora del ciclo (C$880 de C$1.570) y a la sub-fila 'tarde' de Cobros. En el ciclo jun paga el 27 may (borde exacto) → NO tarde: sirve para comprobar que el mismo cliente cruza y no cruza según el día.",
+      "cuotas": [
+        {
+          "vence": "2026-02-20",
+          "monto": 880,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-02-28",
+              "monto": 880,
+              "nota": "TARDE por 1 día (gracia hasta 27 feb)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-03-20",
+          "monto": 880,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-28",
+              "monto": 880,
+              "nota": "TARDE por 1 día"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-20",
+          "monto": 880,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-30",
+              "monto": 880,
+              "nota": "TARDE (gracia hasta 27 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-20",
+          "monto": 880,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-27",
+              "monto": 880,
+              "nota": "BORDE exacto → NO tarde"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-20",
+          "monto": 880,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-30",
+              "monto": 880,
+              "nota": "TARDE"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-20",
+          "monto": 880,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-28",
+              "monto": 880,
+              "nota": "CICLO EN CURSO — TARDE por 1 día (gracia hasta 27 jul)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "TT-05-A",
+      "nombre": "Yahoska del Carmen Obando Téllez",
+      "plan_precio": 690,
+      "dia_pago": 18,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "MISMO CLIENTE, CONTRATO 1 de 2 (mismo cliente_id que TT-05-B). En el ciclo en curso esta cuota se RECUPERA TARDE (18 jul, gracia hasta 25 jul, paga 29 jul) mientras la del otro contrato queda IMPAGA. Es el cliente que hace que la columna USUARIOS no sume vertical: aparece en 'Recuperado — Usuarios' y en 'Por recuperar — Usuarios' a la vez, en las DOS tarjetas (Cobros y Mora). En la tarjeta de Mora esto produce 2 + 5 = 7 contra un total de 6 usuarios, descuadre que hoy NO está explicado en el (i) de Mora.",
+      "cuotas": [
+        {
+          "vence": "2026-02-18",
+          "monto": 690,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-02-20",
+              "monto": 690,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-03-18",
+          "monto": 690,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-21",
+              "monto": 690,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-18",
+          "monto": 690,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-24",
+              "monto": 690,
+              "nota": "a tiempo (gracia hasta 25 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-18",
+          "monto": 690,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-30",
+              "monto": 690,
+              "nota": "TARDE (gracia hasta 25 may)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-18",
+          "monto": 690,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-22",
+              "monto": 690,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-18",
+          "monto": 690,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-29",
+              "monto": 690,
+              "nota": "CICLO EN CURSO — TARDE (gracia hasta 25 jul)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "TT-05-B",
+      "nombre": "Yahoska del Carmen Obando Téllez",
+      "plan_precio": 395,
+      "dia_pago": 28,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "MISMO CLIENTE, CONTRATO 2 de 2 (segundo punto en la casa de la mamá). Cubre 'cliente con DOS cuotas en el mismo ciclo'. En el ciclo en curso la cuota del 28 jul queda IMPAGA y ya cruzó la gracia (28 jul + 7 = 4 ago < 11 ago) → entra a Mora por C$395. Junto con TT-05-A hace que Usuarios no cierre.",
+      "cuotas": [
+        {
+          "vence": "2026-02-28",
+          "monto": 395,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-03",
+              "monto": 395,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-03-28",
+          "monto": 395,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-02",
+              "monto": 395,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-28",
+          "monto": 395,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-04",
+              "monto": 395,
+              "nota": "a tiempo (gracia hasta 5 may)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-28",
+          "monto": 395,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-03",
+              "monto": 395,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-28",
+          "monto": 395,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-05",
+              "monto": 395,
+              "nota": "BORDE exacto (28 jun + 7 = 5 jul) → NO tarde"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-28",
+          "monto": 395,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "TT-06",
+      "nombre": "Wilmer Antonio Zeledón Picado",
+      "plan_precio": 565,
+      "dia_pago": 2,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "CUOTA PARCIAL EN EL CICLO EN CURSO — abona C$200 de C$565 el 5 ago (dentro de gracia). Cubre DOS hallazgos: (a) la columna CUOTAS no suma vertical 'de más' (esta cuota está en 'Recuperado — Cuotas' porque tiene un pago vivo y a la vez en 'Por recuperar — Cuotas' porque le queda saldo C$365); (b) 'Recuperado — Cuotas' mide cuotas TOCADAS, no SALDADAS — el dueño lee 8 cuotas recuperadas y una de ellas solo recibió el 35% de su valor. En Mora entra por la pata de impago (C$365) sin aportar a 'Recuperado' (el abono NO fue tardío).",
+      "cuotas": [
+        {
+          "vence": "2026-03-02",
+          "monto": 565,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-05",
+              "monto": 565,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-02",
+          "monto": 565,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-08",
+              "monto": 565,
+              "nota": "a tiempo (gracia hasta 9 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-02",
+          "monto": 565,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-12",
+              "monto": 565,
+              "nota": "TARDE (gracia hasta 9 may)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-02",
+          "monto": 565,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-07",
+              "monto": 565,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-02",
+          "monto": 565,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-09",
+              "monto": 565,
+              "nota": "BORDE exacto (2 jul + 7 = 9 jul) → NO tarde"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-02",
+          "monto": 565,
+          "cargos_neto": 0,
+          "estado": "parcial",
+          "pagos": [
+            {
+              "fecha": "2026-08-05",
+              "monto": 200,
+              "nota": "CICLO EN CURSO — abono parcial dentro de gracia (gracia hasta 9 ago). Saldo C$365. Requiere cobranza.pago_parcial = true."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "TT-07",
+      "nombre": "Karla Vanessa Rocha Espinoza",
+      "plan_precio": 1075,
+      "dia_pago": 10,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "CRÉDITO A FAVOR APLICADO — el 10 jul entregó C$2.150 para cubrir julio; se aplicaron C$1.075 a la cuota (una sola fila en pagos) y el excedente de C$1.075 se acreditó en saldos_favor. El 1 ago ese crédito se aplica a la cuota del 10 ago como cargo 'credito_aplicado' de −C$1.075 → la cuota queda facturable C$0, estado 'pagada' y SIN NINGUNA FILA EN pagos. Cubre: (a) la columna CUOTAS no suma vertical 'de menos' — esta cuota está contada en 'Cobros' pero NO está ni en 'Recuperado — Cuotas' ni en 'Por recuperar — Cuotas'; (b) lo mismo en USUARIOS: Karla está en 'Cobros — Usuarios' y en ninguna de las dos filas de abajo; (c) el 100% de la tarjeta baja C$1.075 con plata que entró en OTRO ciclo y que no aparece como 'Recuperado' en ningún ciclo.",
+      "cuotas": [
+        {
+          "vence": "2026-03-10",
+          "monto": 1075,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-12",
+              "monto": 1075,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-10",
+          "monto": 1075,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-15",
+              "monto": 1075,
+              "nota": "a tiempo (gracia hasta 17 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-10",
+          "monto": 1075,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-14",
+              "monto": 1075,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-10",
+          "monto": 1075,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-16",
+              "monto": 1075,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-10",
+          "monto": 1075,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-10",
+              "monto": 1075,
+              "nota": "Entregó C$2.150; APLICADO a la cuota C$1.075. El excedente C$1.075 va a saldos_favor (NO es un pago, no genera fila adicional)."
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-10",
+          "monto": 1075,
+          "cargos_neto": -1075,
+          "estado": "pagada",
+          "pagos": [],
+          "cargo_tipo": "credito_aplicado",
+          "cargo_origen": "credito",
+          "cargo_fecha": "2026-08-01",
+          "credito_de": {
+            "acreditado_el": "2026-07-10",
+            "monto": 1075
+          }
+        }
+      ]
+    },
+    {
+      "codigo": "TT-08",
+      "nombre": "Norman Eduardo Lacayo Bermúdez",
+      "plan_precio": 935,
+      "dia_pago": 15,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "CUOTA SOBREPAGADA + DOS PAGOS SOBRE LA MISMA CUOTA + BORDE DE VENTANA (vence el 15 jul = primer día del ciclo, tiene que ENTRAR). Historia: el cliente entregó C$2.135 para cubrir julio y adelantar agosto; dos cobradores cargaron el cobro offline con montos distintos (C$935 el 17 jul y C$1.200 el 18 jul) y ambos quedaron aplicados a la MISMA cuota. Como no son copia exacta (distinto monto y distinto día), el guard del server los deja vivos a los dos. monto_pagado = C$2.135, saldo = −C$1.200. ESTE ES EL CLIENTE QUE DISPARA EL HALLAZGO ALTO #1: 'Por recuperar — Monto' se calcula como meta − recuperado (suma algebraica, los negativos restan) mientras 'Por recuperar — Cuotas' se consulta con saldo > 0,009 → la tarjeta muestra C$4.200 cuando la deuda real de las 8 cuotas pendientes es C$5.400. La diferencia es EXACTAMENTE los C$1.200 de sobrepago de Norman, comidos de la deuda de OTROS clientes. SEGUNDA PASADA (opcional, para ver el hallazgo #2): cargar un pago extra de C$6.500 sobre esta misma cuota → rec_m pasa a C$13.500 > meta C$11.200 → 'Por recuperar' clampea a C$0,00 con 8 cuotas pendientes al lado, la pastilla dice 100% y el tooltip del gráfico dice 120,5%.",
+      "cuotas": [
+        {
+          "vence": "2026-02-15",
+          "monto": 935,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-02-18",
+              "monto": 935,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-03-15",
+          "monto": 935,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-20",
+              "monto": 935,
+              "nota": "a tiempo (gracia hasta 22 mar)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-15",
+          "monto": 935,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-19",
+              "monto": 935,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-15",
+          "monto": 935,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-21",
+              "monto": 935,
+              "nota": "a tiempo (gracia hasta 22 may)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-15",
+          "monto": 935,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-18",
+              "monto": 935,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-15",
+          "monto": 935,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-17",
+              "monto": 935,
+              "nota": "CICLO EN CURSO — cobrador 1, offline. A tiempo (gracia hasta 22 jul)."
+            },
+            {
+              "fecha": "2026-07-18",
+              "monto": 1200,
+              "nota": "CICLO EN CURSO — cobrador 2, offline, MISMA cuota. Sobrepago: monto_pagado C$2.135, saldo −C$1.200. Vivo (no es copia exacta → el guard no lo manda a cuarentena). — el server lo manda a REVISION (sobrepago: excede el total de la cuota)",
+              "en_revision": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "TT-09",
+      "nombre": "Francisco Javier Delgadillo Aguirre",
+      "plan_precio": 720,
+      "dia_pago": 8,
+      "estado_contrato": "suspendido (suspendido el 5 ago 2026)",
+      "caso_que_cubre": "CONTRATO SUSPENDIDO + CUOTA ANULADA. Pagó los 5 ciclos cerrados (dos de ellos TARDE: 20 may y 25 jun) y al suspenderlo el 5 ago su cuota del 8 ago quedó ANULADA. Cubre el hallazgo ALTO 'suspender reescribe la historia': _noSuspendido mira el estado ACTUAL del contrato, así que sus C$3.600 ya cobrados y sus C$1.440 de mora recuperada tarde DESAPARECEN retroactivamente de los 6 ciclos. Medición: las barras may y jun deberían valer C$5.260 y C$3.655 y la app las va a mostrar en C$4.540 y C$2.935 (−C$720 cada una). Es el cliente que prueba que un ciclo cerrado NO es estable.",
+      "cuotas": [
+        {
+          "vence": "2026-03-08",
+          "monto": 720,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-10",
+              "monto": 720,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-08",
+          "monto": 720,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-12",
+              "monto": 720,
+              "nota": "a tiempo (gracia hasta 15 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-08",
+          "monto": 720,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-20",
+              "monto": 720,
+              "nota": "TARDE (gracia hasta 15 may) — estos C$720 desaparecen de la barra 'may'"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-08",
+          "monto": 720,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-25",
+              "monto": 720,
+              "nota": "TARDE (gracia hasta 15 jun) — estos C$720 desaparecen de la barra 'jun'"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-08",
+          "monto": 720,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-14",
+              "monto": 720,
+              "nota": "a tiempo (gracia hasta 15 jul)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-08",
+          "monto": 720,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "TT-10",
+      "nombre": "Silvia Auxiliadora Gutiérrez Baltodano",
+      "plan_precio": 615,
+      "dia_pago": 22,
+      "estado_contrato": "cancelado (cancelado el 30 jul 2026)",
+      "caso_que_cubre": "CONTRATO CANCELADO — SU DEUDA SE CONDONO. Se dio de baja el 30 jul debiendo tres cuotas (22 may, 22 jun, 22 jul) y, por la regla del 2026-08-24, cancelar pone en CERO toda la deuda viva: la cuota sin un peso encima se anula y la que tiene plata queda \"pagada\" por lo que se pago. Lo que cubre este caso ahora es el OTRO lado de la regla: que su plata historica NO desaparece — el abono de C$300 del 10 ago sobre la cuota del 22 may sigue contando en la caja del ciclo en que se cobro. ANTES este cliente cubria el hallazgo \"cancelados si suman y suspendidos no\", que la regla del 24/08 abolio: hoy es al reves, el cancelado aporta cero deuda y el suspendido si cuenta como mora.",
+      "cuotas": [
+        {
+          "vence": "2026-02-22",
+          "monto": 615,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-02-25",
+              "monto": 615,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-03-22",
+          "monto": 615,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-27",
+              "monto": 615,
+              "nota": "a tiempo (gracia hasta 29 mar)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-22",
+          "monto": 615,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-30",
+              "monto": 615,
+              "nota": "TARDE (gracia hasta 29 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-22",
+          "monto": 300,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-10",
+              "monto": 300,
+              "nota": "AYER — abono TARDÍO sobre un ciclo YA CERRADO (jun). Saldo C$315. Entra al KPI de caja 'Esta semana' y al balde 'Atrasos de ciclos anteriores'."
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-22",
+          "monto": 615,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-22",
+          "monto": 615,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "TT-11",
+      "nombre": "Óscar Danilo Chavarría Selva",
+      "plan_precio": 480,
+      "dia_pago": 1,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "CARGO EXTRA POSITIVO (reconexión) + PAGOS TARDÍOS QUE CAEN FUERA DEL CICLO. Se le cortó el servicio el 25 jun por la mora de junio; pagó junio el 3 jul y se le reconectó, pero el cargo de reconexión de C$250 se cargó tarde (el 5 ago) sobre la cuota vigente, la del 1 ago. Cubre: (a) cargo_extra positivo SUBE el facturable (C$480 + C$250 = C$730) y por lo tanto sube el 100% de Cobros y la mora del ciclo; (b) sus pagos del 3 jul (cuota del 1 jun) y del 20 jul (cuota del 1 jul) tienen fecha POSTERIOR al cierre de sus ciclos → alimentan el 'tail' de la curva de jun y jul; (c) el nombre lleva tilde (Óscar / Chavarría) para el fold de búsqueda.",
+      "cuotas": [
+        {
+          "vence": "2026-03-01",
+          "monto": 480,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-06",
+              "monto": 480,
+              "nota": "a tiempo (gracia hasta 8 mar)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-01",
+          "monto": 480,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-15",
+              "monto": 480,
+              "nota": "TARDE (gracia hasta 8 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-01",
+          "monto": 480,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-20",
+              "monto": 480,
+              "nota": "TARDE (gracia hasta 8 may)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-01",
+          "monto": 480,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-03",
+              "monto": 480,
+              "nota": "TARDE y FUERA del ciclo jun (cerró el 14 jun) → tail de la curva de jun"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-01",
+          "monto": 480,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-20",
+              "monto": 480,
+              "nota": "TARDE y FUERA del ciclo jul (cerró el 14 jul) → tail de la curva de jul"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-01",
+          "monto": 480,
+          "cargos_neto": 250,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "TT-12",
+      "nombre": "Iveth del Socorro Núñez Mairena",
+      "plan_precio": 850,
+      "dia_pago": 28,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "PAGO ANULADO + PAGO EN REVISIÓN + CUOTA ANULADA SOBRE CONTRATO ACTIVO. (a) Ciclo en curso: cuota del 28 jul con un pago de C$850 registrado el 31 jul y ANULADO el 4 ago (el depósito rebotó) → monto_pagado vuelve a C$0, la cuota queda impaga y en mora por C$850. El pago anulado NO debe sumar ni a 'Recuperado' ni a la caja. (b) Ciclo jul: la cuota del 28 jun recibió DOS pagos de C$850 el MISMO día (2 jul), cargados por dos dispositivos; el segundo, por ser copia exacta, quedó EN REVISIÓN → no cuenta en ninguna métrica ni en monto_pagado. (c) Cuota manual de multa por daño de equipo, C$400, creada el 20 jul y ANULADA el 25 jul (se cargó al cliente equivocado): al ser una cuota anulada sobre contrato ACTIVO, prueba de forma aislada que las anuladas se excluyen de las tres tarjetas.",
+      "cuotas": [
+        {
+          "vence": "2026-02-28",
+          "monto": 850,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-05",
+              "monto": 850,
+              "nota": "a tiempo (gracia hasta 7 mar)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-03-28",
+          "monto": 850,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-04",
+              "monto": 850,
+              "nota": "BORDE exacto (28 mar + 7 = 4 abr) → NO tarde"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-28",
+          "monto": 850,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-10",
+              "monto": 850,
+              "nota": "TARDE (gracia hasta 5 may)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-28",
+          "monto": 850,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-03",
+              "monto": 850,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-28",
+          "monto": 850,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-02",
+              "monto": 850,
+              "nota": "VIVO — a tiempo (gracia hasta 5 jul)"
+            },
+            {
+              "fecha": "2026-07-02",
+              "monto": 850,
+              "en_revision": true,
+              "nota": "EN REVISIÓN — copia exacta cargada por un 2º dispositivo. NO cuenta en monto_pagado ni en ninguna métrica."
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-20",
+          "monto": 400,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-28",
+          "monto": 850,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": [
+            {
+              "fecha": "2026-07-31",
+              "monto": 850,
+              "anulado": true,
+              "nota": "ANULADO el 4 ago (depósito rebotado). La cuota vuelve a impaga; el pago se preserva pero no cuenta."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "TT-13",
+      "nombre": "Marvin Josué Urbina Sandoval",
+      "plan_precio": 1025,
+      "dia_pago": 12,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "PRE-PAGO ANTES DEL INICIO DEL CICLO + CUOTA MANUAL (COBRO PUNTUAL) PARCIAL. (a) El 9 jul pagó de una vez las cuotas del 12 jul y del 12 ago; el pago del 12 ago tiene fecha_pago 9 jul, ANTERIOR al inicio del ciclo (15 jul) → es el baseline de la curva y alimenta la nota al pie 'De lo cobrado, C$1.025,00 ya venía pagado por adelantado antes del 15 jul'. Además su cuota vence el 12 ago, o sea que TODAVÍA NO VENCIÓ y ya está pagada. (b) El 5 ago se le creó una cuota MANUAL de instalación de un punto adicional por C$1.500 (contrato_id NULL, tipo_cargo_manual='instalacion', fecha_vencimiento = el día de creación) y abonó C$900 → saldo C$600. Cubre el hallazgo de que los COBROS PUNTUALES entran a la tarjeta disfrazados de cuotas del mes (los reportes sí los excluyen → el conteo 'Cuotas' del dashboard nunca va a cerrar contra el del reporte) y refuerza el descuadre de la columna Cuotas y de Usuarios (Marvin queda en 'Recuperado' y en 'Por recuperar' a la vez).",
+      "cuotas": [
+        {
+          "vence": "2026-03-12",
+          "monto": 1025,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-14",
+              "monto": 1025,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-12",
+          "monto": 1025,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-16",
+              "monto": 1025,
+              "nota": "a tiempo (gracia hasta 19 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-12",
+          "monto": 1025,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-18",
+              "monto": 1025,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-12",
+          "monto": 1025,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-15",
+              "monto": 1025,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-12",
+          "monto": 1025,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-09",
+              "monto": 1025,
+              "nota": "adelantado, dentro del ciclo jul"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-05",
+          "monto": 1500,
+          "cargos_neto": 0,
+          "estado": "parcial",
+          "pagos": [
+            {
+              "fecha": "2026-08-05",
+              "monto": 900,
+              "nota": "CUOTA MANUAL (instalación de punto adicional, contrato_id NULL). Abono C$900, saldo C$600."
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-12",
+          "monto": 1025,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-09",
+              "monto": 1025,
+              "nota": "PRE-PAGO: fecha_pago 9 jul < 15 jul (inicio del ciclo) → baseline de la curva, nota al pie de la tabla."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "TT-14",
+      "nombre": "Heydi Carolina Vílchez Rostrán",
+      "plan_precio": 845,
+      "dia_pago": 14,
+      "estado_contrato": "activo",
+      "caso_que_cubre": "DESCUENTO (cargo_extra NEGATIVO) + BORDE FINAL DE LA VENTANA. (a) El 6 ago se le aplicó un descuento de C$150 por 5 días sin servicio sobre la cuota del 14 ago → cargos_neto = −150, facturable C$695, impaga. Cubre que el '100%' de la tarjeta es NETO de descuentos y se mueve hacia abajo retroactivamente. (b) Su cuota vence el 14 ago = ÚLTIMO día del ciclo (el fin es exclusivo el 15) → tiene que ENTRAR; junto con TT-08 (15 jul, primer día) prueban los dos bordes de la ventana. (c) Su pago del ciclo jul es el 21 jul: es el BORDE exacto de la gracia (14 jul + 7 = 21 jul → NO es tarde) y además cae FUERA del ciclo jul → tail de la curva sin ser mora. Es el caso que separa 'tarde' de 'fuera del ciclo'.",
+      "cuotas": [
+        {
+          "vence": "2026-03-14",
+          "monto": 845,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-18",
+              "monto": 845,
+              "nota": "a tiempo (gracia hasta 21 mar)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-14",
+          "monto": 845,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-25",
+              "monto": 845,
+              "nota": "TARDE (gracia hasta 21 abr)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-14",
+          "monto": 845,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-20",
+              "monto": 845,
+              "nota": "a tiempo"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-14",
+          "monto": 845,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-19",
+              "monto": 845,
+              "nota": "a tiempo (gracia hasta 21 jun)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-14",
+          "monto": 845,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-21",
+              "monto": 845,
+              "nota": "BORDE exacto (14 jul + 7 = 21 jul) → NO tarde, PERO fecha fuera del ciclo jul → cae en el tail de la curva"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-14",
+          "monto": 845,
+          "cargos_neto": -150,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-01",
+      "nombre": "María Auxiliadora Pérez",
+      "plan_precio": 500,
+      "dia_pago": 3,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "El Calvario",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: El Calvario.",
+      "cuotas": [
+        {
+          "vence": "2026-04-03",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-05",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-03",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-05",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-03",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-05",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-03",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-05",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-03",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-05",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-03",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-02",
+      "nombre": "Juan Carlos Mendoza",
+      "plan_precio": 600,
+      "dia_pago": 5,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "San Antonio",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: San Antonio.",
+      "cuotas": [
+        {
+          "vence": "2026-04-05",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-07",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-05",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-07",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-05",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-07",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-05",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-07",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-05",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-07",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-05",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-03",
+      "nombre": "Rosa Amelia Castillo",
+      "plan_precio": 700,
+      "dia_pago": 8,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "Las Mercedes",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: Las Mercedes.",
+      "cuotas": [
+        {
+          "vence": "2026-05-08",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-10",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-08",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-10",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-08",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-10",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-08",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-10",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-08",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-04",
+      "nombre": "Pedro Antonio Rivera",
+      "plan_precio": 800,
+      "dia_pago": 10,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "La Esperanza",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: La Esperanza.",
+      "cuotas": [
+        {
+          "vence": "2026-04-10",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-12",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-10",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-12",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-10",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-12",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-10",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-12",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-10",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-12",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-10",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-05",
+      "nombre": "Ana Julia Sandoval",
+      "plan_precio": 900,
+      "dia_pago": 12,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "Los Robles",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: Los Robles.",
+      "cuotas": [
+        {
+          "vence": "2026-04-12",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-14",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-12",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-14",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-12",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-14",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-12",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-14",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-12",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-14",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-12",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-06",
+      "nombre": "Carlos Enrique Munguía",
+      "plan_precio": 500,
+      "dia_pago": 14,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "El Tamarindo",
+      "municipio": "Cinco Pinos",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: El Tamarindo.",
+      "cuotas": [
+        {
+          "vence": "2026-04-14",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-16",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-14",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-16",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-14",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-16",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-14",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-16",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-14",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-16",
+              "monto": 500,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-14",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-07",
+      "nombre": "Martha Lorena Vílchez",
+      "plan_precio": 600,
+      "dia_pago": 16,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "El Calvario",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: El Calvario.",
+      "cuotas": [
+        {
+          "vence": "2026-03-16",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-18",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-16",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-18",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-16",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-18",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-16",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-18",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-16",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-18",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-16",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-18",
+              "monto": 600,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "PB-08",
+      "nombre": "José Luis Aguilar",
+      "plan_precio": 700,
+      "dia_pago": 18,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "San Antonio",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: San Antonio.",
+      "cuotas": [
+        {
+          "vence": "2026-03-18",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-20",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-18",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-20",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-18",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-20",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-18",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-20",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-18",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-20",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-18",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-20",
+              "monto": 700,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "PB-09",
+      "nombre": "Silvia Elena Gutiérrez",
+      "plan_precio": 800,
+      "dia_pago": 20,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "Las Mercedes",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: Las Mercedes.",
+      "cuotas": [
+        {
+          "vence": "2026-03-20",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-22",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-20",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-22",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-20",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-22",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-20",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-22",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-20",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-22",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-20",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-22",
+              "monto": 800,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "PB-10",
+      "nombre": "Francisco Javier Ortiz",
+      "plan_precio": 900,
+      "dia_pago": 22,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "La Esperanza",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"puntual\": paga siempre, 2 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: La Esperanza.",
+      "cuotas": [
+        {
+          "vence": "2026-04-22",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-24",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-22",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-24",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-22",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-24",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-22",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-24",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-22",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-24",
+              "monto": 900,
+              "nota": "perfil puntual (+2d)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "PB-11",
+      "nombre": "Karla Vanessa Espinoza",
+      "plan_precio": 500,
+      "dia_pago": 25,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "Los Robles",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"gracia\": paga siempre, 6 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: Los Robles.",
+      "cuotas": [
+        {
+          "vence": "2026-03-25",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-31",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-25",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-01",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-25",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-31",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-25",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-01",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-25",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-31",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-25",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-12",
+      "nombre": "Denis Alberto Zamora",
+      "plan_precio": 600,
+      "dia_pago": 28,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "El Tamarindo",
+      "municipio": "Cinco Pinos",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"gracia\": paga siempre, 6 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: El Tamarindo.",
+      "cuotas": [
+        {
+          "vence": "2026-03-28",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-03",
+              "monto": 600,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-28",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-04",
+              "monto": 600,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-28",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-03",
+              "monto": 600,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-28",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-04",
+              "monto": 600,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-28",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-03",
+              "monto": 600,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-28",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-13",
+      "nombre": "Yolanda del Carmen Ruiz",
+      "plan_precio": 700,
+      "dia_pago": 3,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "El Calvario",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"gracia\": paga siempre, 6 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: El Calvario.",
+      "cuotas": [
+        {
+          "vence": "2026-04-03",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-09",
+              "monto": 700,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-03",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-09",
+              "monto": 700,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-03",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-09",
+              "monto": 700,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-03",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-09",
+              "monto": 700,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-03",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-09",
+              "monto": 700,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-03",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-14",
+      "nombre": "Marvin Antonio Salgado",
+      "plan_precio": 800,
+      "dia_pago": 5,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "San Antonio",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"gracia\": paga siempre, 6 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: San Antonio.",
+      "cuotas": [
+        {
+          "vence": "2026-04-05",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-11",
+              "monto": 800,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-05",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-11",
+              "monto": 800,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-05",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-11",
+              "monto": 800,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-05",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-11",
+              "monto": 800,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-05",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-11",
+              "monto": 800,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-05",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-15",
+      "nombre": "Claudia Patricia Reyes",
+      "plan_precio": 900,
+      "dia_pago": 8,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador Test",
+      "comunidad": "Las Mercedes",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"gracia\": paga siempre, 6 dias despues del vencimiento. Cobrador: Cobrador Test. Comunidad: Las Mercedes.",
+      "cuotas": [
+        {
+          "vence": "2026-04-08",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-14",
+              "monto": 900,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-08",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-14",
+              "monto": 900,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-08",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-14",
+              "monto": 900,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-08",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-14",
+              "monto": 900,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-08",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-14",
+              "monto": 900,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-08",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-16",
+      "nombre": "Óscar Danilo Herrera",
+      "plan_precio": 500,
+      "dia_pago": 10,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "La Esperanza",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"gracia\": paga siempre, 6 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: La Esperanza.",
+      "cuotas": [
+        {
+          "vence": "2026-04-10",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-16",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-10",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-16",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-10",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-16",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-10",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-16",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-10",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-16",
+              "monto": 500,
+              "nota": "perfil gracia (+6d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-09-10",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-17",
+      "nombre": "Reyna Isabel Flores",
+      "plan_precio": 600,
+      "dia_pago": 12,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "Los Robles",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"tardio\": paga siempre, 16 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: Los Robles.",
+      "cuotas": [
+        {
+          "vence": "2026-04-12",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-28",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-12",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-28",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-12",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-28",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-12",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-28",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-12",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-12",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-18",
+      "nombre": "Wilfredo José Cruz",
+      "plan_precio": 700,
+      "dia_pago": 14,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "El Tamarindo",
+      "municipio": "Cinco Pinos",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"tardio\": paga siempre, 16 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: El Tamarindo.",
+      "cuotas": [
+        {
+          "vence": "2026-06-14",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-30",
+              "monto": 700,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-14",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-30",
+              "monto": 700,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-14",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-14",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-19",
+      "nombre": "Xiomara Elizabeth Toruño",
+      "plan_precio": 800,
+      "dia_pago": 16,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "El Calvario",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"tardio\": paga siempre, 16 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: El Calvario.",
+      "cuotas": [
+        {
+          "vence": "2026-03-16",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-01",
+              "monto": 800,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-16",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-02",
+              "monto": 800,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-16",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-01",
+              "monto": 800,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-16",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-02",
+              "monto": 800,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-16",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-01",
+              "monto": 800,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-16",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-20",
+      "nombre": "Bayardo Ramón Gómez",
+      "plan_precio": 900,
+      "dia_pago": 18,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "San Antonio",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"tardio\": paga siempre, 16 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: San Antonio.",
+      "cuotas": [
+        {
+          "vence": "2026-03-18",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-03",
+              "monto": 900,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-18",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-04",
+              "monto": 900,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-18",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-03",
+              "monto": 900,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-18",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-04",
+              "monto": 900,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-18",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-03",
+              "monto": 900,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-18",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-21",
+      "nombre": "Migdalia Esther Núñez",
+      "plan_precio": 500,
+      "dia_pago": 20,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "Las Mercedes",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"tardio\": paga siempre, 16 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: Las Mercedes.",
+      "cuotas": [
+        {
+          "vence": "2026-03-20",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-05",
+              "monto": 500,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-20",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-06",
+              "monto": 500,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-20",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-05",
+              "monto": 500,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-20",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-06",
+              "monto": 500,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-20",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-05",
+              "monto": 500,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-20",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-22",
+      "nombre": "Álvaro Ernesto Cerda",
+      "plan_precio": 600,
+      "dia_pago": 22,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "La Esperanza",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"tardio\": paga siempre, 16 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: La Esperanza.",
+      "cuotas": [
+        {
+          "vence": "2026-03-22",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-07",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-22",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-08",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-22",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-07",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-22",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-08",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-22",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-07",
+              "monto": 600,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-22",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-23",
+      "nombre": "Fátima Raquel Obando",
+      "plan_precio": 700,
+      "dia_pago": 25,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "Los Robles",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"tardio\": paga siempre, 16 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: Los Robles.",
+      "cuotas": [
+        {
+          "vence": "2026-03-25",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-10",
+              "monto": 700,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-25",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-11",
+              "monto": 700,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-25",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-10",
+              "monto": 700,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-25",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-11",
+              "monto": 700,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-25",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-10",
+              "monto": 700,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-25",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-24",
+      "nombre": "Douglas Iván Peralta",
+      "plan_precio": 800,
+      "dia_pago": 28,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "El Tamarindo",
+      "municipio": "Cinco Pinos",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"tardio\": paga siempre, 16 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: El Tamarindo.",
+      "cuotas": [
+        {
+          "vence": "2026-05-28",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-13",
+              "monto": 800,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-28",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-14",
+              "monto": 800,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-28",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-13",
+              "monto": 800,
+              "nota": "perfil tardio (+16d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-28",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-25",
+      "nombre": "Norma Cecilia Lanuza",
+      "plan_precio": 900,
+      "dia_pago": 3,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "El Calvario",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"muy_tardio\": paga siempre, 38 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: El Calvario.",
+      "cuotas": [
+        {
+          "vence": "2026-04-03",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-11",
+              "monto": 900,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-03",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-10",
+              "monto": 900,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-03",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-11",
+              "monto": 900,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-03",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-10",
+              "monto": 900,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-03",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-03",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-26",
+      "nombre": "Erick Josué Membreño",
+      "plan_precio": 500,
+      "dia_pago": 5,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "San Antonio",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"muy_tardio\": paga siempre, 38 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: San Antonio.",
+      "cuotas": [
+        {
+          "vence": "2026-04-05",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-13",
+              "monto": 500,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-05",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-12",
+              "monto": 500,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-05",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-13",
+              "monto": 500,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-05",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-12",
+              "monto": 500,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-05",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-05",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-27",
+      "nombre": "Perla María Bermúdez",
+      "plan_precio": 600,
+      "dia_pago": 8,
+      "estado_contrato": "activo",
+      "cobrador": "Cobrador2 Test",
+      "comunidad": "Las Mercedes",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"muy_tardio\": paga siempre, 38 dias despues del vencimiento. Cobrador: Cobrador2 Test. Comunidad: Las Mercedes.",
+      "cuotas": [
+        {
+          "vence": "2026-04-08",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-16",
+              "monto": 600,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-08",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-15",
+              "monto": 600,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-08",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-16",
+              "monto": 600,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-08",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-15",
+              "monto": 600,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-08",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-08",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-28",
+      "nombre": "Gerardo Antonio Solís",
+      "plan_precio": 700,
+      "dia_pago": 10,
+      "estado_contrato": "activo",
+      "cobrador": "ACobranza",
+      "comunidad": "La Esperanza",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"muy_tardio\": paga siempre, 38 dias despues del vencimiento. Cobrador: ACobranza. Comunidad: La Esperanza.",
+      "cuotas": [
+        {
+          "vence": "2026-04-10",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-18",
+              "monto": 700,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-10",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-17",
+              "monto": 700,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-10",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-18",
+              "monto": 700,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-10",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-08-17",
+              "monto": 700,
+              "nota": "perfil muy_tardio (+38d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-10",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-10",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-29",
+      "nombre": "Aracely del Socorro Vega",
+      "plan_precio": 800,
+      "dia_pago": 12,
+      "estado_contrato": "activo",
+      "cobrador": "ACobranza",
+      "comunidad": "Los Robles",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_may\": paga siempre, 11 dias despues del vencimiento. Deja de pagar a partir del ciclo may. Cobrador: ACobranza. Comunidad: Los Robles.",
+      "cuotas": [
+        {
+          "vence": "2026-07-12",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-12",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-12",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-30",
+      "nombre": "Mauricio Enrique Lira",
+      "plan_precio": 900,
+      "dia_pago": 14,
+      "estado_contrato": "activo",
+      "cobrador": "ACobranza",
+      "comunidad": "El Tamarindo",
+      "municipio": "Cinco Pinos",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_may\": paga siempre, 11 dias despues del vencimiento. Deja de pagar a partir del ciclo may. Cobrador: ACobranza. Comunidad: El Tamarindo.",
+      "cuotas": [
+        {
+          "vence": "2026-04-14",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-25",
+              "monto": 900,
+              "nota": "perfil dejo_may (+11d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-14",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-06-14",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-14",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-14",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-14",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-31",
+      "nombre": "Blanca Rosa Ampié",
+      "plan_precio": 500,
+      "dia_pago": 16,
+      "estado_contrato": "activo",
+      "cobrador": "ACobranza",
+      "comunidad": "El Calvario",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_may\": paga siempre, 11 dias despues del vencimiento. Deja de pagar a partir del ciclo may. Cobrador: ACobranza. Comunidad: El Calvario.",
+      "cuotas": [
+        {
+          "vence": "2026-03-16",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-27",
+              "monto": 500,
+              "nota": "perfil dejo_may (+11d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-16",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-05-16",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-06-16",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-16",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-16",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-32",
+      "nombre": "Nelson Ariel Chavarría",
+      "plan_precio": 600,
+      "dia_pago": 18,
+      "estado_contrato": "activo",
+      "cobrador": "ACobranza",
+      "comunidad": "San Antonio",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_jun\": paga siempre, 9 dias despues del vencimiento. Deja de pagar a partir del ciclo jun. Cobrador: ACobranza. Comunidad: San Antonio.",
+      "cuotas": [
+        {
+          "vence": "2026-03-18",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-27",
+              "monto": 600,
+              "nota": "perfil dejo_jun (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-18",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-27",
+              "monto": 600,
+              "nota": "perfil dejo_jun (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-18",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-06-18",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-18",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-18",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-33",
+      "nombre": "Ivania Lucía Baltodano",
+      "plan_precio": 700,
+      "dia_pago": 20,
+      "estado_contrato": "activo",
+      "cobrador": "ACobranza",
+      "comunidad": "Las Mercedes",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_jun\": paga siempre, 9 dias despues del vencimiento. Deja de pagar a partir del ciclo jun. Cobrador: ACobranza. Comunidad: Las Mercedes.",
+      "cuotas": [
+        {
+          "vence": "2026-03-20",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-29",
+              "monto": 700,
+              "nota": "perfil dejo_jun (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-20",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-29",
+              "monto": 700,
+              "nota": "perfil dejo_jun (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-20",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-06-20",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-20",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-20",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-34",
+      "nombre": "Hernaldo José Corea",
+      "plan_precio": 800,
+      "dia_pago": 22,
+      "estado_contrato": "suspendido (suspendido el 10 ago 2026)",
+      "cobrador": "ACobranza",
+      "comunidad": "La Esperanza",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_jun\": paga siempre, 9 dias despues del vencimiento. Deja de pagar a partir del ciclo jun. Cobrador: ACobranza. Comunidad: La Esperanza. Contrato SUSPENDIDO: conserva la deuda y cuenta como mora (regla 2026-08-26).",
+      "cuotas": [
+        {
+          "vence": "2026-03-22",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-03-31",
+              "monto": 800,
+              "nota": "perfil dejo_jun (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-22",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-01",
+              "monto": 800,
+              "nota": "perfil dejo_jun (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-22",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-06-22",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-22",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-22",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-35",
+      "nombre": "Scarleth Massiel Duarte",
+      "plan_precio": 900,
+      "dia_pago": 25,
+      "estado_contrato": "activo",
+      "cobrador": "ACobranza",
+      "comunidad": "Los Robles",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_jun\": paga siempre, 9 dias despues del vencimiento. Deja de pagar a partir del ciclo jun. Cobrador: ACobranza. Comunidad: Los Robles.",
+      "cuotas": [
+        {
+          "vence": "2026-03-25",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-03",
+              "monto": 900,
+              "nota": "perfil dejo_jun (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-04-25",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-04",
+              "monto": 900,
+              "nota": "perfil dejo_jun (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-25",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-06-25",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-25",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-25",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-36",
+      "nombre": "Ronald Alexander Pavón",
+      "plan_precio": 500,
+      "dia_pago": 28,
+      "estado_contrato": "activo",
+      "cobrador": "ACobranza",
+      "comunidad": "El Tamarindo",
+      "municipio": "Cinco Pinos",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_jul\": paga siempre, 9 dias despues del vencimiento. Deja de pagar a partir del ciclo jul. Cobrador: ACobranza. Comunidad: El Tamarindo.",
+      "cuotas": [
+        {
+          "vence": "2026-06-28",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-28",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-28",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-37",
+      "nombre": "Damaris Antonia Fonseca",
+      "plan_precio": 600,
+      "dia_pago": 3,
+      "estado_contrato": "suspendido (suspendido el 10 ago 2026)",
+      "cobrador": null,
+      "comunidad": "El Calvario",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_jul\": paga siempre, 9 dias despues del vencimiento. Deja de pagar a partir del ciclo jul. Cobrador: SIN ASIGNAR (admin-managed). Comunidad: El Calvario. Contrato SUSPENDIDO: conserva la deuda y cuenta como mora (regla 2026-08-26).",
+      "cuotas": [
+        {
+          "vence": "2026-04-03",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-12",
+              "monto": 600,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-03",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-12",
+              "monto": 600,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-03",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-12",
+              "monto": 600,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-03",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-03",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-03",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-38",
+      "nombre": "Julio César Matamoros",
+      "plan_precio": 700,
+      "dia_pago": 5,
+      "estado_contrato": "activo",
+      "cobrador": null,
+      "comunidad": "San Antonio",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_jul\": paga siempre, 9 dias despues del vencimiento. Deja de pagar a partir del ciclo jul. Cobrador: SIN ASIGNAR (admin-managed). Comunidad: San Antonio.",
+      "cuotas": [
+        {
+          "vence": "2026-04-05",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-14",
+              "monto": 700,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-05",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-14",
+              "monto": 700,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-05",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-14",
+              "monto": 700,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-05",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-05",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-05",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-39",
+      "nombre": "Heydi Johana Quintero",
+      "plan_precio": 800,
+      "dia_pago": 8,
+      "estado_contrato": "activo",
+      "cobrador": null,
+      "comunidad": "Las Mercedes",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_jul\": paga siempre, 9 dias despues del vencimiento. Deja de pagar a partir del ciclo jul. Cobrador: SIN ASIGNAR (admin-managed). Comunidad: Las Mercedes.",
+      "cuotas": [
+        {
+          "vence": "2026-04-08",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-17",
+              "monto": 800,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-08",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-17",
+              "monto": 800,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-08",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-17",
+              "monto": 800,
+              "nota": "perfil dejo_jul (+9d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-08",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-08",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-08",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-40",
+      "nombre": "Rigoberto de Jesús Alaniz",
+      "plan_precio": 900,
+      "dia_pago": 10,
+      "estado_contrato": "activo",
+      "cobrador": null,
+      "comunidad": "La Esperanza",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_ago\": paga siempre, 4 dias despues del vencimiento. Deja de pagar a partir del ciclo ago. Cobrador: SIN ASIGNAR (admin-managed). Comunidad: La Esperanza.",
+      "cuotas": [
+        {
+          "vence": "2026-04-10",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-14",
+              "monto": 900,
+              "nota": "perfil dejo_ago (+4d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-10",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-14",
+              "monto": 900,
+              "nota": "perfil dejo_ago (+4d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-10",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-14",
+              "monto": 900,
+              "nota": "perfil dejo_ago (+4d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-10",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-14",
+              "monto": 900,
+              "nota": "perfil dejo_ago (+4d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-10",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-10",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-41",
+      "nombre": "Verónica Auxiliadora Ubau",
+      "plan_precio": 500,
+      "dia_pago": 12,
+      "estado_contrato": "activo",
+      "cobrador": null,
+      "comunidad": "Los Robles",
+      "municipio": "Villanueva",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_ago\": paga siempre, 4 dias despues del vencimiento. Deja de pagar a partir del ciclo ago. Cobrador: SIN ASIGNAR (admin-managed). Comunidad: Los Robles.",
+      "cuotas": [
+        {
+          "vence": "2026-08-12",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-12",
+          "monto": 500,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-42",
+      "nombre": "Elmer Antonio Bravo",
+      "plan_precio": 600,
+      "dia_pago": 14,
+      "estado_contrato": "activo",
+      "cobrador": null,
+      "comunidad": "El Tamarindo",
+      "municipio": "Cinco Pinos",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"dejo_ago\": paga siempre, 4 dias despues del vencimiento. Deja de pagar a partir del ciclo ago. Cobrador: SIN ASIGNAR (admin-managed). Comunidad: El Tamarindo.",
+      "cuotas": [
+        {
+          "vence": "2026-04-14",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-04-18",
+              "monto": 600,
+              "nota": "perfil dejo_ago (+4d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-05-14",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-05-18",
+              "monto": 600,
+              "nota": "perfil dejo_ago (+4d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-06-14",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-06-18",
+              "monto": 600,
+              "nota": "perfil dejo_ago (+4d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-07-14",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pagada",
+          "pagos": [
+            {
+              "fecha": "2026-07-18",
+              "monto": 600,
+              "nota": "perfil dejo_ago (+4d)"
+            }
+          ]
+        },
+        {
+          "vence": "2026-08-14",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-09-14",
+          "monto": 600,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-43",
+      "nombre": "Lucía Margarita Espinales",
+      "plan_precio": 700,
+      "dia_pago": 16,
+      "estado_contrato": "activo",
+      "cobrador": null,
+      "comunidad": "El Naranjo",
+      "municipio": "Somotillo",
+      "cliente_activo": false,
+      "caso_que_cubre": "BORDE: comunidad de UN SOLO TRAMO. Es el unico cliente de \"El Naranjo\" y sus 6 cuotas en mora son todas de 700, asi que su desglose tiene una sola linea. Existe para que se pueda probar que la flecha de desplegar aparece IGUAL: hubo una version que la ocultaba en ese caso -\"abrirlo repetiria la fila\"- y la fila nunca dice el monto UNITARIO. Ruben lo reporto el 2026-09-02. No mueve ningun total: solo cambia de que comunidad cuelga.",
+      "cuotas": [
+        {
+          "vence": "2026-03-16",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-04-16",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-05-16",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-06-16",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-16",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-16",
+          "monto": 700,
+          "cargos_neto": 0,
+          "estado": "pendiente",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-44",
+      "nombre": "Freddy Ramón Calderón",
+      "plan_precio": 800,
+      "dia_pago": 18,
+      "estado_contrato": "cancelado (cancelado el 20 ago 2026)",
+      "cobrador": null,
+      "comunidad": "San Antonio",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"nunca\": nunca pago. Deja de pagar a partir del ciclo abr. Cobrador: SIN ASIGNAR (admin-managed). Comunidad: San Antonio. Contrato CANCELADO: su deuda quedo condonada (regla 2026-08-24), solo sobrevive lo que ya habia pagado.",
+      "cuotas": [
+        {
+          "vence": "2026-07-18",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-18",
+          "monto": 800,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        }
+      ]
+    },
+    {
+      "codigo": "PB-45",
+      "nombre": "Sonia María Guevara",
+      "plan_precio": 900,
+      "dia_pago": 20,
+      "estado_contrato": "cancelado (cancelado el 20 ago 2026)",
+      "cobrador": null,
+      "comunidad": "Las Mercedes",
+      "municipio": "Somotillo",
+      "cliente_activo": true,
+      "caso_que_cubre": "POBLACION (no es un caso borde). Perfil de pago \"nunca\": nunca pago. Deja de pagar a partir del ciclo abr. Cobrador: SIN ASIGNAR (admin-managed). Comunidad: Las Mercedes. Contrato CANCELADO: su deuda quedo condonada (regla 2026-08-24), solo sobrevive lo que ya habia pagado.",
+      "cuotas": [
+        {
+          "vence": "2026-03-20",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        },
+        {
+          "vence": "2026-04-20",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        },
+        {
+          "vence": "2026-05-20",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        },
+        {
+          "vence": "2026-06-20",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        },
+        {
+          "vence": "2026-07-20",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        },
+        {
+          "vence": "2026-08-20",
+          "monto": 900,
+          "cargos_neto": 0,
+          "estado": "anulada",
+          "pagos": []
+        }
+      ]
+    }
+  ],
+  "esperados_ciclo_actual": [
+    {
+      "tarjeta": "Cobros del mes (ciclo 15 jul – 14 ago 2026)",
+      "fila": "Cobros",
+      "usuarios": 13,
+      "cuotas": 15,
+      "monto": 11200,
+      "porcentaje": "100% (literal, es el denominador)",
+      "como_se_calcula": "15 cuotas no anuladas con vencimiento en [15 jul, 15 ago) sobre contrato no suspendido. Suma de (monto + cargos_neto): 745 (TT-01) + 1150 (TT-02) + 425 (TT-03) + 880 (TT-04) + 690 (TT-05A) + 395 (TT-05B) + 565 (TT-06) + 0 (TT-07, 1075 − 1075 de crédito) + 935 (TT-08) + 615 (TT-10) + 730 (TT-11, 480 + 250 reconexión) + 850 (TT-12) + 1025 (TT-13 mensual) + 1500 (TT-13 manual) + 695 (TT-14, 845 − 150) = 11.200. Usuarios = 13 clientes distintos (TT-05 aporta 2 cuotas y 1 usuario; TT-13 aporta 2 cuotas y 1 usuario). NO entra TT-09 (contrato suspendido, y además su cuota está anulada) ni la cuota manual anulada de TT-12 ni la cuota del 18 ago de TT-01 (ciclo sep)."
+    },
+    {
+      "tarjeta": "Cobros del mes (ciclo 15 jul – 14 ago 2026)",
+      "fila": "Recuperado",
+      "usuarios": 7,
+      "cuotas": 8,
+      "monto": 7000,
+      "porcentaje": "63%  (el valor exacto es 62,5% — la app redondea con .round(), que sube el .5)",
+      "como_se_calcula": "Suma de pagos VIVOS (anulado=0 y en_revision=0) aplicados a esas 15 cuotas, sin cota de fecha: 745 (TT-01, 20 jul) + 425 (TT-03, 1 ago) + 880 (TT-04, 28 jul) + 690 (TT-05A, 29 jul) + 200 (TT-06, 5 ago) + 2135 (TT-08: 935 + 1200) + 1025 (TT-13, pagado el 9 jul) + 900 (TT-13 manual, 5 ago) = 7.000. Cuotas = 8 cuotas con al menos un pago vivo. Usuarios = 7 (TT-01, TT-03, TT-04, TT-05, TT-06, TT-08, TT-13). NO cuentan el pago anulado de TT-12 (31 jul) ni el en_revision (2 jul, además de otro ciclo)."
+    },
+    {
+      "tarjeta": "Cobros del mes (ciclo 15 jul – 14 ago 2026)",
+      "fila": "↳ a tiempo o en gracia (sub-fila, solo Monto)",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 5430,
+      "porcentaje": "—",
+      "como_se_calcula": "Recuperado (7.000) − Recuperado tarde (1.570) = 5.430. Se calcula en Dart como resta de dos subconsultas anidadas, así que las dos sub-filas siempre suman el Recuperado exacto."
+    },
+    {
+      "tarjeta": "Cobros del mes (ciclo 15 jul – 14 ago 2026)",
+      "fila": "↳ tarde (pasada la gracia) (sub-fila, solo Monto)",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 1570,
+      "porcentaje": "—",
+      "como_se_calcula": "Pagos vivos con date(venc,'+7 days') < date(fecha_pago): TT-04 (venc 20 jul, gracia hasta 27 jul, pagó 28 jul) 880 + TT-05A (venc 18 jul, gracia hasta 25 jul, pagó 29 jul) 690 = 1.570. NO entran: TT-03 (pagó el 1 ago = borde exacto), TT-08 (pagos del 17 y 18 jul con gracia hasta el 22), TT-06 (abonó el 5 ago con gracia hasta el 9), TT-13 manual (pagó el mismo día). Este número tiene que dar IDÉNTICO al 'Recuperado' de la tarjeta de Mora del ciclo."
+    },
+    {
+      "tarjeta": "Cobros del mes (ciclo 15 jul – 14 ago 2026)",
+      "fila": "Por recuperar — LO QUE LA APP MUESTRA HOY (bug)",
+      "usuarios": 8,
+      "cuotas": 8,
+      "monto": 4200,
+      "porcentaje": "38%  (el valor exacto es 37,5%)",
+      "como_se_calcula": "El MONTO no se consulta: es (metaMonto − recMonto).clamp(0,∞) = 11.200 − 7.000 = 4.200. Los CONTEOS sí se consultan (saldo canónico > 0,009) → 8 cuotas y 8 usuarios (TT-02, TT-05, TT-06, TT-10, TT-11, TT-12, TT-13, TT-14). Monto y conteos salen de universos distintos."
+    },
+    {
+      "tarjeta": "Cobros del mes (ciclo 15 jul – 14 ago 2026)",
+      "fila": "Por recuperar — VALOR CORRECTO (lo que debería mostrar)",
+      "usuarios": 8,
+      "cuotas": 8,
+      "monto": 5400,
+      "porcentaje": "48,2% del 100%",
+      "como_se_calcula": "Suma de los saldos reales de esas mismas 8 cuotas: 1150 (TT-02) + 395 (TT-05B) + 365 (TT-06) + 615 (TT-10) + 730 (TT-11) + 850 (TT-12) + 600 (TT-13 manual) + 695 (TT-14) = 5.400. DESVÍO = 5.400 − 4.200 = C$1.200, exactamente el sobrepago de TT-08 (su saldo de −1.200 se resta de la deuda de los demás). Este es el hallazgo alto #1 y es medible con calculadora abriendo las 8 cuotas."
+    },
+    {
+      "tarjeta": "Cobros del mes (ciclo 15 jul – 14 ago 2026)",
+      "fila": "SUMA DE LAS DOS PASTILLAS (control del bug de redondeo)",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 0,
+      "porcentaje": "101%  (63% + 38%)",
+      "como_se_calcula": "7.000 / 11.200 = 0,625 exacto → 62,5 → .round() = 63. 4.200 / 11.200 = 0,375 exacto → 37,5 → .round() = 38. Dart redondea el .5 alejándose del cero, así que las DOS pastillas suben. El escenario está calibrado a propósito para que el cociente caiga exacto en 5/8 y 3/8 (valores binarios exactos, sin ruido de punto flotante) y el 101% aparezca SIEMPRE, no por casualidad."
+    },
+    {
+      "tarjeta": "Cobros del mes (ciclo 15 jul – 14 ago 2026)",
+      "fila": "Nota al pie: 'ya venía pagado por adelantado antes del 15 jul'",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 1025,
+      "porcentaje": "—",
+      "como_se_calcula": "Único pago vivo con fecha anterior al 15 jul sobre una cuota del ciclo: TT-13, C$1.025 pagados el 9 jul sobre la cuota del 12 ago. Es también el punto de arranque (baseline) de la curva verde."
+    },
+    {
+      "tarjeta": "Cobros del mes — GRÁFICO",
+      "fila": "Curva verde: valor final (granTotal) y tooltip 'Cumplimiento' del último punto",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 7000,
+      "porcentaje": "tooltip: 62,5%  ·  pastilla de la fila: 63%",
+      "como_se_calcula": "baseline 1.025 (9 jul) + en ventana 5.975 (935+1200+745+880+690+425+200+900) + tail 0 = 7.000 = 'Recuperado' de la tabla (tiene que cerrar exacto). El tooltip 'Cumplimiento' hace 7.000/11.200 sin clamp y con un decimal → 62,5%, mientras la pastilla de la misma fila dice 63%: dos porcentajes distintos del mismo cociente a un hover de distancia."
+    },
+    {
+      "tarjeta": "Cobros del mes — GRÁFICO",
+      "fila": "Línea roja 'Recuperado tarde (mora)': valor final",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 1570,
+      "porcentaje": "—",
+      "como_se_calcula": "880 el 28 jul + 690 el 29 jul, ambos dentro de la ventana → sin baseline y sin tail. Tiene que terminar exactamente en la sub-fila 'tarde' de la tabla y en el 'Recuperado' de la tarjeta de Mora."
+    },
+    {
+      "tarjeta": "Mora del ciclo (15 jul – 14 ago 2026, gracia 7 días)",
+      "fila": "Total mora",
+      "usuarios": 6,
+      "cuotas": 7,
+      "monto": 4525,
+      "porcentaje": "100% (literal)",
+      "como_se_calcula": "Universo: cuotas del ciclo cuya gracia YA venció contra hoy (venc + 7 < 11 ago → venc ≤ 3 ago) que siguen impagas O que se recuperaron tarde. Son 7: TT-04 (20 jul, recuperada tarde), TT-05A (18 jul, recuperada tarde), TT-05B (28 jul), TT-06 (2 ago, parcial), TT-10 (22 jul), TT-11 (1 ago), TT-12 (28 jul). Usuarios = 6 (TT-05 aporta 2 cuotas). MONTO = pata A (impago) + pata B (recuperado tarde). Pata A = 395 + 365 + 615 + 730 + 850 = 2.955. Pata B = 880 + 690 = 1.570. Total 4.525. Quedan FUERA (todavía en gracia): TT-02 (5 ago, gracia hasta el 12), TT-13 manual (5 ago), TT-07 (10 ago), TT-13 (12 ago), TT-14 (14 ago)."
+    },
+    {
+      "tarjeta": "Mora del ciclo (15 jul – 14 ago 2026, gracia 7 días)",
+      "fila": "Recuperado",
+      "usuarios": 2,
+      "cuotas": 2,
+      "monto": 1570,
+      "porcentaje": "35%  (1.570/4.525 = 34,70%)",
+      "como_se_calcula": "Pagos vivos con venc + 7 < fecha_pago: TT-04 C$880 (28 jul) y TT-05A C$690 (29 jul). Usuarios 2 (TT-04, TT-05). Tiene que ser IDÉNTICO a la sub-fila 'tarde' de Cobros del mes."
+    },
+    {
+      "tarjeta": "Mora del ciclo (15 jul – 14 ago 2026, gracia 7 días)",
+      "fila": "Por recuperar",
+      "usuarios": 5,
+      "cuotas": 5,
+      "monto": 2955,
+      "porcentaje": "65%  (2.955/4.525 = 65,30%)",
+      "como_se_calcula": "MONTO por resta: 4.525 − 1.570 = 2.955 (acá SÍ coincide con la pata A porque el clamp max(saldo,0) ya está aplicado en esa pata). CONTEOS consultados: 5 cuotas pendiente/parcial con saldo > 0,009 (TT-05B 395, TT-06 365, TT-10 615, TT-11 730, TT-12 850) y 5 usuarios."
+    },
+    {
+      "tarjeta": "Mora del ciclo — CONTROL DE COLUMNAS",
+      "fila": "Usuarios: Recuperado + Por recuperar vs Total",
+      "usuarios": 7,
+      "cuotas": 7,
+      "monto": 0,
+      "porcentaje": "desvío +1 usuario",
+      "como_se_calcula": "2 + 5 = 7 contra un Total de 6. El sobrante es TT-05 (Yahoska), que recuperó tarde la cuota de un contrato y sigue debiendo la del otro → cuenta en las dos filas. Es CORRECTO por diseño, pero el (i) de la tarjeta de Mora NO lo advierte (la nota solo existe en el (i) de Cobros del mes). La columna Cuotas sí cierra exacto (2 + 5 = 7 = 7)."
+    },
+    {
+      "tarjeta": "Cobros del mes — CONTROL DE COLUMNAS",
+      "fila": "Usuarios y Cuotas: Recuperado + Por recuperar vs Cobros",
+      "usuarios": 15,
+      "cuotas": 16,
+      "monto": 0,
+      "porcentaje": "desvío +2 usuarios y +1 cuota",
+      "como_se_calcula": "USUARIOS: 7 + 8 = 15 contra 13. En las DOS filas están TT-05 (recuperó una cuota, debe otra), TT-06 (abono parcial) y TT-13 (cuota mensual pagada + instalación parcial) = +3; en NINGUNA fila está TT-07 (cuota saldada 100% con crédito, sin pago y sin saldo) = −1. Neto +2. CUOTAS: 8 + 8 = 16 contra 15. En las dos filas están la cuota parcial de TT-06 y la instalación parcial de TT-13 = +2; en ninguna, la cuota de TT-07 = −1. Neto +1. El (i) solo explica el descuadre 'de más' y solo para Usuarios."
+    },
+    {
+      "tarjeta": "Mora del ciclo — BUG DEL PRIMER FRAME (gracia hardcodeada en 10)",
+      "fila": "Total mora al abrir la pantalla, antes de que cargue el setting",
+      "usuarios": 4,
+      "cuotas": 4,
+      "monto": 2550,
+      "porcentaje": "100%",
+      "como_se_calcula": "Con gracia 10 (el valor hardcodeado) el corte pasa a venc ≤ 31 jul y el criterio de 'tarde' a venc + 10 < fecha_pago. Quedan: pata A = TT-05B 395 + TT-10 615 + TT-12 850 = 1.860 (salen TT-06 del 2 ago y TT-11 del 1 ago); pata B = solo TT-05A 690 (TT-04 deja de ser tarde: 20 jul + 10 = 30 jul > 28 jul). Total 1.860 + 690 = 2.550 con 4 cuotas y 4 usuarios. Un instante después salta a C$4.525 / 7 cuotas / 6 usuarios sin que nadie toque nada. Por eso el escenario exige dias_gracia = 7: con 10 este bug es invisible."
+    },
+    {
+      "tarjeta": "KPIs de caja del Resumen",
+      "fila": "Hoy (11 ago 2026)",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 745,
+      "porcentaje": "1 cobro",
+      "como_se_calcula": "Único pago con date(fecha_pago) = 11 ago: TT-01 C$745 (adelanto de la cuota del 18 ago). Confirma que la caja NO filtra por ventana de vencimiento."
+    },
+    {
+      "tarjeta": "KPIs de caja del Resumen",
+      "fila": "Esta semana (desde el domingo 9 ago)",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 1045,
+      "porcentaje": "2 cobros",
+      "como_se_calcula": "El 11 ago 2026 es martes → el domingo de la semana es el 9 ago. Pagos con fecha ≥ 9 ago: TT-10 C$300 (10 ago) + TT-01 C$745 (11 ago) = 1.045."
+    },
+    {
+      "tarjeta": "KPIs de caja del Resumen",
+      "fila": "Este período (desde el 15 jul)",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 9495,
+      "porcentaje": "13 cobros",
+      "como_se_calcula": "Pagos vivos con fecha ≥ 15 jul, sin importar a qué cuota se aplicaron: 935 (17 jul) + 1200 (18 jul) + 745 (20 jul) + 480 (20 jul) + 845 (21 jul) + 880 (28 jul) + 690 (29 jul) + 425 (1 ago) + 200 (5 ago) + 900 (5 ago) + 1150 (6 ago) + 300 (10 ago) + 745 (11 ago) = 9.495. El pago anulado de TT-12 (31 jul) NO entra."
+    },
+    {
+      "tarjeta": "KPIs de caja — desglose",
+      "fila": "De este ciclo",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 5975,
+      "porcentaje": "63%",
+      "como_se_calcula": "Pagos del período aplicados a cuotas que vencen dentro de [15 jul, 15 ago): 935 + 1200 + 745 + 880 + 690 + 425 + 200 + 900 = 5.975. OJO: es MENOR que el 'Recuperado' de la tarjeta de tendencia (C$7.000) por el pre-pago de TT-13 (C$1.025 cobrados el 9 jul, antes del 15). Diferencia esperada exactamente C$1.025."
+    },
+    {
+      "tarjeta": "KPIs de caja — desglose",
+      "fila": "Atrasos de ciclos anteriores",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 2775,
+      "porcentaje": "29%",
+      "como_se_calcula": "480 (TT-11, cuota del 1 jul) + 845 (TT-14, cuota del 14 jul) + 1150 (TT-02, cuota del 5 jul) + 300 (TT-10, cuota del 22 may) = 2.775."
+    },
+    {
+      "tarjeta": "KPIs de caja — desglose",
+      "fila": "↳ incluido en Atrasos — mora vieja recuperada",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 1930,
+      "porcentaje": "(sin % a propósito)",
+      "como_se_calcula": "De los atrasos, los que se pagaron pasada la gracia: 480 (TT-11: 1 jul + 7 = 8 jul < 20 jul) + 1150 (TT-02: 5 jul + 7 = 12 jul < 6 ago) + 300 (TT-10: 22 may + 7 = 29 may < 10 ago) = 1.930. NO entra TT-14 (14 jul + 7 = 21 jul, pagó el 21 jul → borde exacto, no es tarde)."
+    },
+    {
+      "tarjeta": "KPIs de caja — desglose",
+      "fila": "Adelantos a cuotas futuras",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 745,
+      "porcentaje": "8%",
+      "como_se_calcula": "TT-01, C$745 pagados el 11 ago sobre la cuota del 18 ago (vence a partir del 15 ago → ciclo siguiente)."
+    },
+    {
+      "tarjeta": "KPIs de caja — desglose",
+      "fila": "Sin cuota asociada",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 0,
+      "porcentaje": "no se dibuja",
+      "como_se_calcula": "Todos los pagos del escenario tienen su cuota en la base local → el renglón no debe aparecer. Si aparece con plata, es sync incompleto."
+    },
+    {
+      "tarjeta": "KPIs de caja — desglose",
+      "fila": "Total que entró",
+      "usuarios": 0,
+      "cuotas": 0,
+      "monto": 9495,
+      "porcentaje": "63% + 29% + 8% = 100%",
+      "como_se_calcula": "5.975 + 2.775 + 745 = 9.495 = el KPI 'Este período' exacto. Los porcentajes acá SÍ suman 100 (62,93→63; 29,23→29; 7,85→8), así que este desglose sirve de control positivo frente al 101% de la tarjeta de tendencia."
+    }
+  ],
+  "esperados_historico": [
+    {
+      "ciclo": "mar (15 feb – 14 mar 2026)",
+      "total_mora": 2030,
+      "recuperado": 2030,
+      "sigue_debiendose": 0,
+      "como_se_calcula": "Impago hoy: C$0 (todo cobrado). Recuperado tarde: TT-02 1.150 (venc 5 mar, gracia hasta 12 mar, pagó 20 mar) + TT-04 880 (venc 20 feb, gracia hasta 27 feb, pagó 28 feb) = 2.030. Barra 100% verde."
+    },
+    {
+      "ciclo": "abr (15 mar – 14 abr 2026)",
+      "total_mora": 3355,
+      "recuperado": 3355,
+      "sigue_debiendose": 0,
+      "como_se_calcula": "Impago hoy: C$0. Recuperado tarde: TT-02 1.150 (5 abr → 18 abr) + TT-04 880 (20 mar → 28 mar) + TT-11 480 (1 abr → 15 abr) + TT-14 845 (14 abr → 25 abr) = 3.355. La mora SUBE +C$1.325 contra marzo."
+    },
+    {
+      "ciclo": "may (15 abr – 14 may 2026)",
+      "total_mora": 4540,
+      "recuperado": 4540,
+      "sigue_debiendose": 0,
+      "como_se_calcula": "Impago hoy: C$0. Recuperado tarde: TT-02 1.150 (5 may → 25 may) + TT-04 880 (20 abr → 30 abr) + TT-06 565 (2 may → 12 may) + TT-10 615 (22 abr → 30 abr) + TT-11 480 (1 may → 20 may) + TT-12 850 (28 abr → 10 may) = 4.540. PICO de la serie. VALOR CORRECTO SI SE ARREGLA LA SUSPENSIÓN RETROACTIVA: C$5.260 (TT-09 pagó tarde C$720 el 20 may sobre la cuota del 8 may, y su contrato suspendido HOY borra ese aporte de un ciclo cerrado hace tres meses)."
+    },
+    {
+      "ciclo": "jun (15 may – 14 jun 2026)",
+      "total_mora": 2935,
+      "recuperado": 2620,
+      "sigue_debiendose": 315,
+      "como_se_calcula": "Impago hoy: TT-10 C$315 (cuota del 22 may: C$615 − C$300 abonados el 10 ago). Recuperado tarde: TT-02 1.150 (5 jun → 28 jun) + TT-05A 690 (18 may → 30 may) + TT-11 480 (1 jun → 3 jul) + TT-10 300 (22 may → 10 ago) = 2.620. Total 2.935: la mora BAJA −C$1.605 contra mayo (el valle que la tarjeta tiene que mostrar). VALOR CORRECTO SIN EL BUG DE SUSPENSIÓN: C$3.655 (TT-09 pagó tarde C$720 el 25 jun). CONTROL EXTRA: el abono del 10 ago de TT-10 mueve el reparto rojo/verde de esta barra (rojo 615→315, verde 2.320→2.620) SIN cambiar su altura total."
+    },
+    {
+      "ciclo": "jul (15 jun – 14 jul 2026)",
+      "total_mora": 3125,
+      "recuperado": 2510,
+      "sigue_debiendose": 615,
+      "como_se_calcula": "Impago hoy: TT-10 C$615 (cuota del 22 jun, nunca pagada). Recuperado tarde: TT-02 1.150 (5 jul → 6 ago) + TT-04 880 (20 jun → 30 jun) + TT-11 480 (1 jul → 20 jul) = 2.510. Total 3.125: la mora vuelve a SUBIR +C$190. Este ciclo es además el que mejor muestra el 'tail' del gráfico: C$1.630 de los C$2.510 recuperados (65%) tienen fecha de pago POSTERIOR al 14 jul y se apilan en el último punto de la curva."
+    },
+    {
+      "ciclo": "ago (15 jul – 14 ago 2026) — EN CURSO, incompleto",
+      "total_mora": 4525,
+      "recuperado": 1570,
+      "sigue_debiendose": 2955,
+      "como_se_calcula": "Impago hoy: TT-05B 395 + TT-06 365 + TT-10 615 + TT-11 730 + TT-12 850 = 2.955. Recuperado tarde: TT-04 880 + TT-05A 690 = 1.570. Total 4.525. TIENE QUE DAR IDÉNTICO al 'Total mora' de la tarjeta 'Mora del ciclo' (el propio (i) de la histórica promete esa igualdad); en este escenario dan igual porque no hay ningún pago vivo sobre una cuota anulada — que es la única vía por la que hoy pueden separarse. OJO: es el ciclo en curso y su mora sigue creciendo (TT-02 C$1.150, TT-13 manual C$600 y TT-14 C$695 entran recién cuando venza su gracia), así que su barra NO es comparable contra las cerradas."
+    }
+  ],
+  "cobertura_casos": [
+    {
+      "caso": "ALTA — 'Por recuperar — Monto' es una resta con signo: un sobrepago le come deuda a otros clientes (muestra C$4.200 en vez de C$5.400)",
+      "cliente": "TT-08 Norman Eduardo Lacayo Bermúdez (dos pagos vivos, C$935 + C$1.200, sobre una cuota de C$935)"
+    },
+    {
+      "caso": "ALTA — con sobrepago 'Recuperado' puede superar el 100%, 'Por recuperar' clampea a C$0,00 con cuotas pendientes y el tooltip contradice a la pastilla",
+      "cliente": "TT-08 Norman Eduardo Lacayo Bermúdez (segunda pasada del test: agregarle un pago de C$6.500 para que rec_m supere meta_m)"
+    },
+    {
+      "caso": "ALTA — las dos pastillas de porcentaje suman 101% por redondear cada una por separado",
+      "cliente": "Es un efecto del TOTAL, calibrado a propósito: rec/meta = 7.000/11.200 = 5/8 exacto → 62,5% y 37,5% → 63% + 38%. Lo determinan en conjunto TT-13 (plan C$1.025) y TT-14 (plan C$845 con descuento C$150)"
+    },
+    {
+      "caso": "ALTA — la columna USUARIOS no suma vertical, y en la tarjeta de Mora no está advertido en ninguna parte",
+      "cliente": "TT-05 Yahoska del Carmen Obando Téllez (dos contratos: uno recuperado tarde, otro impago) + TT-06 Wilmer y TT-13 Marvin en la tarjeta de Cobros"
+    },
+    {
+      "caso": "ALTA — la columna CUOTAS no suma vertical en las DOS direcciones (de más por parciales, de menos por crédito/condonación)",
+      "cliente": "De más: TT-06 Wilmer (parcial 200/565) y TT-13 Marvin (instalación parcial 900/1.500). De menos: TT-07 Karla (cuota saldada 100% con crédito, sin fila en pagos)"
+    },
+    {
+      "caso": "ALTA — suspender un contrato reescribe la historia: borra plata ya cobrada y mora de ciclos CERRADOS",
+      "cliente": "TT-09 Francisco Javier Delgadillo Aguirre (suspendido el 5 ago; sus C$720 de mora recuperada tarde en may y en jun desaparecen de las barras: 5.260→4.540 y 3.655→2.935)"
+    },
+    {
+      "caso": "MEDIA — los contratos CANCELADOS sí suman y los suspendidos no: dos criterios opuestos, y el (i) solo declara suspendidos",
+      "cliente": "TT-10 Silvia Auxiliadora Gutiérrez Baltodano (cancelada el 30 jul, sigue aportando C$615 a Cobros y a la mora del ciclo en curso) contra TT-09 (suspendido, desaparece)"
+    },
+    {
+      "caso": "MEDIA — el primer frame usa la gracia hardcodeada en 10 y subestima la mora",
+      "cliente": "Lo dispara el setting dias_gracia = 7 del tenant. Los clientes que hacen visible el salto son TT-11 Óscar (venc 1 ago) y TT-06 Wilmer (venc 2 ago), que con gracia 10 quedan fuera del universo, y TT-04 Denis, que con gracia 10 deja de ser 'tarde'. Total mora 2.550 → 4.525"
+    },
+    {
+      "caso": "MEDIA — 'Recuperado — Cuotas/Usuarios' mide cuotas TOCADAS, no SALDADAS",
+      "cliente": "TT-06 Wilmer (abono de C$200 sobre C$565 hace contar la cuota entera) y TT-13 Marvin (instalación con C$900 de C$1.500)"
+    },
+    {
+      "caso": "MEDIA — el tail: la curva pega un salto vertical el último día y solo se declara pasando el mouse",
+      "cliente": "TT-02 José Ramón (paga el ciclo jul recién el 6 ago), TT-11 Óscar (paga jun el 3 jul y jul el 20 jul) y TT-14 Heydi (paga el 21 jul). En el ciclo jul son C$1.630 de C$2.510 recuperados = 65% del recorrido de la curva apilado en el 14 jul"
+    },
+    {
+      "caso": "MEDIA — el crédito a favor y los descuentos bajan retroactivamente el 100% de la tarjeta",
+      "cliente": "TT-07 Karla (crédito aplicado −C$1.075: su cuota aporta C$0 al 100%) y TT-14 Heydi (descuento −C$150)"
+    },
+    {
+      "caso": "BAJA/LATENTE — la pata de pagos tardíos del 'Total mora' no filtra cuotas anuladas y 'Recuperado' sí",
+      "cliente": "No se puede provocar por la app (el trigger anula los pagos al anular la cuota). El escenario lo deja verificable por control negativo: barra 'ago' = C$4.525 debe dar IGUAL que el 'Total mora' de la tarjeta del ciclo. Si algún día difieren, es ese término"
+    },
+    {
+      "caso": "BORDE — pago justo el día que vence la gracia (NO es tarde)",
+      "cliente": "TT-03 María Elena Pavón Cruz (los 6 ciclos; en el actual: venc 25 jul, gracia hasta 1 ago, paga el 1 ago). También TT-05B (5 jul), TT-06 (9 jul), TT-12 (4 abr) y TT-14 (21 jul)"
+    },
+    {
+      "caso": "BORDE — pago un día DESPUÉS de la gracia (sí es tarde)",
+      "cliente": "TT-04 Denis Alberto Sequeira Munguía (venc 20 jul, gracia hasta 27 jul, paga el 28 jul)"
+    },
+    {
+      "caso": "BORDE — cliente con DOS cuotas en el mismo ciclo",
+      "cliente": "TT-05 Yahoska (dos contratos: 18 jul y 28 jul) y TT-13 Marvin (cuota mensual del 12 ago + cuota manual del 5 ago)"
+    },
+    {
+      "caso": "BORDE — dos pagos sobre una misma cuota",
+      "cliente": "TT-08 Norman (dos pagos VIVOS, C$935 y C$1.200) y TT-12 Iveth (uno vivo y otro en revisión, ambos de C$850 el 2 jul)"
+    },
+    {
+      "caso": "BORDE — pago ANULADO",
+      "cliente": "TT-12 Iveth del Socorro Núñez Mairena (C$850 el 31 jul, anulado el 4 ago: la cuota vuelve a impaga y entra a la mora del ciclo)"
+    },
+    {
+      "caso": "BORDE — pago EN REVISIÓN",
+      "cliente": "TT-12 Iveth (segundo pago de C$850 del 2 jul, copia exacta, en cuarentena: no cuenta en monto_pagado ni en ninguna métrica)"
+    },
+    {
+      "caso": "BORDE — cuota ANULADA",
+      "cliente": "TT-12 Iveth (multa manual de C$400 del 20 jul, anulada el 25 jul, sobre contrato ACTIVO → aísla el caso) y TT-09 (cuota del 8 ago anulada al suspender)"
+    },
+    {
+      "caso": "BORDE — contrato SUSPENDIDO",
+      "cliente": "TT-09 Francisco Javier Delgadillo Aguirre (suspendido el 5 ago 2026)"
+    },
+    {
+      "caso": "BORDE — cargo extra POSITIVO (reconexión)",
+      "cliente": "TT-11 Óscar Danilo Chavarría Selva (+C$250 sobre la cuota del 1 ago: facturable C$730)"
+    },
+    {
+      "caso": "BORDE — cargo extra NEGATIVO (descuento)",
+      "cliente": "TT-14 Heydi Carolina Vílchez Rostrán (−C$150 sobre la cuota del 14 ago: facturable C$695)"
+    },
+    {
+      "caso": "BORDE — crédito a favor aplicado (cargo negativo, sin fila en pagos)",
+      "cliente": "TT-07 Karla Vanessa Rocha Espinoza (excedente de C$1.075 generado el 10 jul, aplicado el 1 ago a la cuota del 10 ago)"
+    },
+    {
+      "caso": "BORDE — cuota SOBREPAGADA (saldo negativo)",
+      "cliente": "TT-08 Norman (saldo −C$1.200)"
+    },
+    {
+      "caso": "BORDE — pago hecho ANTES del inicio del ciclo sobre una cuota de ese ciclo",
+      "cliente": "TT-13 Marvin Josué Urbina Sandoval (C$1.025 pagados el 9 jul sobre la cuota del 12 ago → baseline de la curva y nota al pie)"
+    },
+    {
+      "caso": "BORDE — cuota que vence el PRIMER día de la ventana (15 jul) y cuota que vence el ÚLTIMO (14 ago)",
+      "cliente": "TT-08 Norman (15 jul) y TT-14 Heydi (14 ago). Control por arriba: TT-01 con la cuota del 18 ago, que NO debe entrar"
+    },
+    {
+      "caso": "BORDE — cuota vencida pero todavía EN GRACIA (entra a Cobros, no entra a Mora)",
+      "cliente": "TT-02 José Ramón (venc 5 ago, gracia hasta el 12 ago) y TT-13 (instalación del 5 ago)"
+    },
+    {
+      "caso": "BORDE — cuota que todavía NO vence dentro del ciclo",
+      "cliente": "TT-13 Marvin (12 ago, ya pagada) y TT-14 Heydi (14 ago, impaga)"
+    },
+    {
+      "caso": "BORDE — cobro puntual / cuota manual sin contrato entra al conteo 'Cuotas' del dashboard (los reportes la excluyen)",
+      "cliente": "TT-13 Marvin (instalación de C$1.500 del 5 ago, contrato_id NULL)"
+    },
+    {
+      "caso": "BORDE — adelanto a una cuota de un ciclo POSTERIOR (no debe tocar las tarjetas del ciclo, sí la caja)",
+      "cliente": "TT-01 Ana Lucía (C$745 el 11 ago sobre la cuota del 18 ago)"
+    },
+    {
+      "caso": "BORDE — nombres con ñ y tildes para el fold de búsqueda",
+      "cliente": "TT-11 Óscar Danilo Chavarría Selva, TT-12 Iveth del Socorro Núñez Mairena, TT-05 Yahoska Obando Téllez, TT-14 Heydi Vílchez Rostrán, TT-06 Wilmer Zeledón Picado"
+    }
+  ],
+  "ancla_hoy": "2026-08-27"
+}

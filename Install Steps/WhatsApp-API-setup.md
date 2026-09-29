@@ -1,25 +1,56 @@
 # WhatsApp por API (envío automático) — guía de activación
 
-El código y la config ya están en la app. Esto es lo que falta **una vez**, cuando
-tengas la cuenta paga de Meta, para dejarlo andando. Orden: Meta → Deploy → Cron →
-App.
+> ⚠️ **SUPERSEDIDA (2026-08-21) para el camino de Meta directo.**
+> El paso a paso completo y verificado —alta de la cuenta de Meta por tenant,
+> costos reales, límites, estado de cada ISP y troubleshooting— vive ahora en
+> **`WhatsApp-Meta-alta-y-setup.md`**. Este documento se conserva por la parte
+> de **WhatChimp** (§1B) y por la referencia del cron; para dar de alta un ISP
+> nuevo, usá el otro.
+
+El código y la config ya están en la app. Esto es lo que falta **una vez** para
+dejarlo andando. Orden: elegir proveedor → dar de alta el número → Cron → App.
 
 > El modo **gratis** (abrir WhatsApp a mano desde Avisos) ya funciona sin nada de
 > esto. Esta guía es SOLO para el **envío automático por lote** (modo pago).
 
+## 0) Elegí el proveedor (por tenant)
+
+Desde **v0.33.0** cada tenant elige por dónde salen sus avisos, en Configuración →
+Avanzado → "WhatsApp API" → **Por dónde se manda**:
+
+| | **Meta directo** | **WhatChimp** |
+|---|---|---|
+| Suscripción | US$0 | desde US$24/mes (Basic, anual) |
+| Números incluidos | ilimitados, sin costo | **1**; el extra sale US$18/mes |
+| Tope de suscriptores | no hay | 5.000 (Basic) / 15.000 (Pro) |
+| Variables de plantilla | **con nombre** `{{nombre}}` | **posicionales** `{{1}}` |
+| Extras | ninguno | bandeja, chatbot, campañas, panel |
+
+**Los dos exigen el mismo trámite con Meta** (verificación del negocio, alta del
+número, plantillas aprobadas). WhatChimp lo hace más llevadero con un asistente,
+pero no lo saltea. Sin verificar el negocio, el techo es **250 destinatarios por
+día**; verificado sube a 2.000 y de ahí Meta escala solo.
+
+> ⚠️ **Mairena tiene 4.831 clientes y el plan Basic de WhatChimp topa en 5.000
+> suscriptores.** Cada ISP necesita su propia cuenta — una compartida no alcanza.
+
 ---
 
-## 1) En Meta (una sola vez)
+## 1A) Si vas por META DIRECTO (una sola vez)
 
 1. **Meta Business** + **verificación del negocio** (suben documentos de la empresa).
+   Meta promete hasta **14 días hábiles**; para Nicaragua asumí 2 a 4 semanas.
 2. Agregá el producto **WhatsApp** → registrá un **número WhatsApp Business** y
-   verificalo. Anotá:
+   verificalo (PIN de 6 dígitos, obligatorio — guardalo). Anotá:
    - **Phone Number ID** (NO el número a secas — es el ID que da Meta).
    - WhatsApp Business Account ID (por si lo pide).
+   - Si el número ya está en la app de WhatsApp Business, o lo borrás (se pierden
+     TODOS los chats, sin vuelta) o usás **Coexistence**, que lo deja funcionando
+     en las dos partes a la vez.
 3. Generá un **Access Token permanente** (recomendado: System User token, no el
    temporal de 24h).
 4. Creá **2 plantillas** en el Business Manager → categoría **Utility** →
-   esperá la **aprobación de Meta** (24-48h). Usá **variables CON NOMBRE**
+   esperá la **aprobación de Meta** (hasta 24h). Usá **variables CON NOMBRE**
    (formato "Named", no posicional): `{{nombre}}`, `{{monto}}`, `{{dias}}`,
    `{{empresa}}` (así el orden en el texto no importa).
    - **No hace falta inventarlo a mano:** en la app (paso 4, "Editar mensaje")
@@ -30,16 +61,38 @@ App.
      próximos {{dias}} días. Gracias — {{empresa}}"*
    - Anotá el **nombre** de cada plantilla (ej. `aviso_corte_gracia_v1`,
      `aviso_corte_mora_v1`) y el **idioma** (ej. `es` o `es_MX`).
+   - **No pongas la variable al final del mensaje** ni pidas la cédula completa:
+     son dos causas típicas de rechazo.
 
-## 2) Deploy de las edge functions (Dashboard de Supabase)
+## 1B) Si vas por WHATCHIMP (una sola vez)
+
+1. Cuenta en whatchimp.com y **conectá el número** con su asistente (Setup Wizard).
+   Ahí adentro se hace el alta con Meta — la verificación del negocio sigue siendo
+   tuya y con tus papeles.
+2. **Bot Manager → Message Template**: primero creá las **Template Variables**, y
+   después las **2 plantillas** (Utility). Esperá la aprobación de Meta.
+   - Usá **`{{1}} {{2}} {{3}} {{4}}`** — WhatChimp numera **por posición**.
+   - **Tienen que estar las cuatro, en este orden: 1 nombre · 2 monto · 3 días ·
+     4 empresa.** El envío manda siempre las cuatro; si la plantilla usa menos,
+     los datos salen corridos (el monto donde va el nombre). El editor de la app
+     te avisa si falta alguna.
+   - El botón **"Copiar para WhatChimp"** (paso 4, "Editar mensaje") te da el
+     cuerpo ya numerado.
+3. **Settings → API Developer Console**: copiá la **clave de API** y el
+   **`phone_number_id`**. La consola también genera la URL de prueba.
+4. Anotá el **nombre** de cada plantilla y el **idioma**.
+
+## 2) Deploy de las edge functions — ✅ YA HECHO (2026-08-16)
+
+`whatsapp-set-token` y `whatsapp-enviar` están **ACTIVE** en producción (vxxz).
+Solo hay que repetirlo si se cambia su código:
+
+```bash
+supabase functions deploy whatsapp-set-token whatsapp-enviar
+```
 
 Las env vars (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`)
 ya las inyecta Supabase — no hay que configurarlas.
-
-1. Dashboard → **Edge Functions** → deploy **`whatsapp-set-token`**
-   (pegar `supabase/functions/whatsapp-set-token/index.ts`).
-2. Deploy **`whatsapp-enviar`** (pegar `supabase/functions/whatsapp-enviar/index.ts`).
-3. Verificá que ambas queden "deployed a few seconds ago".
 
 ## 3) El cron diario (correr DESPUÉS de deployar las functions)
 

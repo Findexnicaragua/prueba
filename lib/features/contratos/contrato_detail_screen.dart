@@ -43,6 +43,7 @@ import '../shared/widgets/solicitud_accion_helper.dart';
 
 import 'contrato_detail_header.dart' show ContratoHeaderCard;
 import 'cuota_detalle_lectura.dart';
+import '../shared/widgets/hoja_cargos_cuota.dart';
 part 'contrato_detail_cuotas.dart';
 part 'contrato_detail_pagos.dart';
 part 'contrato_detail_documento.dart';
@@ -173,12 +174,17 @@ Future<void> imprimirDeudaCancelacion({
       diaPago: diaPagoSnap,
       cuotas: cuotas,
       total: total,
-      titulo: 'Estado de deuda — Cancelación de contrato',
+      titulo: 'Constancia de condonación — Cancelación de contrato',
       fechaPrefijo: 'Cancelación',
       fechaKvLabel: 'Cancelado el',
+      // El pie ya decía la verdad; el encabezado y el total, no. Un documento
+      // que titula "Estado de deuda" y remata en "Total adeudado" le reclama al
+      // cliente una plata que el ISP acaba de perdonarle.
+      columnaMontoLabel: 'Condonado',
+      totalLabel: 'Total condonado',
       pieNota:
-          'Contrato cancelado. La deuda detallada sigue siendo cobrable. '
-          'Documento informativo.',
+          'Contrato cancelado. El detalle es la deuda que se CONDONÓ al '
+          'cancelar: estas cuotas ya no se cobran. Documento informativo.',
     );
     if (!context.mounted) return;
     await guardarPdfConAviso(
@@ -256,10 +262,7 @@ class _AccionesContrato extends ConsumerWidget {
         // en el call-site. `previewDeudaCancelacion` estaba escrita desde su
         // creación pero sin un solo consumidor: éste es el primero.
         final d = esCancelar
-            ? await repo.previewDeudaCancelacion(
-                contratoId: contratoId,
-                fechaCancelacion: fecha,
-                precioMensual: precio)
+            ? await repo.previewDeudaCancelacion(contratoId: contratoId)
             : await repo.previewDeudaSuspension(
                 contratoId: contratoId,
                 fechaSuspension: fecha,
@@ -543,10 +546,15 @@ class _AccionesContrato extends ConsumerWidget {
         // Cancelar por SOLICITUD: antes esta rama era solo para admin_usuarios
         // y el admin_cobranza cancelaba directo desde el dropdown del header.
         // En producción resultó ser quien decide el 55% de las bajas.
+        // También desde SUSPENDIDO: el dueño pidió poder dar de baja definitiva
+        // a quien ya se cortó por mora, sin tener que reactivarlo primero.
+        // Pasa por la misma solicitud al admin. La cancelación de un suspendido
+        // NO recalcula plata (ver `cancelarContrato`): el prorrateo ya se hizo
+        // el día del corte.
         if (pideAprobacionCancelar &&
             ref.watch(puedeGestionarEstadoContratoProvider) &&
             !ref.watch(estaImpersonandoProvider) &&
-            estado == 'activo') ...[
+            (estado == 'activo' || estado == 'suspendido')) ...[
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
@@ -1155,8 +1163,6 @@ class _ContratoDetailScreenState extends ConsumerState<ContratoDetailScreen> {
           tenantId: tenantId,
           contratoId: widget.contratoId,
           cobradorId: me.id,
-          fechaCancelacion: fechaCancelacion,
-          precioMensual: precioCancelacion,
           motivo: cancelRes!.motivo,
         );
         // Decisión sobre el excedente (no-op si no hay o el setting está OFF).
@@ -1710,13 +1716,20 @@ class _CancelacionCard extends ConsumerWidget {
                               color: scheme.onSurfaceVariant, fontSize: 13)),
                     ],
                     const SizedBox(height: 4),
-                    Text('Deuda al cancelar (cobrable): ${Fmt.cordobas(total)}',
-                        style: TextStyle(
-                            color: scheme.onSurfaceVariant, fontSize: 13)),
+                    // Desde 2026-08-24 cancelar NO deja deuda: el snapshot ya no
+                    // es "lo que queda por cobrar" sino "lo que se dejó de
+                    // cobrar". Decía "(cobrable)" y mandaba a buscar una deuda
+                    // que ya no existe — fue justo lo que reportó el dueño.
+                    if (total > 0.009)
+                      Text('Deuda condonada al cancelar: ${Fmt.cordobas(total)}',
+                          style: TextStyle(
+                              color: scheme.onSurfaceVariant, fontSize: 13)),
                     const SizedBox(height: 4),
                     Text(
-                      'Permanente: no se reactiva. La deuda se sigue cobrando '
-                      'desde las cuotas del contrato (abajo).',
+                      'Permanente: no se reactiva. Las cuotas sin pagar '
+                      'quedaron en cero — este contrato ya no se cobra. Para '
+                      'cortar el servicio SIN perder la deuda, se usa '
+                      'Suspender.',
                       style: TextStyle(color: scheme.outline, fontSize: 11),
                     ),
                     const SizedBox(height: 10),
@@ -1809,11 +1822,8 @@ class _CancelarContratoDialogState extends State<_CancelarContratoDialog> {
     // número mostrado para decidir difiere del registrado (audit 2026-07-04).
     final fechaCorte =
         DateTime.now().toUtc().subtract(const Duration(hours: 6));
-    _deudaFuture = ContratosRepo().previewDeudaCancelacion(
-      contratoId: widget.contratoId,
-      fechaCancelacion: fechaCorte,
-      precioMensual: widget.precioMensual,
-    );
+    _deudaFuture =
+        ContratosRepo().previewDeudaCancelacion(contratoId: widget.contratoId);
     if (widget.creditoOn) {
       _excedenteFuture = ContratosRepo().previewExcedente(
         contratoId: widget.contratoId,
@@ -1849,20 +1859,34 @@ class _CancelarContratoDialogState extends State<_CancelarContratoDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'Es PERMANENTE: el servicio termina y el contrato NO se puede '
-                'reactivar. La deuda real (meses cumplidos + lo consumido del mes '
-                'en curso) queda COBRABLE; los meses futuros se anulan. Se imprime '
-                'un documento con la deuda.',
+                'Es PERMANENTE: el servicio termina, el contrato NO se puede '
+                'reactivar y TODA la deuda pendiente se CONDONA — incluidos los '
+                'meses atrasados. El contrato deja de aparecer en las listas de '
+                'cobro. Se imprime un documento con lo condonado.',
+              ),
+              const SizedBox(height: 8),
+              // El aviso que evita el error caro: quien quiere cortar el
+              // servicio a un moroso y SEGUIR cobrandole tiene que suspender,
+              // no cancelar. Antes las dos hacian casi lo mismo y no habia
+              // forma de saber cual elegir.
+              Text(
+                '¿El cliente se va debiendo y le vas a seguir cobrando? '
+                'Entonces usá SUSPENDER: corta el servicio, conserva la deuda '
+                'y se puede revertir.',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.error),
               ),
               const SizedBox(height: 8),
               Text(
-                'Si fue un error, podés Revertirla desde la tarjeta del contrato, '
-                'mientras no hayas cobrado nada de la deuda.',
+                'Si fue un error, podés Revertirla desde la tarjeta del contrato: '
+                'las cuotas vuelven como estaban, con su deuda.',
                 style: TextStyle(
                     fontSize: 12, color: Theme.of(context).colorScheme.outline),
               ),
               const SizedBox(height: 12),
-              // Cuánto queda cobrable, en números: el párrafo de arriba lo
+              // Cuánto se CONDONA, en números: el párrafo de arriba lo
               // describe en prosa y eso no alcanza para decidir.
               FutureBuilder<({double total, List<Map<String, dynamic>> cuotas})>(
                 future: _deudaFuture,
@@ -1870,7 +1894,11 @@ class _CancelarContratoDialogState extends State<_CancelarContratoDialog> {
                   total: snap.data?.total ?? 0,
                   cuotas: snap.data?.cuotas ?? const [],
                   diaPago: widget.diaPago,
-                  pieExtra: 'se imprime el documento de deuda',
+                  // El título por defecto ("Deuda a la fecha") describía una
+                  // foto del pasado; acá lo que importa es lo que va a pasar.
+                  titulo: 'Se va a condonar',
+                  vacioTexto: 'No hay deuda que condonar.',
+                  pieExtra: 'esta plata deja de ser cobrable',
                 ),
               ),
               const SizedBox(height: 16),

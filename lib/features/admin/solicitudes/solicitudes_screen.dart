@@ -14,6 +14,8 @@ import '../../../data/utils/busqueda_cliente.dart'
 import '../../../data/utils/errores.dart';
 import '../../../data/utils/formatters.dart';
 import '../../../data/utils/op_log.dart';
+import '../../../data/utils/prorrateo.dart';
+import '../../../data/providers/db_epoch_provider.dart';
 import '../../../powersync/db.dart' as ps;
 import '../../shared/widgets/deuda_contrato_bloque.dart';
 import '../../shared/widgets/empty_state.dart';
@@ -369,6 +371,7 @@ class _HistorialTab extends ConsumerWidget {
 }
 
 final _todasSolicitudesProvider = StreamProvider<List<SolicitudAccion>>((ref) {
+  ref.watch(dbEpochProvider); // se recrea al cambiar de DB/identidad (#7)
   return ps.db
       .watch('SELECT * FROM solicitudes_accion ORDER BY ocurrido_en DESC')
       .map((rows) => rows.map(SolicitudAccion.fromRow).toList());
@@ -424,6 +427,28 @@ final _infoEntidadProvider = FutureProvider.autoDispose
         planNombre: _texto(row['plan_nombre']),
       );
 
+    case TipoSolicitud.desactivarCliente:
+      // Acá `entidad_id` es el CLIENTE, no un contrato. Sin esta rama la
+      // tarjeta degradaba a "sin datos" justo en la solicitud que desde el
+      // 2026-08-26 condona plata.
+      final row = await ps.db.getOptional(
+        'SELECT c.nombre AS cliente_nombre, c.codigo AS cliente_codigo, '
+        '       (SELECT COUNT(*) FROM contratos ct WHERE ct.cliente_id = c.id '
+        "          AND ct.estado IN ('activo','suspendido')) AS vivos "
+        '  FROM clientes c WHERE c.id = ?',
+        [key.entidadId],
+      );
+      if (row == null) return null;
+      final vivos = (row['vivos'] as num?)?.toInt() ?? 0;
+      return (
+        clienteNombre: _texto(row['cliente_nombre']),
+        clienteCodigo: _texto(row['cliente_codigo']),
+        contratoCodigo: vivos == 0
+            ? 'sin contratos vivos'
+            : '$vivos contrato(s) se cancelan',
+        planNombre: null,
+      );
+
     case TipoSolicitud.crearContrato:
     case TipoSolicitud.desconocido:
       // Tipo que esta version no conoce: no se puede adivinar de que entidad
@@ -472,6 +497,26 @@ final _infoEntidadProvider = FutureProvider.autoDispose
 final _deudaVivaProvider = FutureProvider.autoDispose
     .family<DeudaSnapshot?, ({TipoSolicitud tipo, String entidadId})>(
         (ref, key) async {
+  // La baja de CLIENTE también mueve plata desde la regla del 2026-08-26:
+  // cancela sus contratos vivos y condona la deuda. Sin esta rama, el aprobador
+  // decidía una condonación sin ver un solo peso — mientras que para cancelar
+  // UN contrato la misma pantalla ya se lo muestra.
+  if (key.tipo == TipoSolicitud.desactivarCliente) {
+    final prev =
+        await ContratosRepo().previewBajaCliente(clienteId: key.entidadId);
+    final dp = await ps.db.getOptional(
+      "SELECT dia_pago FROM contratos WHERE cliente_id = ? AND estado IN ('activo','suspendido') LIMIT 1",
+      [key.entidadId],
+    );
+    return DeudaSnapshot(
+      total: prev.total,
+      cuotas: prev.cuotas,
+      diaPago: (dp?['dia_pago'] as num?)?.toInt(),
+      precioMensual: 0,
+      fecha: SolicitudesRepo.fechaEjecucion(),
+    );
+  }
+
   final esCorte = key.tipo == TipoSolicitud.suspenderContrato ||
       key.tipo == TipoSolicitud.cancelarContrato;
   if (!esCorte) return null;
@@ -491,9 +536,7 @@ final _deudaVivaProvider = FutureProvider.autoDispose
   final fecha = SolicitudesRepo.fechaEjecucion();
   final d = key.tipo == TipoSolicitud.cancelarContrato
       ? await ContratosRepo().previewDeudaCancelacion(
-          contratoId: key.entidadId,
-          fechaCancelacion: fecha,
-          precioMensual: precio)
+          contratoId: key.entidadId)
       : await ContratosRepo().previewDeudaSuspension(
           contratoId: key.entidadId,
           fechaSuspension: fecha,
@@ -604,6 +647,134 @@ String? _texto(dynamic valor) {
 /// Línea "Etiqueta: valor" de la tarjeta. Mismo tamaño/tono que el detalle que
 /// ya se mostraba; el valor va apenas más marcado para poder barrer la lista de
 /// un vistazo (que es lo que hace quien aprueba).
+/// El MONTO del prorrateo que se va a aplicar si se aprueba esta solicitud.
+///
+/// Por que es un widget con Future y no un campo de `datos`: al aprobar, el
+/// repo relee el precio del plan de ESE momento y prorratea con el, asi que un
+/// numero guardado al pedir mentiria si alguien edito el precio mientras la
+/// solicitud esperaba. Este lo calcula en vivo con `prorrateoCambioPlanHoy`,
+/// el MISMO helper que usa la mutacion — que es exactamente lo que la regla de
+/// la casa exige: el preview no puede usar otra formula que la operacion.
+///
+/// Mientras carga, o si algo falla, no muestra nada: la tarjeta sigue siendo
+/// util sin esta linea y un error de lectura no puede romper la bandeja.
+class _ProrrateoSolicitud extends StatelessWidget {
+  const _ProrrateoSolicitud({required this.solicitud});
+  final SolicitudAccion solicitud;
+
+  Future<({double monto, int dias, bool sube, DateTime? desde, DateTime? hasta,
+          bool saldada, bool haySiguiente})?>
+      _calcular() async {
+    try {
+      final planNuevoId = solicitud.datos['plan_nuevo_id'] as String?;
+      if (planNuevoId == null) return null;
+      final ct = await ps.db.getOptional(
+        'SELECT ct.dia_pago, pl.precio_mensual AS precio_viejo '
+        '  FROM contratos ct LEFT JOIN planes pl ON pl.id = ct.plan_id '
+        ' WHERE ct.id = ?',
+        [solicitud.entidadId],
+      );
+      final nuevo = await ps.db.getOptional(
+          'SELECT precio_mensual FROM planes WHERE id = ?', [planNuevoId]);
+      if (ct == null || nuevo == null) return null;
+      final diaPago = (ct['dia_pago'] as num?)?.toInt();
+      if (diaPago == null) return null;
+      // "Hoy" en Nicaragua (UTC-6, sin DST): el mismo dia local con el que va a
+      // ejecutarse el cambio (regla 1b del checklist).
+      final hoy = DateTime.now().toUtc().subtract(const Duration(hours: 6));
+      // `monto`/`cargos_neto`/`monto_pagado` además del período: hacen falta
+      // para saber si la cuota del ciclo ya está saldada. Cuando lo está, el
+      // cargo NO se asienta sobre ella sino sobre la siguiente
+      // (`contratos_repo`, regla del 2026-09-03), y quien firma tiene que verlo.
+      final cuotas = await ps.db.getAll(
+        'SELECT periodo, monto, COALESCE(cargos_neto,0) AS cargos_neto, '
+        '       COALESCE(monto_pagado,0) AS monto_pagado '
+        "  FROM cuotas WHERE contrato_id = ? AND estado <> 'anulada'",
+        [solicitud.entidadId],
+      );
+      // OJO con el nombre de este helper: los simbolos de la regla
+      // `ejes-del-ciclo` (ver su ficha) se matchean POR SUBSTRING y sobre el
+      // texto entero, comentarios incluidos. Un nombre que contenga uno de
+      // ellos hace que `tools/regla.py` levante este archivo como superficie
+      // de una regla que no toca — y el CI lo marca como FALLA.
+      DateTime leerPeriodo(Map<String, dynamic> c) {
+        final raw = (c['periodo'] as String).split('-');
+        return DateTime(int.parse(raw[0]), int.parse(raw[1]), 1);
+      }
+
+      for (final c in cuotas) {
+        final periodo = leerPeriodo(c);
+        if (estadoServicio(periodo, diaPago, hoy) != 'en_curso') continue;
+        final pr = prorrateoCambioPlanHoy(
+          hoy: hoy,
+          finVentanaActual: servicioFin(periodo, diaPago),
+          precioViejo: ((ct['precio_viejo'] as num?) ?? 0).toDouble(),
+          precioNuevo: (nuevo['precio_mensual'] as num).toDouble(),
+        );
+        if (pr.sinAjuste) return null;
+        // Mismo criterio y mismo epsilon que la mutación, para que el preview y
+        // lo ejecutado no puedan discrepar (principio #6 del AGENTS).
+        final saldada = (c['monto_pagado'] as num).toDouble() >=
+            (c['monto'] as num).toDouble() +
+                (c['cargos_neto'] as num).toDouble() -
+                0.009;
+        final haySiguiente =
+            cuotas.any((o) => leerPeriodo(o).isAfter(periodo));
+        return (
+          monto: pr.monto,
+          dias: pr.dias,
+          sube: pr.esUpgrade,
+          desde: pr.desde,
+          hasta: pr.hasta,
+          saldada: saldada,
+          haySiguiente: haySiguiente,
+        );
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _ddmm(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<
+        ({double monto, int dias, bool sube, DateTime? desde, DateTime? hasta,
+          bool saldada, bool haySiguiente})?>(
+      future: _calcular(),
+      builder: (context, snap) {
+        final r = snap.data;
+        if (r == null) return const SizedBox.shrink();
+        final rango = (r.desde != null && r.hasta != null)
+            ? ' (${_ddmm(r.desde!)} al ${_ddmm(r.hasta!)})'
+            : '';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _linea(r.sube ? 'Se le cobra' : 'Le queda a favor',
+                '${r.sube ? '+ ' : ''}${Fmt.cordobas(r.monto)}'),
+            _linea('Por', '${r.dias} ${r.dias == 1 ? "día" : "días"}$rango'),
+            // El mes en curso ya está cobrado: el cargo NO cae ahí. Quien firma
+            // tiene que saber QUÉ cuota se mueve, no sólo cuánto — si no, cuando
+            // el cliente reclame nadie va a poder explicar el papel.
+            if (r.sube && r.saldada && r.haySiguiente)
+              _linea('Ojo',
+                  'el mes en curso ya está pagado: la diferencia entra en la '
+                  'cuota siguiente'),
+            if (r.sube && r.saldada && !r.haySiguiente)
+              _linea('Ojo',
+                  'el mes en curso ya está pagado y no hay cuota siguiente: '
+                  'esta diferencia NO se va a cobrar'),
+          ],
+        );
+      },
+    );
+  }
+}
+
 Widget _linea(String etiqueta, String valor) {
   return Padding(
     padding: const EdgeInsets.only(top: 3),
@@ -943,14 +1114,37 @@ class _SolicitudCardState extends ConsumerState<_SolicitudCard> {
     if (viva == null) return const [];
     final pedido = s.deudaSnapshot;
     final porQue = pedido == null ? null : _porQueCambioLaDeuda(pedido, viva);
+    // SUSPENDER conserva la deuda; CANCELAR la condona: el rótulo tiene que
+    // decir cuál de las dos, porque el aprobador decide con esto. Hasta el
+    // 2026-08-26 las dos decían "quedaría cobrable" — al aprobar una
+    // cancelación, lo contrario de lo que iba a pasar.
+    final esCancelacion = s.tipo == TipoSolicitud.cancelarContrato;
+    final esBajaCliente = s.tipo == TipoSolicitud.desactivarCliente;
+    final condona = esCancelacion || esBajaCliente;
     return [
       const SizedBox(height: 8),
+      if (condona)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            esBajaCliente
+                ? 'Al aprobar, los contratos vivos de este cliente pasan a '
+                    'CANCELADO y esta deuda se CONDONA. Lo ya pagado queda como '
+                    'histórico. Para conservar la deuda, la acción es Suspender '
+                    'el contrato.'
+                : 'Al aprobar, esta deuda se CONDONA y el contrato no se puede '
+                    'reactivar. Para conservar la deuda, la acción es Suspender.',
+            style: TextStyle(fontSize: 12, color: Colors.red.shade800),
+          ),
+        ),
       DeudaContratoBloque(
         total: viva.total,
         cuotas: viva.cuotas,
         diaPago: viva.diaPago,
-        titulo: 'Deuda que quedaría cobrable',
-        vacioTexto: 'No queda deuda cobrable.',
+        titulo: condona ? 'Se va a condonar' : 'Deuda que quedaría cobrable',
+        vacioTexto: condona
+            ? 'No hay deuda que condonar.'
+            : 'No queda deuda cobrable.',
         // Compacto: el desglose mes a mes tapaba el resto del pedido. El
         // detalle completo está en la ficha del contrato.
         compacto: true,
@@ -992,6 +1186,18 @@ class _SolicitudCardState extends ConsumerState<_SolicitudCard> {
               modoHoy
                   ? 'Hoy, con prorrateo del ciclo en curso'
                   : 'El próximo ciclo (sin plata en el acto)'),
+          // EL MONTO. Sin esto el admin aprobaba un cargo sin haberlo visto
+          // nunca: la tarjeta decía a qué plan y desde cuándo, y el número que
+          // se le suma a la cuota del cliente no aparecía en ninguna parte —
+          // el cálculo del prorrateo ni siquiera se invocaba en esta pantalla.
+          // La regla de la casa es que quien autoriza tiene que VER el número
+          // antes de firmar, calculado con el MISMO criterio que la mutación.
+          //
+          // Se calcula EN VIVO y no se lee de `datos`: al aprobar se aplica el
+          // precio del plan de ESE momento (solicitudes_repo:328), así que un
+          // número congelado al pedir mentiría si alguien editó el precio
+          // mientras la solicitud esperaba. Mismo helper que usa el repo.
+          if (modoHoy) _ProrrateoSolicitud(solicitud: s),
         ];
       case TipoSolicitud.crearContrato:
         // Avisos de que esta solicitud NO va a poder ejecutarse, ANTES de que

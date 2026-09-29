@@ -13,6 +13,7 @@ import '../../../data/utils/errores.dart';
 import '../../../data/utils/formatters.dart';
 import '../../../powersync/db.dart' as ps;
 import '../../shared/widgets/empty_state.dart';
+import 'rechazos_sync_seccion.dart';
 
 /// Cuotas cobradas POR ENCIMA de su total, para que un humano las resuelva.
 ///
@@ -20,10 +21,16 @@ import '../../shared/widgets/empty_state.dart';
 /// el mismo histórico dejaron 36 cuotas sobrepagadas (C$30.003) y nadie se
 /// enteró hasta correr `invariantes_dinero.sql` a mano.
 ///
-/// El guard del server (0214) ya anula solo la copia EXACTA (misma cuota, mismo
-/// monto, mismo día). Acá cae lo que el server NO puede decidir: montos o
-/// fechas distintas, donde el segundo pago puede ser plata real imputada al mes
-/// equivocado. Esa diferencia la tiene que ver una persona.
+/// **Desde 0264 cae acá TODO duplicado, sin excepción.** Antes, la copia
+/// exacta —misma cuota, mismo monto, mismo día— la anulaba el server solo. Se
+/// sacó esa rama porque dos cobros idénticos NO son intercambiables: cada uno
+/// tiene su recibo, con su correlativo y su cobrador, y el cliente tiene UNO de
+/// los dos en la mano. Además el importe puede coincidir y el recibo no —
+/// cambia el vuelto, o uno pagó en dólares—. Elegir por el cliente es elegir
+/// cuál comprobante queda sin respaldo, y eso no lo decide una máquina.
+///
+/// Por eso la tarjeta de cada cobro muestra recibo, cobrador, moneda y vuelto:
+/// son los cuatro datos con los que se distingue un papel del otro.
 ///
 /// **La lista se DERIVA del flag, no se marca "revisado".** Una cuota aparece
 /// porque tiene un pago EN REVISIÓN (cuarentena 0218: un sobrepago no-exacto
@@ -32,6 +39,7 @@ import '../../shared/widgets/empty_state.dart';
 /// duplicado). Sin botón de "ya lo miré" que esconda plata en cuarentena.
 /// El conteo alimenta el badge; comparte la MISMA condición que la lista.
 final cobrosARevisarCountProvider = StreamProvider<int>((ref) {
+  ref.watch(dbEpochProvider); // se recrea al cambiar de DB/identidad (#7)
   return ps.db
       .watch('SELECT COUNT(DISTINCT cu.id) AS cnt FROM cuotas cu '
           'JOIN pagos p ON p.cuota_id = cu.id '
@@ -53,6 +61,7 @@ class _CobrosARevisarScreenState extends ConsumerState<CobrosARevisarScreen> {
   Timer? _debounce;
   late Stream<List<Map<String, dynamic>>> _stream;
 
+
   @override
   void initState() {
     super.initState();
@@ -66,11 +75,12 @@ class _CobrosARevisarScreenState extends ConsumerState<CobrosARevisarScreen> {
     super.dispose();
   }
 
-  /// Una cuota entra si tiene un pago EN REVISIÓN (cuarentena 0218): un 2º cobro
-  /// que sobrepasa el total y no es duplicado exacto queda `en_revision=1` →
-  /// NO cuenta en ninguna métrica hasta que una persona decide cuál es el
-  /// verdadero. (Antes se derivaba de `monto_pagado > total`; con la cuarentena
-  /// el en_revision ya no infla monto_pagado, así que el disparador es el flag.)
+  /// Una cuota entra si tiene un pago EN REVISIÓN (cuarentena 0218): todo 2º
+  /// cobro que sobrepasa el total queda `en_revision=1` —desde 0264 también el
+  /// idéntico— y NO cuenta en ninguna métrica hasta que una persona decide cuál
+  /// es el verdadero. (Antes se derivaba de `monto_pagado > total`; con la
+  /// cuarentena el en_revision ya no infla monto_pagado, así que el disparador
+  /// es el flag.)
   Stream<List<Map<String, dynamic>>> _buildStream() {
     final where = <String>[
       "cu.estado <> 'anulada'",
@@ -122,7 +132,11 @@ class _CobrosARevisarScreenState extends ConsumerState<CobrosARevisarScreen> {
     // Cold-start: recrear el stream si la DB se recrea (cambio de usuario o
     // schema), para no quedar leyendo una conexión cerrada.
     ref.listen(dbEpochProvider, (_, __) {
-      if (mounted) setState(() => _stream = _buildStream());
+      if (mounted) {
+        setState(() {
+          _stream = _buildStream();
+              });
+      }
     });
     final scheme = Theme.of(context).colorScheme;
 
@@ -154,6 +168,17 @@ class _CobrosARevisarScreenState extends ConsumerState<CobrosARevisarScreen> {
                 ),
               ),
             ),
+            // F-4 (audit 2026-08-20): todo lo de abajo scrollea JUNTO — con
+            // varias secciones pobladas a la vez (el día malo para el que
+            // existe la pantalla) el tramo fijo superaba el viewport de un
+            // teléfono y las cuotas en cuarentena quedaban inalcanzables.
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 24),
+                children: [
+            // Bandeja ONLINE de rechazos + talonario (0236/0237). Se oculta
+            // sola sin conexion o sin nada pendiente.
+            const RechazosSyncSeccion(),
             if (rows.isNotEmpty)
               Container(
                 width: double.infinity,
@@ -166,23 +191,29 @@ class _CobrosARevisarScreenState extends ConsumerState<CobrosARevisarScreen> {
                       fontSize: 12, color: scheme.onErrorContainer, height: 1.4),
                 ),
               ),
-            Expanded(
-              child: rows.isEmpty
-                  ? EmptyState(
-                      icon: Icons.verified_outlined,
-                      titulo: _query.isEmpty
-                          ? 'Nada que revisar'
-                          : 'Sin resultados',
-                      descripcion: _query.isEmpty
-                          ? 'Ninguna cuota está cobrada por encima de su total.'
-                          : 'Ningún cliente con ese nombre tiene cuotas para revisar.',
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                      children: _porCliente(rows)
-                          .map((g) => _ClienteCard(grupo: g))
-                          .toList(),
-                    ),
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 48),
+                child: EmptyState(
+                  icon: Icons.verified_outlined,
+                  titulo:
+                      _query.isEmpty ? 'Nada que revisar' : 'Sin resultados',
+                  descripcion: _query.isEmpty
+                      ? 'Ninguna cuota está cobrada por encima de su total.'
+                      : 'Ningún cliente con ese nombre tiene cuotas para revisar.',
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Column(
+                  children: _porCliente(rows)
+                      .map((g) => _ClienteCard(grupo: g))
+                      .toList(),
+                ),
+              ),
+                ],
+              ),
             ),
           ],
         );
@@ -313,8 +344,15 @@ class _DetalleCuotaSheetState extends ConsumerState<_DetalleCuotaSheet> {
   void initState() {
     super.initState();
     _pagos = ps.db.watch(
+      // Vuelto, moneda y monto entregado NO son adorno: son lo que distingue
+      // dos cobros del mismo monto y el mismo día (pedido de Rubén,
+      // 2026-08-29). Uno pudo pagar US$15 justos y el otro C$520 con vuelto:
+      // mismo importe aplicado, recibos distintos. Y el CHECK
+      // `pagos_coherencia_moneda` garantiza que los cuatro campos vienen
+      // siempre poblados y coherentes, así que se pueden mostrar sin defensas.
       'SELECT p.id, p.monto_cordobas, p.fecha_pago, p.metodo, p.notas, '
-      'p.en_revision, '
+      'p.en_revision, p.revision_motivo, '
+      'p.vuelto_cordobas, p.moneda, p.monto_original, p.tasa_conversion, '
       'co.nombre AS quien, r.numero_completo AS recibo '
       'FROM pagos p '
       'LEFT JOIN cobradores co ON co.id = p.cobrador_id '
@@ -434,6 +472,15 @@ class _DetalleCuotaSheetState extends ConsumerState<_DetalleCuotaSheet> {
             motivo: motivo.trim(),
           );
       if (!mounted) return;
+      // Si tras anular este pago ya no quedan cobros en revisión para esta cuota,
+      // la disputa queda resuelta y cerramos la hoja modal automáticamente.
+      final restantesEnRevision = await ps.db.getOptional(
+        'SELECT 1 FROM pagos WHERE cuota_id = ? AND anulado = 0 AND en_revision = 1 LIMIT 1',
+        [widget.cuota['cuota_id'] as String],
+      );
+      if (restantesEnRevision == null && mounted) {
+        Navigator.of(context).pop();
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pago anulado')),
       );
@@ -483,8 +530,9 @@ class _DetalleCuotaSheetState extends ConsumerState<_DetalleCuotaSheet> {
             actorId: me.id,
           );
       if (!mounted) return;
+      Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cobro confirmado. Los demás se anularon.')),
+        const SnackBar(content: Text('Cobro confirmado. El duplicado fue anulado.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -530,6 +578,41 @@ String _fechaLegible(String? iso) {
   return dt.hour == 0 && dt.minute == 0
       ? Fmt.fechaNi(iso)
       : Fmt.fechaHoraNi(iso);
+}
+
+/// ¿Vale la pena mostrar CÓMO pagó, o sería repetir el mismo número?
+///
+/// En córdobas justos lo entregado es igual a lo aplicado: repetirlo es ruido.
+/// Con dólares o con vuelto de por medio es JUSTO lo que distingue dos cobros
+/// del mismo importe y el mismo día — el caso que la migración 0264 dejó de
+/// resolver sola para que lo decida una persona.
+bool _hayQueMostrarComoPago(Map<String, dynamic> p) {
+  final moneda = (p['moneda'] as String?) ?? 'NIO';
+  final vuelto = (p['vuelto_cordobas'] as num?)?.toDouble() ?? 0;
+  return moneda != 'NIO' || vuelto > 0.001;
+}
+
+/// "Entregó US$15.00 · tasa 34.20" / "Entregó C$520.00 · vuelto C$7.00".
+///
+/// Los tres campos vienen siempre poblados y coherentes: lo garantiza el CHECK
+/// `pagos_coherencia_moneda` del server (en NIO, `monto_original` = aplicado +
+/// vuelto; en USD, la tasa es > 0). Por eso no hay defensas contra nulos más
+/// allá del default de lectura.
+String _comoPago(Map<String, dynamic> p) {
+  final moneda = (p['moneda'] as String?) ?? 'NIO';
+  final entregado = (p['monto_original'] as num?)?.toDouble() ?? 0;
+  final vuelto = (p['vuelto_cordobas'] as num?)?.toDouble() ?? 0;
+  final tasa = (p['tasa_conversion'] as num?)?.toDouble() ?? 1;
+
+  final partes = <String>['Entregó ${Fmt.monto(entregado, moneda)}'];
+  // La tasa solo dice algo si hubo conversión.
+  if (moneda != 'NIO') partes.add('tasa ${tasa.toStringAsFixed(2)}');
+  // El vuelto SIEMPRE en córdobas, aunque haya pagado en dólares
+  // (invariante de dinero #2).
+  partes.add(vuelto > 0.001
+      ? 'vuelto ${Fmt.cordobas(vuelto)}'
+      : 'sin vuelto');
+  return partes.join(' · ');
 }
 
 class _PagoCard extends StatelessWidget {
@@ -592,16 +675,73 @@ class _PagoCard extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                       color: scheme.onErrorContainer)),
             ),
+            // El porqué, en las palabras del server. Desde 0264 distingue el
+            // duplicado IDÉNTICO ("preguntá qué recibo tiene el cliente") del
+            // sobrepago común, que son dos decisiones distintas.
+            if ((pago['revision_motivo'] as String?)?.isNotEmpty ?? false) ...[
+              const SizedBox(height: 5),
+              Text(pago['revision_motivo'] as String,
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      color: scheme.onSurfaceVariant,
+                      height: 1.35)),
+            ],
           ],
-          const SizedBox(height: 4),
-          Text(
-            'Registró: $quien'
-            '${recibo == null ? '' : '\nRecibo $recibo'}'
-            ' · ${pago['metodo'] ?? ''}'
-            '${notas == null || notas.isEmpty ? '' : '\n$notas'}',
-            style: TextStyle(
-                fontSize: 12, color: scheme.onSurfaceVariant, height: 1.5),
+          // ── EL RECIBO, PRIMERO Y DESTACADO ──────────────────────────────
+          // Es el criterio de decisión, no un dato más: el cliente tiene UNO
+          // de los dos papeles en la mano, y ése manda. Antes iba mezclado en
+          // un párrafo con el método y las notas.
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.receipt_long,
+                  size: 15, color: scheme.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  recibo == null ? 'Sin recibo' : 'Recibo $recibo',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: recibo == null ? scheme.error : scheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 2),
+          Text('Cobró $quien · ${pago['metodo'] ?? ''}',
+              style:
+                  TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+
+          // ── CÓMO PAGÓ ───────────────────────────────────────────────────
+          // Solo cuando aporta: en córdobas justos, lo entregado es igual a lo
+          // aplicado y repetirlo es ruido. Cuando hay dólares o vuelto, es
+          // JUSTO lo que distingue este recibo del otro.
+          if (_hayQueMostrarComoPago(pago)) ...[
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(_comoPago(pago),
+                  style: TextStyle(
+                      fontSize: 12, color: scheme.onSurface, height: 1.4)),
+            ),
+          ],
+
+          if (notas != null && notas.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(notas,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic)),
+          ],
           if (puedeAnular) ...[
             const SizedBox(height: 10),
             Wrap(

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../powersync/db.dart' as ps;
+import '../providers/db_epoch_provider.dart';
 import '../models/deuda_snapshot.dart';
 import '../models/solicitud_accion.dart';
 import '../utils/busqueda_cliente.dart';
@@ -468,14 +469,13 @@ class SolicitudesRepo {
       tenantId: s.tenantId,
       contratoId: s.entidadId,
       cobradorId: aprobadorId,
-      fechaCancelacion: fecha,
-      precioMensual: precio,
       motivo: notas != null
           ? '${_motivoDeSolicitud(s)} — $notas'
           : _motivoDeSolicitud(s),
     );
     // Cancelación → sin fila de evento: origenEventoId = null.
-    await _disponerExcedente(s.entidadId, fecha, precio, aprobadorId, null);
+    await _disponerExcedente(
+        s.tenantId, s.entidadId, fecha, precio, aprobadorId, null);
   }
 
   /// Acredita el excedente que el cliente pagó por adelantado y no va a usar.
@@ -499,12 +499,15 @@ class SolicitudesRepo {
   /// No-op si no hay excedente o si el tenant tiene el crédito apagado. Si falla
   /// NO se propaga: la suspensión ya está hecha y tirar acá dejaría la
   /// solicitud marcada como fallida con el contrato ya cortado.
-  Future<void> _disponerExcedente(String contratoId, DateTime fecha,
-      double precio, String aprobadorId, String? origenEventoId) async {
+  Future<void> _disponerExcedente(String tenantId, String contratoId,
+      DateTime fecha, double precio, String aprobadorId,
+      String? origenEventoId) async {
     try {
-      final on =
-          await const SettingsRepo().read('cobranza.credito_excedente',
-              fallback: true);
+      // El setting se lee del tenant de la SOLICITUD: la clave existe en cada
+      // empresa con valores distintos, y el device del super_admin baja además
+      // las del tenant System.
+      final on = await const SettingsRepo()
+          .read(tenantId, 'cobranza.credito_excedente', fallback: true);
       if (on != true) return;
       await ContratosRepo().registrarDisposicionExcedente(
         contratoId: contratoId,
@@ -543,7 +546,8 @@ class SolicitudesRepo {
       motivo: _motivoDeSolicitud(s),
       notas: s.notas,
     );
-    await _disponerExcedente(s.entidadId, fecha, precio, aprobadorId, suspId);
+    await _disponerExcedente(
+        s.tenantId, s.entidadId, fecha, precio, aprobadorId, suspId);
   }
 
   Future<void> _ejecutarReactivarContrato(
@@ -572,42 +576,15 @@ class SolicitudesRepo {
 
   Future<void> _ejecutarDesactivarCliente(
       SolicitudAccion s, String aprobadorId) async {
-    final rows = await ps.db.getAll(
-      'SELECT COUNT(*) AS n FROM contratos '
-      "WHERE cliente_id = ? AND estado = 'activo'",
-      [s.entidadId],
-    );
-    final n = (rows.first['n'] as int?) ?? 0;
-    if (n > 0) {
-      throw StateError(
-        'No se puede desactivar: el cliente tiene $n contrato(s) activo(s). '
-        'Suspendé o cancelá primero.',
-      );
-    }
-
-    // MISMO CRITERIO QUE EL SERVER. El trigger `trg_clientes_guard_desactivar`
-    // (0220) bloquea por DEUDA, no por contratos activos, así que un cliente
-    // con el contrato ya cancelado pero con cuotas impagas pasaba este chequeo
-    // y lo rechazaba el server al sincronizar: la solicitud quedaba aprobada y
-    // el cliente seguía activo. Hoy hay 5 clientes en ese hueco.
-    final deuda = await ps.db.getAll(
-      'SELECT COUNT(*) AS n, '
-      '       COALESCE(SUM(max(monto + COALESCE(cargos_neto, 0) '
-      '                        - COALESCE(monto_pagado, 0), 0)), 0) AS saldo '
-      '  FROM cuotas '
-      " WHERE cliente_id = ? AND estado IN ('pendiente','parcial')",
-      [s.entidadId],
-    );
-    final saldo = ((deuda.first['saldo'] as num?) ?? 0).toDouble();
-    if (saldo > 0.01) {
-      final cuantas = (deuda.first['n'] as num?)?.toInt() ?? 0;
-      throw StateError(
-        'No se puede desactivar: debe ${saldo.toStringAsFixed(2)} en $cuantas '
-        'cuota(s). Un cliente desactivado no debe tener deuda: cobrale o '
-        'condonale la deuda primero.',
-      );
-    }
-
+    // Acá había DOS bloqueos —contratos ACTIVOS y DEUDA— que espejaban el guard
+    // del server (0220) y la regla ANTERIOR: "un cliente desactivado no debe
+    // tener deuda, cobrale primero". La migración `0260` dio vuelta esa regla:
+    // desactivar CANCELA los contratos vivos y CONDONA la deuda, así que ambos
+    // bloqueaban justo el efecto buscado. Aprobar una solicitud de baja ahora
+    // ejecuta la baja, y el server hace la cascada en la misma transacción.
+    //
+    // Lo que el aprobador ve ANTES de decidir (monto condonado + contratos que
+    // se cancelan) lo pinta `solicitudes_screen._bloqueDeuda`.
     final ocurridoEn = DateTime.now().toUtc();
     final opId = OpLog.nuevoOpId();
     final actor = await OpLog.actorDeUsuario(ps.db, aprobadorId);
@@ -668,6 +645,7 @@ final solicitudesRepoProvider =
     Provider<SolicitudesRepo>((ref) => const SolicitudesRepo());
 
 final solicitudesPendientesCountProvider = StreamProvider<int>((ref) {
+  ref.watch(dbEpochProvider); // se recrea al cambiar de DB/identidad (#7)
   return ps.db
       .watch(
         "SELECT COUNT(*) as cnt FROM solicitudes_accion WHERE estado = 'pendiente'",
@@ -677,6 +655,7 @@ final solicitudesPendientesCountProvider = StreamProvider<int>((ref) {
 
 final solicitudesPendientesProvider =
     StreamProvider<List<SolicitudAccion>>((ref) {
+  ref.watch(dbEpochProvider); // se recrea al cambiar de DB/identidad (#7)
   return ps.db
       .watch(
         'SELECT * FROM solicitudes_accion WHERE estado = ? '

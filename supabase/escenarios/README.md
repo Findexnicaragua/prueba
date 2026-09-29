@@ -1,76 +1,98 @@
 # Escenarios de prueba controlados
 
-Datos de prueba con **resultado conocido de antemano**, para verificar que los
-números del Resumen son los correctos.
+Datos con **resultado conocido de antemano**, para verificar que los números del
+Resumen son los correctos.
 
-La idea: con 4.500 clientes reales, cuando un número no cuadra hay que
-investigar. Con 4 clientes cuyos pagos elegimos nosotros, el número esperado se
-calcula a mano en un minuto y la comparación es inmediata.
+La idea: con 4.600 clientes reales, cuando un número no cuadra hay que
+investigar. Con clientes cuyos pagos elegimos nosotros, el número esperado se
+calcula a mano y la comparación es inmediata.
 
-## Escenario "lectura del dashboard" — Test Tenant
+## Escenario "aritmética del Resumen"
 
-Cuatro clientes que cubren los cuatro casos donde la lectura se presta a
-confusión:
+**15 clientes repartidos en 6 ciclos (mar–ago 2026).** Cada uno existe para
+disparar un caso de borde distinto:
 
-| Cliente | Cuota | Vence | Qué hace |
-|---|---|---|---|
-| Ana | 500 | 20 jul | Paga el mismo día — **a tiempo** |
-| Beto | 800 | 16 jul | **No paga** — cae en mora |
-| Carla | 600 | 18 jul | Paga el 5 ago — **tarde**, pasada la gracia |
-| Dani | 700 | 20 **jun** | Paga el 1 ago una cuota **de otro ciclo** |
+| Cliente | Qué caso cubre |
+|---|---|
+| TT-01 | Control: paga siempre dentro de la gracia. Y un adelanto |
+| TT-02 | Moroso crónico que siempre se pone al día tarde |
+| TT-03 | Paga el ÚLTIMO día de gracia exacto (el borde) |
+| TT-04 | Paga un día después de vencer (dentro de la gracia) |
+| TT-05 | **Un cliente con DOS contratos** (dos puntos en la misma casa) |
+| TT-06 | Cuota con abono PARCIAL en el ciclo en curso |
+| TT-07 | Crédito a favor aplicado (cargo negativo, sin fila en pagos) |
+| TT-08 | Dos cobros sobre la MISMA cuota + cuota que vence el primer día del ciclo |
+| TT-09 | **Contrato suspendido** que pagó los ciclos cerrados + cuota anulada |
+| TT-10 | Contrato cancelado con deuda |
+| TT-11 | Cargo extra positivo (reconexión) + pagos tardíos |
+| TT-12 | Pago anulado + pago en revisión + cuota anulada |
+| TT-13 | Pre-pago antes del inicio del ciclo + cobro puntual |
+| TT-14 | Descuento (cargo negativo) + borde final de la ventana |
 
-**Dani es el caso importante.** Su plata entra en la caja del período pero no
-aparece en "Recuperado", porque cubre un mes anterior. Es exactamente el hueco
-donde al dueño del tenant no le cerró la cuenta en agosto de 2026 — reproducido
-en miniatura.
+**TT-09 es el importante.** Pagó de marzo a julio y se suspende en agosto: con
+el filtro de suspendidos que había antes, esa plata desaparecía de los cinco
+ciclos cerrados donde entró.
 
-### Cómo correrlo
+## Los dos usos del mismo escenario
 
-Contra el tenant de pruebas, **en este orden** (el segundo depende de las cuotas
-que genera el trigger del server al insertar los contratos):
+`dashboard.json` es la fuente única. Dos generadores lo bajan a dos lados:
 
 ```bash
-supabase db query --linked -f supabase/escenarios/01_clientes_y_contratos.sql
-supabase db query --linked -f supabase/escenarios/02_pagos.sql
-supabase db query --linked -f supabase/escenarios/03_recibos.sql
+# 1. SQLite, para el test: corre las consultas de produccion y compara
+python supabase/escenarios/generar_seed_dart.py
+flutter test test/features/admin/dashboard/dashboard_numeros_test.dart
 ```
 
-Los contratos se insertan y las cuotas las genera el servidor solo, como en la
-vida real. Los pagos se aplican después, buscando la cuota por
-(cliente, fecha de vencimiento) — así no dependen de ids que cambian al
-re-sembrar.
+```bash
+# 2. Postgres, para VER el escenario en la app (tenant de prueba)
+python supabase/escenarios/generar_seed_sql.py
+supabase db query --linked -f supabase/escenarios/dashboard_seed.sql
+```
 
-### Qué tiene que dar
+El seed de Postgres **borra** la data operativa del tenant de prueba y la
+reemplaza. Deja los 20 invariantes de dinero en cero.
 
-Ciclo **agosto 2026** (15 jul – 14 ago), con 10 días de gracia:
+## Qué tiene que dar
 
-| Tarjeta | Fila | Esperado |
-|---|---|---|
-| Cobros del mes | Cobros | 2.600 |
-| Cobros del mes | Recuperado | 1.100 |
-| Cobros del mes | Por recuperar | 1.500 |
-| Mora del ciclo | Total mora | 2.100 |
-| Mora del ciclo | Recuperado | 600 |
-| Mora del ciclo | Por recuperar | 1.500 |
-| Desglose de caja | Cuotas del ciclo | 1.100 |
-| Desglose de caja | Deuda vieja | 700 |
-| Desglose de caja | **Total que entró** | **1.800** |
+Ciclo en curso **15 jul – 14 ago 2026**, con 7 días de gracia:
 
-Verificado contra la base el 2026-08-11: los siete coinciden exactamente.
+| Tarjeta | Fila | Usuarios | Cuotas | Monto |
+|---|---|---|---|---|
+| Cobros del mes | Cobros | 13 | 15 | 11.200 |
+| Cobros del mes | Recuperado | 7 | 8 | 5.800 |
+| Cobros del mes | ↳ tarde | — | — | 1.570 |
+| Cobros del mes | Por recuperar | 8 | 8 | 5.400 |
+| Mora del ciclo | Total mora | 6 | 7 | 4.525 |
+| Mora del ciclo | Recuperado | 2 | 2 | 1.570 |
+| Mora del ciclo | Por recuperar | 5 | 5 | 2.955 |
 
-**La lección del escenario:** "Recuperado" dice 1.100 y a la caja entraron
-1.800. No es un error — son dos preguntas distintas. "Recuperado" mide cuánto de
-lo que vence este mes ya se cobró; la caja mide cuánta plata entró, sin importar
-qué mes cubre.
+Los 6 ciclos de la histórica, con la mora moviéndose mes a mes:
 
-### Ojo con las fechas
+| Ciclo | Total | Recuperado | Sigue debiéndose |
+|---|---|---|---|
+| mar | 2.030 | 2.030 | 0 |
+| abr | 3.355 | 3.355 | 0 |
+| may | 5.260 | 5.260 | 0 |
+| jun | 3.655 | 3.340 | 315 |
+| jul | 3.125 | 2.510 | 615 |
+| ago (en curso) | 4.525 | 1.570 | 2.955 |
 
-El escenario tiene fechas FIJAS (julio/agosto 2026) porque los números esperados
-dependen de ellas. Corrido mucho después, las cuotas siguen donde están pero el
-ciclo "en curso" ya es otro: hay que mirar el período de agosto 2026 con las
+## Dos cosas que el escenario enseñó
+
+**El sobrepago no es alcanzable por doble cobro.** TT-08 se diseñó con dos
+cobros sobre la misma cuota para provocar una cuota sobrepagada. Al sembrarlo
+contra el server real, el guard de la migración 0218 mandó el segundo pago a
+REVISIÓN por sobrepago, y `monto_pagado` quedó correcto. O sea que ese camino ya
+está cerrado: el saldo negativo solo se alcanza BAJANDO el total después de
+cobrar (quitar un cargo de una cuota ya pagada, o la cancelación de contrato).
+El escenario se corrigió para reflejar lo que el server realmente hace.
+
+**Las cuotas las genera el server.** Insertar un contrato dispara el trigger que
+las crea solas. Por eso el seed las borra antes de poner las del escenario, con
+sus fechas exactas.
+
+## Ojo con las fechas
+
+Las fechas son FIJAS (mar–ago 2026) porque los números esperados dependen de
+ellas. Corrido mucho después, hay que mirar el ciclo de agosto 2026 con las
 flechas de la tarjeta, no el que abre por defecto.
-
-### Para limpiar
-
-El tenant se vacía con el mismo orden seguro de FKs que se usó en la limpieza
-del 2026-08-09 (pagos → cuotas → contratos → clientes).

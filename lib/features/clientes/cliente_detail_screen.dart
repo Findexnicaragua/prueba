@@ -607,10 +607,14 @@ class _IconButton extends StatelessWidget {
   }
 }
 
-/// Saldo a favor del CLIENTE (crédito por excedente, 0127). Solo admin/
-/// admin_cobranza. Muestra el disponible + "Aplicar" a la cuota pendiente más
-/// vieja entre TODOS sus contratos activos (oldest-first global — el crédito es a
-/// nivel cliente, cruza contratos). Oculto si no hay saldo o el setting está OFF.
+/// Saldo a favor del CLIENTE (crédito por excedente, 0127). Muestra el
+/// disponible + "Aplicar" a la cuota pendiente más vieja de sus contratos
+/// COBRABLES —activos y suspendidos— (oldest-first global: el crédito es a nivel
+/// cliente y cruza contratos). Oculto si no hay saldo o el setting está OFF.
+///
+/// El rol `lectura` VE la tarjeta (es información de dinero, su trabajo) pero no
+/// el botón: aplicar crédito escribe un cargo, una fila de `saldos_favor` y
+/// `op_log` a su nombre.
 class _SaldoFavorSection extends ConsumerStatefulWidget {
   const _SaldoFavorSection({required this.clienteId});
   final String clienteId;
@@ -637,25 +641,48 @@ class _SaldoFavorSectionState extends ConsumerState<_SaldoFavorSection> {
     // creado_por = el usuario): bloqueada al impersonar, igual que cobrar/
     // suspender/cancelar.
     if (bloqueadoPorImpersonacion(context, ref)) return;
+    // El rol `lectura` llega hasta acá porque `verDinero` lo incluye a propósito
+    // (ve dinero, no lo mueve). Sin este guard escribía cargo + saldos_favor +
+    // op_log a su nombre. Doble red: el botón tampoco se le dibuja.
+    if (ref.read(soloLecturaProvider)) return;
     final me = ref.read(cobradorActualProvider).valueOrNull;
     if (me == null) return;
-    // Cuota pendiente/parcial MÁS VIEJA entre los contratos ACTIVOS del cliente.
+    // Cuota pendiente/parcial MÁS VIEJA de los contratos COBRABLES del cliente.
+    //
+    // 'suspendido' entra desde el 2026-08-26: se le cortó el servicio pero se le
+    // sigue cobrando, así que su deuda es tan aplicable como la de un activo. Es
+    // la misma línea que ya tomaron el titular del dashboard y el reporte de
+    // mora. 'cancelado' NO entra: cancelar condona, no queda deuda (0259/0261).
+    //
+    // 🔴 El JOIN es INNER Y TIENE QUE SEGUIR SIÉNDOLO. Es tentador pasarlo a
+    // LEFT para alcanzar los cargos manuales sueltos (`cuotas.contrato_id` es
+    // nullable) — el `COALESCE(ct.estado,'activo')` de acá abajo parece pedirlo.
+    // NO: `saldos_favor.contrato_id` es **NOT NULL** en Postgres, así que el
+    // INSERT de `aplicarCredito` (contratos_repo, "Fila del libro") reventaría
+    // con 23502 EN EL SERVER, después de que SQLite ya lo escribió local. Y como
+    // esto es offline-first, el usuario ve el crédito aplicado, la cuota baja de
+    // saldo… y el sync lo rechaza. Para habilitarlo hace falta una migración que
+    // haga nullable esa columna, no un cambio de JOIN.
     final rows = await ps.db.getAll(
       '''
       SELECT cu.id, cu.periodo, ct.dia_pago AS dia_pago,
              (cu.monto + COALESCE(cu.cargos_neto, 0) - COALESCE(cu.monto_pagado, 0)) AS saldo
         FROM cuotas cu JOIN contratos ct ON ct.id = cu.contrato_id
        WHERE cu.cliente_id = ? AND cu.estado IN ('pendiente','parcial')
-         AND COALESCE(ct.estado, 'activo') = 'activo'
+         AND COALESCE(ct.estado, 'activo') IN ('activo','suspendido')
          AND (cu.monto + COALESCE(cu.cargos_neto, 0) - COALESCE(cu.monto_pagado, 0)) > 0.005
        ORDER BY date(cu.fecha_vencimiento) ASC LIMIT 1
       ''',
       [widget.clienteId],
     );
     if (rows.isEmpty) {
+      // Callejón sin salida antes: decía "no hay cuotas pendientes" y ahí
+      // terminaba, sin decir qué pasa con la plata del cliente.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('No hay cuotas pendientes para aplicar el saldo.')));
+            content: Text('Este cliente no tiene ninguna cuota donde aplicar '
+                'el saldo. Queda a su favor para la próxima que se le genere.'),
+            duration: Duration(seconds: 5)));
       }
       return;
     }
@@ -714,10 +741,22 @@ class _SaldoFavorSectionState extends ConsumerState<_SaldoFavorSection> {
       stream: _stream,
       initialData: const [],
       builder: (context, snap) {
+        // Antes, si la consulta fallaba, `snap.data` quedaba null → disp 0 → la
+        // tarjeta desaparecía ENTERA y el crédito del cliente se volvía
+        // invisible, indistinguible de "no tiene". Mismo criterio que el KPI del
+        // dashboard (M13): un error se dice, no se disfraza de cero.
+        if (snap.hasError) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Text('No se pudo leer el saldo a favor de este cliente.',
+                style: TextStyle(fontSize: 13, color: Colors.orange.shade900)),
+          );
+        }
         final raw =
             (snap.data?.isNotEmpty ?? false) ? snap.data!.first['d'] : null;
         final disp = (raw as num?)?.toDouble() ?? 0.0;
         if (disp <= 0.005) return const SizedBox.shrink();
+        final soloLectura = ref.watch(soloLecturaProvider);
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Container(
@@ -745,15 +784,16 @@ class _SaldoFavorSectionState extends ConsumerState<_SaldoFavorSection> {
                     ],
                   ),
                 ),
-                FilledButton(
-                  onPressed: _aplicando ? null : () => _aplicar(disp),
-                  child: _aplicando
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Aplicar'),
-                ),
+                if (!soloLectura)
+                  FilledButton(
+                    onPressed: _aplicando ? null : () => _aplicar(disp),
+                    child: _aplicando
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Aplicar'),
+                  ),
               ],
             ),
           ),
@@ -1125,8 +1165,9 @@ class _ClienteInfo extends ConsumerWidget {
     final resultado = await showModalBottomSheet<({String? cobradorId})>(
       context: context,
       showDragHandle: true,
-      builder: (_) =>
-          _SelectorCobradorSheet(cobradorIdActual: cobradorIdActual),
+      builder: (_) => _SelectorCobradorSheet(
+          cobradorIdActual: cobradorIdActual,
+          tenantId: ref.read(tenantIdProvider)),
     );
     if (resultado == null || !context.mounted) return;
     if (resultado.cobradorId == cobradorIdActual) return; // sin cambios
@@ -1393,9 +1434,17 @@ class _NotaClienteCardState extends ConsumerState<_NotaClienteCard> {
 /// para reasignar el cliente. Devuelve `(cobradorId: <id|null>)` al elegir, o
 /// null si se cierra sin elegir. Reutiliza la misma query del `_SelectorCobrador`
 /// del form de cliente.
+///
+/// [tenantId] llega por constructor (el llamador ya tiene `ref`): esta lista
+/// ESCRIBE — asignar un cobrador de otra empresa deja al cliente en el limbo
+/// (desaparece de la lista y del mapa de su cobrador real). El SQLite del
+/// super_admin no es mono-tenant: conserva la empresa impersonada anterior
+/// hasta que cierra el sync (audit 2026-08-21).
 class _SelectorCobradorSheet extends StatefulWidget {
-  const _SelectorCobradorSheet({required this.cobradorIdActual});
+  const _SelectorCobradorSheet(
+      {required this.cobradorIdActual, required this.tenantId});
   final String? cobradorIdActual;
+  final String? tenantId;
 
   @override
   State<_SelectorCobradorSheet> createState() => _SelectorCobradorSheetState();
@@ -1410,9 +1459,10 @@ class _SelectorCobradorSheetState extends State<_SelectorCobradorSheet> {
     _cobradoresStream = ps.db.watch(
       '''
       SELECT id, nombre, prefijo_recibo FROM cobradores
-       WHERE activo = 1 AND rol = 'cobrador'
+       WHERE activo = 1 AND rol = 'cobrador' AND tenant_id = ?
        ORDER BY nombre
       ''',
+      parameters: [widget.tenantId],
     );
   }
 

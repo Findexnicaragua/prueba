@@ -218,11 +218,21 @@ class ContratosRepo {
           }
           continue; // parcial futuro: sobrevive (lo abonado vale).
         }
-        // en_curso → prorratear los días consumidos del ciclo, clamp al pago.
+        // en_curso → prorratear los días consumidos del ciclo.
+        // CLAMP DOBLE (audit 2026-08-22, hallazgo CRITICO): el prorrateo usa
+        // `precioMensual`, que es el precio LIVE del plan, mientras que la cuota
+        // es un SNAPSHOT del precio de SU momento (invariante #5 / R22). Si el
+        // plan subio -o la cuota venia de un plan anterior- prorratear podia
+        // dejar la cuota POR ENCIMA de su propio mes entero: darse de baja salia
+        // mas caro que el mes completo. Caso real: SE0338 de Mairena, cuota de
+        // C$513 que al suspender quedaba en C$1.075 por 26 dias. Ya se consumo
+        // una vez (SE0294, 11/08: 479,90 -> 496,45).
+        // Techo = montoAntes (nunca subir), piso = pagado (nunca esconder plata).
         final v = ventanaServicio(periodo, diaPago);
         final prorrateado =
             montoPuente(v.inicio, fechaSuspension, precioMensual);
-        final nuevoMonto = prorrateado < pagado ? pagado : prorrateado;
+        final acotado = prorrateado > montoAntes ? montoAntes : prorrateado;
+        final nuevoMonto = acotado < pagado ? pagado : acotado;
         final saldo = nuevoMonto + cargos - pagado;
         if (pagado < 0.01 && saldo < 0.01) {
           await anular(c['id']!); // sin pago ni días consumidos.
@@ -331,6 +341,18 @@ class ContratosRepo {
     final ocurridoEn = DateTime.now().toUtc().toIso8601String();
     final opId = OpLog.nuevoOpId();
     final actor = await OpLog.actorDeUsuario(_dbOrGlobal, cobradorId);
+    // El motivo que llega del caller, o la etiqueta genérica si no vino.
+    //
+    // ESTO ESTABA ROTO Y NO SE NOTABA: el parámetro se declaraba y se
+    // documentaba ("queda en el op_log del contrato") y el cuerpo escribía
+    // siempre el literal 'Cambio de plan'. Producción lo confirma: 168 filas
+    // de historial, CERO variación. Lo grave era el camino de aprobación:
+    // `solicitudes_repo._ejecutarCambiarPlan` arma un motivo que incluye el
+    // AVISO de que el precio del plan se movió entre el pedido y la firma —con
+    // los dos números— más las notas de quien pidió, y se descartaba entero.
+    final motivoOp = (motivo != null && motivo.trim().isNotEmpty)
+        ? motivo.trim()
+        : 'Cambio de plan';
 
     await _dbWOrGlobal.writeTransaction((tx) async {
       // 0. Solo un contrato ACTIVO; leer día_pago, plan actual y cliente.
@@ -365,12 +387,20 @@ class ContratosRepo {
       // del plan entre abrir el diálogo y confirmar). Fallback al parámetro.
       var precioNuevoReal = precioNuevo;
       var precioViejoReal = precioViejo;
+      // Los NOMBRES viajan con el cargo (0267): el contrato queda apuntando al
+      // plan NUEVO, así que después del cambio no hay forma de saber de dónde
+      // venía. El único rastro es un `op_log` con el UUID, y `op_log` no se le
+      // sincroniza al cobrador → el ticket impreso en la calle no podría
+      // nombrarlo. Se guardan acá, en el momento en que todavía se saben.
+      String? planViejoNombre, planNuevoNombre;
       final precios = await tx.getAll(
-        'SELECT id, precio_mensual FROM planes WHERE id IN (?, ?)',
+        'SELECT id, nombre, precio_mensual FROM planes WHERE id IN (?, ?)',
         [planNuevoId, planViejoId],
       );
       for (final p in precios) {
         final pm = (p['precio_mensual'] as num?)?.toDouble();
+        if (p['id'] == planNuevoId) planNuevoNombre = p['nombre'] as String?;
+        if (p['id'] == planViejoId) planViejoNombre = p['nombre'] as String?;
         if (pm == null) continue;
         if (p['id'] == planNuevoId) precioNuevoReal = pm;
         if (p['id'] == planViejoId) precioViejoReal = pm;
@@ -400,7 +430,7 @@ class ContratosRepo {
         await _opCuota(tx, tenantId: tenantId, opId: opId, tipoOp: 'cambio_plan',
             actor: actor, ocurridoEn: ocurridoEn, cuotaId: cu['id']!, campos: [
               {'campo': 'monto', 'antes': montoAntes, 'despues': montoNuevo},
-            ], resumen: {'motivo': 'Cambio de plan'});
+            ], resumen: {'motivo': motivoOp});
       }
 
       // 1.5. Modo "Hoy con prorrateo": ajustar los días NO servidos del ciclo en
@@ -426,6 +456,52 @@ class ContratosRepo {
             break;
           }
         }
+
+        // 🔴 SOBRE QUÉ CUOTA SE ASIENTA EL CARGO (decisión del dueño, 2026-09-03).
+        //
+        // `host` es la cuota del CICLO EN CURSO y define QUÉ se cobra: los días
+        // que van de hoy al fin de su ventana. Eso no se toca.
+        //
+        // Lo que sí se decidió es DÓNDE se asienta. Si esa cuota ya está saldada,
+        // meterle el cargo encima la REABRE, y el cliente tiene un recibo en la
+        // mano que dice que ese mes está pagado. Pasó de verdad: contrato 0986 de
+        // Mairena, cuota de agosto, C$513 cobrados el 25/08 con el recibo
+        // RE-01069, y el cambio de plan del 28/08 la dejó debiendo C$49,61.
+        // Tres de los ocho cambios de plan hechos cayeron sobre una cuota pagada.
+        //
+        // Regla: si la del ciclo está saldada, el cargo va a la SIGUIENTE. El mes
+        // con recibo queda cerrado (regla 18: el recibo es un documento emitido,
+        // no una vista) y la diferencia se cobra igual, un ciclo después.
+        //
+        // Sólo aplica al UPGRADE: el downgrade acredita en `saldos_favor` y no
+        // toca la cuota, así que nunca reabrió nada.
+        Map<String, dynamic>? cuotaDelCargo = host;
+        var cargoDiferido = false;
+        if (host != null) {
+          final hMonto = (host['monto'] as num).toDouble();
+          final hCargos = (host['cargos_neto'] as num).toDouble();
+          final hPagado = (host['monto_pagado'] as num).toDouble();
+          // Mismo epsilon que el resto del repo para comparar plata.
+          if (hPagado >= hMonto + hCargos - 0.009) {
+            final perHost = _parsePeriodo(host['periodo'] as String);
+            DateTime? mejorPer;
+            Map<String, dynamic>? siguiente;
+            for (final cu in vivas) {
+              final per = _parsePeriodo(cu['periodo'] as String);
+              if (per.isAfter(perHost) &&
+                  (mejorPer == null || per.isBefore(mejorPer))) {
+                mejorPer = per;
+                siguiente = cu;
+              }
+            }
+            // Si NO hay siguiente, el contrato se está terminando. Antes que
+            // falsear un recibo por unos días de un contrato que cierra, no se
+            // cobra — y queda dicho en el historial, no en silencio.
+            cuotaDelCargo = siguiente;
+            cargoDiferido = true;
+          }
+        }
+
         if (host != null) {
           final prorr = prorrateoCambioPlanHoy(
             hoy: hoy,
@@ -436,30 +512,86 @@ class ContratosRepo {
           );
           if (!prorr.sinAjuste) {
             final hostId = host['id'] as String;
-            if (prorr.esUpgrade) {
-              // UPGRADE: cargo_extra (SUMA) sobre la cuota en curso + recalc del
-              // espejo (cargos_neto/estado), calcando aplicarCredito. El admin lo
-              // cobra con el flujo normal (la cuota muestra el saldo mayor).
-              final hostEstado = host['estado'] as String;
-              final hostMonto = (host['monto'] as num).toDouble();
-              final hostPagado = (host['monto_pagado'] as num).toDouble();
-              final saldoAntes =
-                  hostMonto + (host['cargos_neto'] as num).toDouble() - hostPagado;
+            // El contexto que necesita el RECIBO para explicarse solo (0267).
+            // Se arma acá, dentro de la tx, porque es el único momento en que
+            // se saben las dos puntas: apenas termine, el contrato ya apunta al
+            // plan nuevo y el viejo no se puede reconstruir.
+            // `tramos` va guardado y no recalculado en el recibo a propósito:
+            // el papel tiene que seguir diciendo lo mismo dentro de dos años,
+            // aunque la fórmula del prorrateo cambie (misma lección que 0262
+            // con el mes, que se recalculaba en cada impresión).
+            final detalleJson = jsonEncode({
+              'v': 1,
+              'plan_antes': planViejoNombre,
+              'precio_antes': precioViejoReal,
+              'plan_despues': planNuevoNombre,
+              'precio_despues': precioNuevoReal,
+              'desde': prorr.desde?.toIso8601String().split('T').first,
+              'hasta': prorr.hasta?.toIso8601String().split('T').first,
+              'dias': prorr.dias,
+              'es_upgrade': prorr.esUpgrade,
+              // true = el cargo NO está en la cuota cuyos días cobra: la del
+              // ciclo ya estaba pagada y se asentó en la siguiente (2026-09-03).
+              // Se congela acá para que dentro de dos años se pueda explicar por
+              // qué el recibo de septiembre cobra días de agosto, sin deducirlo.
+              'diferido': cargoDiferido,
+              'tramos': [
+                for (final t in prorr.tramos)
+                  {
+                    'anio': t.anio,
+                    'mes': t.mes,
+                    'dias': t.dias,
+                    'precio_dia': t.precioDia,
+                    'subtotal': t.subtotal,
+                  },
+              ],
+            });
+            if (prorr.esUpgrade && cuotaDelCargo == null) {
+              // La del ciclo estaba saldada y NO hay cuota siguiente: el contrato
+              // se está terminando. No se cobra la diferencia — antes que dejar
+              // falso un recibo ya entregado por los días de un contrato que
+              // cierra. Queda ASENTADO en el historial del contrato: si mañana
+              // alguien pregunta por qué ese cambio no generó cargo, la respuesta
+              // está escrita y no hay que deducirla.
+              await _opContrato(tx, tenantId: tenantId, opId: opId,
+                  tipoOp: 'cambio_plan', actor: actor, ocurridoEn: ocurridoEn,
+                  contratoId: contratoId, campos: const [], resumen: {
+                    'monto': 0,
+                    'motivo': 'Diferencia NO cobrada: la cuota del ciclo ya estaba '
+                        'pagada y no hay cuota siguiente donde asentarla'
+                  });
+            } else if (prorr.esUpgrade) {
+              // UPGRADE: cargo_extra (SUMA) + recalc del espejo
+              // (cargos_neto/estado), calcando aplicarCredito. El admin lo cobra
+              // con el flujo normal (la cuota muestra el saldo mayor).
+              //
+              // Va sobre `cuotaDelCargo`, que es la del ciclo en curso SALVO que
+              // esa ya esté saldada — ahí es la siguiente (ver el bloque de
+              // arriba). `host` sigue siendo quien definió el prorrateo.
+              final destino = cuotaDelCargo!;
+              final destinoId = destino['id'] as String;
+              final hostEstado = destino['estado'] as String;
+              final hostMonto = (destino['monto'] as num).toDouble();
+              final hostPagado = (destino['monto_pagado'] as num).toDouble();
+              final saldoAntes = hostMonto +
+                  (destino['cargos_neto'] as num).toDouble() -
+                  hostPagado;
               await tx.execute(
                 '''
                 INSERT INTO cargos_extra (id, tenant_id, cuota_id, cobrador_id,
                   tipo, monto, porcentaje, descripcion, aplicado_por, aplicado_en,
-                  client_local_id, ocurrido_en, origen)
-                VALUES (?, ?, ?, ?, 'otro', ?, NULL, ?, ?, ?, ?, ?, 'cobro')
+                  client_local_id, ocurrido_en, origen, detalle)
+                VALUES (?, ?, ?, ?, 'otro', ?, NULL, ?, ?, ?, ?, ?,
+                        'cambio_plan', ?)
                 ''',
                 [
-                  _uuid.v4(), tenantId, hostId,
-                  (host['cobrador_id'] as String?) ?? cobradorId, prorr.monto,
+                  _uuid.v4(), tenantId, destinoId,
+                  (destino['cobrador_id'] as String?) ?? cobradorId, prorr.monto,
                   'Diferencia por cambio de plan', cobradorId, ocurridoEn,
-                  _uuid.v4(), ocurridoEn,
+                  _uuid.v4(), ocurridoEn, detalleJson,
                 ],
               );
-              final delta = await _deltaCargosExtraLocal(tx, hostId);
+              final delta = await _deltaCargosExtraLocal(tx, destinoId);
               final nuevoEstado = calcularEstadoCuota(
                 estadoActual: hostEstado,
                 montoCuota: hostMonto,
@@ -468,12 +600,12 @@ class ContratosRepo {
               );
               await tx.execute(
                 'UPDATE cuotas SET cargos_neto = ?, estado = ?, ocurrido_en = ? WHERE id = ?',
-                [delta, nuevoEstado, ocurridoEn, hostId],
+                [delta, nuevoEstado, ocurridoEn, destinoId],
               );
               final saldoDespues = hostMonto + delta - hostPagado;
               await _opCuota(tx, tenantId: tenantId, opId: opId,
                   tipoOp: 'cambio_plan', actor: actor, ocurridoEn: ocurridoEn,
-                  cuotaId: hostId, campos: [
+                  cuotaId: destinoId, campos: [
                     {'campo': 'estado', 'antes': hostEstado, 'despues': nuevoEstado},
                     {
                       'campo': 'saldo',
@@ -482,7 +614,10 @@ class ContratosRepo {
                     },
                   ], resumen: {
                     'monto': prorr.monto,
-                    'motivo': 'Diferencia por cambio de plan (upgrade)'
+                    'motivo': cargoDiferido
+                        ? 'Diferencia por cambio de plan (upgrade) — asentada en '
+                            'esta cuota porque la del ciclo ya estaba pagada'
+                        : 'Diferencia por cambio de plan (upgrade)'
                   });
             } else {
               // DOWNGRADE: acreditar la diferencia en saldos_favor (R17). NO toca
@@ -491,13 +626,13 @@ class ContratosRepo {
                 '''
                 INSERT INTO saldos_favor (id, tenant_id, cliente_id, contrato_id,
                   tipo, monto, cuota_id, origen_evento_id, motivo, creado_por,
-                  ocurrido_en)
-                VALUES (?, ?, ?, ?, 'acreditado', ?, ?, ?, ?, ?, ?)
+                  ocurrido_en, detalle)
+                VALUES (?, ?, ?, ?, 'acreditado', ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 [
                   _uuid.v4(), tenantId, clienteId, contratoId, prorr.monto,
                   hostId, opId, 'Crédito por cambio de plan (downgrade)',
-                  cobradorId, ocurridoEn,
+                  cobradorId, ocurridoEn, detalleJson,
                 ],
               );
               await _opContrato(tx, tenantId: tenantId, opId: opId,
@@ -518,26 +653,29 @@ class ContratosRepo {
       await _opContrato(tx, tenantId: tenantId, opId: opId, tipoOp: 'cambio_plan',
           actor: actor, ocurridoEn: ocurridoEn, contratoId: contratoId, campos: [
             {'campo': 'plan_id', 'antes': planViejoId, 'despues': planNuevoId},
-          ], resumen: {'motivo': 'Cambio de plan'});
+          ], resumen: {'motivo': motivoOp});
 
       // 3. Mirror offline del color del mapa (online lo hace el trigger server).
       await recalcVmvDeContrato(tx, contratoId);
     });
   }
 
-  /// Cancela un contrato con la MISMA dinámica de dinero que suspender, pero
-  /// PERMANENTE (no se reactiva). Deja viva/cobrable la deuda real (meses
-  /// cumplidos + mora previa), prorratea el mes en curso por la ventana de
-  /// servicio del día_pago (CLAMP al pago) y anula solo los meses futuros.
-  /// Guarda motivo + snapshot de deuda en `contratos` (para reimprimir el doc).
-  /// A diferencia del cancelar viejo: NO anula la mora previa ni liquida las
-  /// parciales a 0 → la deuda real sigue cobrable.
+  /// Cancela un contrato: PERMANENTE (no se reactiva) y **CONDONA toda la deuda
+  /// viva** — regla del dueño del 2026-08-24. Toda cuota `pendiente`/`parcial`
+  /// queda con saldo CERO, sin importar su ventana de servicio: la sin pago se
+  /// anula, la que tiene abono baja su `monto` a lo ya pagado. Guarda motivo +
+  /// snapshot de lo condonado en `contratos` (para reimprimir el documento).
+  ///
+  /// Es lo OPUESTO de suspender, que conserva la deuda y es reversible. El
+  /// comentario anterior describía la dinámica de suspensión —la regla previa a
+  /// esa fecha— y sobrevivió 80 líneas arriba del código que hace lo contrario.
+  ///
+  /// **Sin fecha ni precio a propósito:** cancelar ya no prorratea nada, así que
+  /// el resultado no depende de ellos. Dejarlos en la firma insinuaba que sí.
   Future<void> cancelarContrato({
     required String tenantId,
     required String contratoId,
     required String cobradorId,
-    required DateTime fechaCancelacion,
-    required double precioMensual,
     required String motivo,
   }) async {
     final ocurridoEn = DateTime.now().toUtc().toIso8601String();
@@ -554,10 +692,12 @@ class ContratosRepo {
       }
       final diaPago = (cRows.first['dia_pago'] as num?)?.toInt() ?? 1;
 
-      // Snapshot de la deuda SOBREVIVIENTE (mismo cálculo que suspender, DRY) →
-      // se guarda para reimprimir el documento de cancelación.
-      final deuda = await _calcularDeudaSuspension(
-          tx, contratoId, fechaCancelacion, precioMensual);
+      // Snapshot de la deuda que se CONDONA → se guarda para reimprimir el
+      // documento del cliente y para la tarjeta del contrato. Se calcula con
+      // `_calcularDeudaCancelacion`, o sea con el MISMO criterio del loop de
+      // abajo. Hasta el 2026-08-26 usaba el cálculo de suspensión y guardaba un
+      // monto menor al que efectivamente se ponía en cero.
+      final deuda = await _calcularDeudaCancelacion(tx, contratoId);
       // Estado PREVIO de las cuotas vivas → permite REVERTIR la cancelación al
       // estado exacto. `monto_pagado` es la guarda (si cambió, hubo cobros).
       final cuotasPrevias = await _snapshotCuotasPrevias(tx, contratoId);
@@ -569,10 +709,26 @@ class ContratosRepo {
         'cuotas_previas': cuotasPrevias,
       });
 
-      // Clasificar cada cuota viva por ventana de servicio del día_pago (igual
-      // que suspender): cumplido → INTACTA (deuda real cobrable); en_curso →
-      // prorratear con clamp al pago; futuro → anular el pendiente (el parcial
-      // sobrevive). NUNCA anular una cuota con pago.
+      // REGLA (2026-08-24, decisión del dueño): **cancelar NO deja deuda**.
+      // Todas las cuotas vivas quedan en cero, sin importar su ventana de
+      // servicio. Antes esto clasificaba por `estadoServicio` y dejaba INTACTA
+      // la cumplida, prorrateaba la en curso y solo anulaba la futura — o sea
+      // que un contrato cancelado seguía apareciendo con deuda cobrable, que es
+      // justo lo que el dueño reportó.
+      //
+      // Cancelar y suspender hacían casi lo mismo. Ahora se separan:
+      //   · SUSPENDER = corta el servicio, CONSERVA la deuda, es reversible.
+      //     Es la herramienta para el que se fue debiendo y le querés cobrar.
+      //   · CANCELAR  = se acabó, no se cobra más. Permanente.
+      //
+      // CÓMO se pone en cero, y por qué NO siempre anulando:
+      //   · sin pago      → anular la cuota.
+      //   · con pago      → `monto = pagado` y estado 'pagada' (saldo 0).
+      // Anular una cuota con plata NO es una opción: el trigger
+      // `cuotas_anular_pagos_asociados_trg` anula EN CASCADA sus pagos y sus
+      // recibos, o sea que borraría plata que entró a caja y un comprobante que
+      // el cliente tiene en la mano. La regla "NUNCA anular una cuota con pago"
+      // sigue siendo inviolable; lo que cambia es qué se hace con el resto.
       Future<void> anular(Object id) => tx.execute(
             '''
             UPDATE cuotas
@@ -582,6 +738,17 @@ class ContratosRepo {
             ''',
             [ocurridoEn, cobradorId, 'Cancelación de contrato', ocurridoEn, id],
           );
+      // Si el contrato YA estaba suspendido, sus cuotas se procesaron con esta
+      // misma lógica el día de la suspensión: la del mes en curso quedó
+      // prorrateada a los días servidos y las futuras anuladas. Volver a
+      // correrla contra la fecha de CANCELACIÓN —posterior— recalcularía el
+      // prorrateo con MÁS días y le subiría el monto a la cuota, cobrándole al
+      // cliente tiempo en el que el servicio ya estaba cortado. Lo que sobrevivió
+      // a la suspensión es la deuda real: queda intacta y cobrable.
+      // El contrato YA suspendido tambien se limpia: lo que sobrevivio a la
+      // suspension es deuda, y cancelar ya no la conserva. Antes se salteaba
+      // para no re-prorratear con una fecha posterior (lo que le SUBIA el monto
+      // al cliente); sin prorrateo ese riesgo desaparece.
       final vivasRows = await tx.getAll(
         '''
         SELECT id, periodo, estado, monto,
@@ -593,34 +760,16 @@ class ContratosRepo {
         [contratoId],
       );
       for (final c in vivasRows) {
-        final periodo = _parsePeriodo(c['periodo'] as String);
-        final est = estadoServicio(periodo, diaPago, fechaCancelacion);
-        if (est == 'cumplido') continue; // deuda real → intacta (cobrable).
         final estadoAntes = c['estado'] as String;
         final montoAntes = (c['monto'] as num).toDouble();
         final pagado = (c['monto_pagado'] as num).toDouble();
         final cargos = (c['cargos_neto'] as num).toDouble();
         final saldoAntes = montoAntes + cargos - pagado;
         final clamp0 = saldoAntes < 0 ? 0 : saldoAntes;
-        if (est == 'futuro') {
-          if (estadoAntes == 'pendiente') {
-            await anular(c['id']!);
-            await _opCuota(tx, tenantId: tenantId, opId: opId,
-                tipoOp: 'cancelacion', actor: actor, ocurridoEn: ocurridoEn,
-                cuotaId: c['id']!, campos: [
-                  {'campo': 'estado', 'antes': estadoAntes, 'despues': 'anulada'},
-                  {'campo': 'saldo', 'antes': clamp0, 'despues': 0},
-                ], resumen: {'motivo': 'Cancelación de contrato'});
-          }
-          continue; // parcial futuro: sobrevive (lo abonado vale).
-        }
-        // en_curso → prorratear días consumidos, clamp al pago.
-        final v = ventanaServicio(periodo, diaPago);
-        final prorrateado =
-            montoPuente(v.inicio, fechaCancelacion, precioMensual);
-        final nuevoMonto = prorrateado < pagado ? pagado : prorrateado;
-        final saldo = nuevoMonto + cargos - pagado;
-        if (pagado < 0.01 && saldo < 0.01) {
+        if (saldoAntes < 0.01) continue; // ya esta en cero: nada que hacer.
+
+        if (pagado < 0.01) {
+          // Sin plata encima: se anula y desaparece de toda lista de cobro.
           await anular(c['id']!);
           await _opCuota(tx, tenantId: tenantId, opId: opId,
               tipoOp: 'cancelacion', actor: actor, ocurridoEn: ocurridoEn,
@@ -628,29 +777,26 @@ class ContratosRepo {
                 {'campo': 'estado', 'antes': estadoAntes, 'despues': 'anulada'},
                 {'campo': 'saldo', 'antes': clamp0, 'despues': 0},
               ], resumen: {'motivo': 'Cancelación de contrato'});
-        } else if (saldo < 0.01) {
+        } else {
+          // Con abono: el monto BAJA a lo ya pagado y la cuota queda saldada.
+          // Asi el saldo es 0 sin tocar el pago ni su recibo (anularla los
+          // mataria en cascada). `cargos_neto` se lleva a 0 en el mismo UPDATE:
+          // si quedara un cargo, el saldo canonico volveria a dar > 0 y la
+          // cuota reaparecia en las listas de cobro.
           await tx.execute(
-            "UPDATE cuotas SET monto = ?, estado = 'pagada', ocurrido_en = ? WHERE id = ?",
-            [nuevoMonto, ocurridoEn, c['id']],
+            "UPDATE cuotas SET monto = ?, cargos_neto = 0, estado = 'pagada', "
+            'ocurrido_en = ? WHERE id = ?',
+            [pagado, ocurridoEn, c['id']],
           );
           await _opCuota(tx, tenantId: tenantId, opId: opId,
               tipoOp: 'cancelacion', actor: actor, ocurridoEn: ocurridoEn,
               cuotaId: c['id']!, campos: [
-                {'campo': 'monto', 'antes': montoAntes, 'despues': nuevoMonto},
+                {'campo': 'monto', 'antes': montoAntes, 'despues': pagado},
                 {'campo': 'estado', 'antes': estadoAntes, 'despues': 'pagada'},
                 {'campo': 'saldo', 'antes': clamp0, 'despues': 0},
-              ], resumen: {'motivo': 'Prorrateo por cancelación'});
-        } else {
-          await tx.execute(
-            'UPDATE cuotas SET monto = ?, ocurrido_en = ? WHERE id = ?',
-            [nuevoMonto, ocurridoEn, c['id']],
-          );
-          await _opCuota(tx, tenantId: tenantId, opId: opId,
-              tipoOp: 'cancelacion', actor: actor, ocurridoEn: ocurridoEn,
-              cuotaId: c['id']!, campos: [
-                {'campo': 'monto', 'antes': montoAntes, 'despues': nuevoMonto},
-                {'campo': 'saldo', 'antes': clamp0, 'despues': saldo < 0 ? 0 : saldo},
-              ], resumen: {'motivo': 'Prorrateo por cancelación'});
+              ], resumen: {
+                'motivo': 'Cancelación de contrato: la deuda no se cobra'
+              });
         }
       }
 
@@ -691,15 +837,126 @@ class ContratosRepo {
     });
   }
 
-  /// Preview de la deuda cobrable al cancelar (mismo cálculo que suspender).
+  /// Preview de la deuda que se CONDONA al cancelar.
+  ///
+  /// **Espeja la mutación de `cancelarContrato`, no la de suspender.** Hasta el
+  /// 2026-08-26 delegaba en `_calcularDeudaSuspension`, que descarta las cuotas
+  /// futuras pendientes y prorratea la del mes en curso — la regla ANTERIOR al
+  /// 2026-08-24. Cancelar ya no clasifica por ventana de servicio: pone en cero
+  /// el saldo ENTERO de toda cuota viva. O sea que el número que veía quien
+  /// autoriza la baja era MENOR que el que el sistema borraba, y ese mismo
+  /// número viajaba al snapshot, al documento del cliente y a la ficha del
+  /// contrato. Cuatro superficies con el monto de la regla vieja.
+  ///
+  /// No toma fecha ni precio a propósito: sin prorrateo no hacen falta, y
+  /// dejarlos sería insinuar que el resultado depende de ellos.
   Future<({double total, List<Map<String, dynamic>> cuotas})>
-      previewDeudaCancelacion({
-    required String contratoId,
-    required DateTime fechaCancelacion,
-    required double precioMensual,
-  }) =>
-          _calcularDeudaSuspension(
-              _dbOrGlobal, contratoId, fechaCancelacion, precioMensual);
+      previewDeudaCancelacion({required String contratoId}) =>
+          _calcularDeudaCancelacion(_dbOrGlobal, contratoId);
+
+  /// Qué FALTA CERRAR antes de poder desactivar a un cliente (regla del
+  /// 2026-08-29): mientras le quede un contrato vivo —activo o suspendido— la
+  /// baja se rechaza, y hay que resolver cada uno por separado.
+  ///
+  /// **Cambió de sentido con `0265` y conviene tenerlo claro.** Entre el
+  /// 2026-08-26 y el 2026-08-29 esto era el preview de una CONDONACIÓN: la baja
+  /// cancelaba los contratos en cascada y el número que devolvía era la plata
+  /// que se iba a borrar. Esa cascada se retiró porque una sola firma terminaba
+  /// condonando la deuda de varios contratos que el que autorizaba nunca había
+  /// visto por separado. Ahora la condonación vive en `cancelarContrato`, una
+  /// firma por contrato, y esto es la LISTA DE PENDIENTES de la baja.
+  ///
+  /// Lo enforça el SERVER (`zz_clientes_guard_desactivar`, migración `0265`),
+  /// que rechaza la transición activo→inactivo con contratos vivos. Esta
+  /// función solo MUESTRA, para que el usuario vea qué le falta en vez de
+  /// chocarse con un error.
+  ///
+  /// [total] y [cuotas] se conservan —son la deuda que quedaría pendiente— pero
+  /// **ya no son "lo que se va a condonar"**: nada se condona acá. Sirven para
+  /// dimensionar el trabajo que falta. El que decide contrato por contrato es
+  /// [vivos].
+  Future<({
+    double total,
+    List<Map<String, dynamic>> cuotas,
+    int contratos,
+    List<Map<String, dynamic>> vivos,
+  })> previewBajaCliente({required String clienteId}) async {
+    final vivos = await _dbOrGlobal.getAll(
+      'SELECT id, codigo, estado FROM contratos '
+      "WHERE cliente_id = ? AND estado IN ('activo','suspendido') "
+      // Los activos primero: son los que hay que resolver sí o sí, y el
+      // suspendido admite además la salida de cobrarle la deuda.
+      "ORDER BY CASE estado WHEN 'activo' THEN 0 ELSE 1 END, codigo",
+      [clienteId],
+    );
+    var total = 0.0;
+    final cuotas = <Map<String, dynamic>>[];
+    // Detalle POR CONTRATO: desde 0265 la baja no cancela en cascada, así que
+    // el diálogo ya no muestra "cuánto se condona" sino QUÉ FALTA CERRAR, uno
+    // por uno. Sin este desglose la pantalla podría decir "tenés 2 contratos"
+    // sin poder decir cuáles ni cuánto debe cada uno — y el usuario tendría
+    // que salir a buscarlos a mano.
+    final detalle = <Map<String, dynamic>>[];
+    for (final c in vivos) {
+      final d = await _calcularDeudaCancelacion(_dbOrGlobal, c['id'] as String);
+      total += d.total;
+      cuotas.addAll(d.cuotas);
+      detalle.add({
+        'id': c['id'],
+        'codigo': c['codigo'],
+        'estado': c['estado'],
+        'deuda': (d.total * 100).round() / 100,
+      });
+    }
+    cuotas.sort((a, b) =>
+        (a['periodo'] as String).compareTo(b['periodo'] as String));
+    return (
+      total: (total * 100).round() / 100,
+      cuotas: cuotas,
+      contratos: vivos.length,
+      vivos: detalle,
+    );
+  }
+
+  /// Lo que `cancelarContrato` pone en cero, calculado igual que la mutación:
+  /// cuotas `pendiente`/`parcial`, saldo canónico `monto + cargos_neto −
+  /// monto_pagado`, sin clasificar por ventana de servicio y sin prorratear.
+  /// El umbral `>= 0.01` es el MISMO `if (saldoAntes < 0.01) continue` del loop
+  /// de cancelación: si acá no se corta igual, el diálogo muestra un número y
+  /// la app escribe otro.
+  Future<({double total, List<Map<String, dynamic>> cuotas})>
+      _calcularDeudaCancelacion(dynamic ex, String contratoId) async {
+    final rows = await ex.getAll(
+      '''
+      SELECT periodo, estado, fecha_vencimiento, monto,
+             COALESCE(cargos_neto, 0) AS cargos_neto,
+             COALESCE(monto_pagado, 0) AS monto_pagado,
+             max(monto + COALESCE(cargos_neto, 0) - COALESCE(monto_pagado, 0), 0) AS saldo
+        FROM cuotas
+       WHERE contrato_id = ? AND estado IN ('pendiente','parcial')
+       ORDER BY date(periodo) ASC
+      ''',
+      [contratoId],
+    );
+    var total = 0.0;
+    final cuotas = <Map<String, dynamic>>[];
+    for (final r in rows) {
+      final saldo = (r['saldo'] as num).toDouble();
+      if (saldo < 0.01) continue; // ya está en cero: la mutación la saltea.
+      final redondeado = (saldo * 100).round() / 100;
+      total += redondeado;
+      cuotas.add({
+        'periodo': r['periodo'],
+        'saldo': redondeado,
+        'monto_pagado': (r['monto_pagado'] as num).toDouble(),
+        'fecha_vencimiento': r['fecha_vencimiento'],
+        // Sin `en_curso` ni `dias_*`: cancelar no prorratea, así que la fila
+        // "prorrateado N/M días" de `filaCuotaDeuda` no debe aparecer nunca.
+        'en_curso': false,
+      });
+    }
+    return (total: (total * 100).round() / 100, cuotas: cuotas);
+  }
 
   /// Cambio de estado SIMPLE del contrato (el UPDATE pelado, sin tocar cuotas)
   /// — NO la dinámica de suspender/cancelar, que tienen su propio flujo porque
@@ -852,11 +1109,25 @@ class ContratosRepo {
       //    adelante. Las de los meses suspendidos (período <= mesR) quedan
       //    anuladas (no se cobran). Vuelven a 'pendiente', monto COMPLETO, venc
       //    recalculada con el día nuevo (ciclos completos desde la reactivación).
+      // Los TRES motivos con que se anula por SUSPENSION (audit 2026-08-22):
+      //   1. 'Suspensión temporal'                        -> lo escribe ESTA app
+      //   2. 'Suspensión de contrato (red del server)'    -> el trigger 0234,
+      //      cuando el write de la app no llego (carrera de sync)
+      //   3. 'Servicio no prestado: ...(reparación 0234)' -> el backfill de 0234
+      // Filtrar solo por el primero dejaba las otras dos anuladas PARA SIEMPRE:
+      // el unique (contrato_id, periodo) impide regenerarlas, el cron no las
+      // repone y el colchon del cliente las ve como "ya existe". Hoy hay 3
+      // cuotas por C$2.748 en contratos suspendidos con el motivo 3.
+      // NO se incluyen los motivos de CANCELACION: reactivar un contrato
+      // suspendido no debe resucitar lo que se anulo al cancelar otro. Y el
+      // filtro de periodo (>= mes de reactivacion) ya acota a servicio futuro.
       final aRevivir = await tx.getAll(
         '''
         SELECT id, periodo, monto, fecha_vencimiento FROM cuotas
          WHERE contrato_id = ? AND estado = 'anulada'
-           AND motivo_anulacion = 'Suspensión temporal'
+           AND (motivo_anulacion = 'Suspensión temporal'
+                OR motivo_anulacion = 'Suspensión de contrato (red del server)'
+                OR motivo_anulacion LIKE 'Servicio no prestado:%')
            AND date(periodo) >= date(?)
         ''',
         [contratoId, mesRNextStr],
@@ -1345,7 +1616,7 @@ class ContratosRepo {
         (cRows.isNotEmpty ? (cRows.first['dia_pago'] as num?)?.toInt() : null) ?? 1;
     final rows = await ex.getAll(
       '''
-      SELECT periodo, estado, fecha_vencimiento,
+      SELECT periodo, estado, fecha_vencimiento, monto,
              COALESCE(cargos_neto, 0) AS cargos_neto,
              COALESCE(monto_pagado, 0) AS monto_pagado,
              max(monto + COALESCE(cargos_neto, 0) - COALESCE(monto_pagado, 0), 0) AS saldo
@@ -1363,6 +1634,7 @@ class ContratosRepo {
       final est = estadoServicio(periodo, diaPago, fechaSuspension);
       final cargos = (r['cargos_neto'] as num).toDouble();
       final pagado = (r['monto_pagado'] as num).toDouble();
+      final montoAntes = (r['monto'] as num).toDouble();
       double saldo;
       int? diasCons;
       int? diasCiclo;
@@ -1373,11 +1645,14 @@ class ContratosRepo {
         saldo = (r['saldo'] as num).toDouble();
       } else if (est == 'en_curso') {
         // Período EN CURSO → prorratear los días consumidos del CICLO (inicio →
-        // fecha de suspensión), CLAMP al pago. Espeja la mutación.
+        // fecha de suspensión). **Espeja la mutación, incluido el clamp doble**:
+        // si acá no se acota igual, el diálogo muestra un número y la app
+        // escribe otro (audit 2026-08-22).
         final v = ventanaServicio(periodo, diaPago);
         final prorrateado =
             montoPuente(v.inicio, fechaSuspension, precioMensual);
-        final nuevoMonto = prorrateado < pagado ? pagado : prorrateado;
+        final acotado = prorrateado > montoAntes ? montoAntes : prorrateado;
+        final nuevoMonto = acotado < pagado ? pagado : acotado;
         saldo = nuevoMonto + cargos - pagado;
         if (saldo < 0.01) continue; // cubierto por el abono o sin días.
         diasCons = diasPuente(v.inicio, fechaSuspension);

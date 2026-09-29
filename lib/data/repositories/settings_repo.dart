@@ -35,9 +35,16 @@ class SettingsRepo {
     });
   }
 
-  Future<dynamic> read(String clave, {dynamic fallback}) async {
-    final rows = await ps.db
-        .getAll('SELECT valor FROM settings WHERE clave = ?', [clave]);
+  /// [tenantId] es OBLIGATORIO (2026-08-20): las claves de settings se repiten
+  /// entre empresas y el device del super_admin baja también las del tenant
+  /// System (bucket catalogo_tenant, sin filtro de rol) — 53 claves colisionan
+  /// con valores distintos de verdad (p.ej. cobranza.dias_gracia: System=10,
+  /// Test Tenant=7, Telenet=5). Sin el filtro, `LIMIT 1` implícito devolvía
+  /// la de cualquiera.
+  Future<dynamic> read(String tenantId, String clave, {dynamic fallback}) async {
+    final rows = await ps.db.getAll(
+        'SELECT valor FROM settings WHERE tenant_id = ? AND clave = ?',
+        [tenantId, clave]);
     if (rows.isEmpty) return fallback;
     final raw = rows.first['valor'] as String?;
     try {
@@ -313,14 +320,48 @@ class AppSettings {
       settingValue<bool>(_map, 'dashboard.sparkline_visible', true);
   bool get dashOperativoVisible =>
       settingValue<bool>(_map, 'dashboard.operativo_visible', true);
-  bool get dashTopCobradoresVisible =>
-      settingValue<bool>(_map, 'dashboard.top_cobradores_visible', true);
   bool get dashDistribucionVisible =>
       settingValue<bool>(_map, 'dashboard.distribucion_visible', true);
-  bool get dashProyeccionVisible =>
-      settingValue<bool>(_map, 'dashboard.proyeccion_visible', true);
-  bool get dashRecuperacionVisible =>
-      settingValue<bool>(_map, 'dashboard.recuperacion_visible', true);
+
+  // Los gates `dashboard.pendientes_visible`, `proyeccion_visible`,
+  // `recuperacion_visible` y `top_cobradores_visible` se RETIRARON el
+  // 2026-08-28: servian para ir encendiendo las tarjetas del Resumen de a una
+  // mientras se trabajaban, y ya estan las cinco aprobadas. Un gate que nadie
+  // consulta es una palanca que el proximo agente cree que hace algo.
+
+
+  /// El ORDEN y el encendido de las tarjetas del Resumen (migración 0263).
+  ///
+  /// Devuelve el JSON CRUDO; lo interpreta `leerOrdenTarjetas` en
+  /// `dashboard_tarjetas.dart`, que es donde vive el catálogo de tarjetas y la
+  /// regla de fallback. Acá no se parsea a propósito: este repo no tiene por
+  /// qué saber qué tarjetas existen.
+  ///
+  /// Null = el tenant no lo tiene sembrado → se usa el orden por defecto.
+  String? get dashTarjetasOrden {
+    final v = _map?['dashboard.tarjetas']?.valor;
+    if (v == null) return null;
+    return v is String ? v : v.toString();
+  }
+
+
+  /// Las tarjetas del Resumen que NO son las 5 que el dueno eligio
+  /// (2026-08-27): Recaudo y mora, Caja del ciclo, "De que cuotas era esta
+  /// plata", Cobros de 7 dias, KPIs operativos y Distribucion de cuotas.
+  ///
+  /// Default FALSE y la clave NO se siembra A PROPOSITO: `settingValue` cae al
+  /// default cuando la fila no existe (ver :186), asi que estas tarjetas nacen
+  /// apagadas en TODOS los tenants sin escribir un solo registro en la base
+  /// — ni migracion ni UPDATE en produccion. Los otros seis
+  /// `dashboard.*_visible` SI tienen fila sembrada (0133) y por eso cambiarles
+  /// el default de Dart no habria hecho nada: gana la fila.
+  ///
+  /// Consecuencia a tener presente: como no hay fila, el interruptor NO
+  /// aparece en Ajustes. Para poder prenderlo desde la pantalla hay que
+  /// sembrarlo con una migracion — se difirio hasta que se publique.
+  bool get dashExtrasVisible =>
+      settingValue<bool>(_map, 'dashboard.extras_visible', false);
+
 
   // ── Pantalla de Avisos (gracia/mora): toggle super_admin por tenant (0134).
   // Default FALSE = opt-in (el super_admin lo prende). Gatea el ítem de menú +
@@ -344,6 +385,15 @@ class AppSettings {
       settingValue<bool>(_map, 'cobranza.notif_api_habilitado', false);
   bool get notifApiTokenConfigurado =>
       settingValue<bool>(_map, 'cobranza.notif_api_token_configurado', false);
+  /// Por dónde salen los avisos: `meta` (Cloud API directa) o `whatchimp` (0235).
+  /// Cambia SOLO cómo se arma el pedido en la edge function; a quién se le avisa
+  /// es igual. Ojo: la forma de las variables de la plantilla cambia con esto —
+  /// Meta usa `{{nombre}}`, WhatChimp `{{1}}` (ver [notifApiVariablesPosicionales]).
+  String get notifApiProveedor =>
+      settingValue<String>(_map, 'cobranza.notif_api_proveedor', 'meta');
+
+  /// `true` si el proveedor numera las variables en vez de nombrarlas.
+  bool get notifApiVariablesPosicionales => notifApiProveedor == 'whatchimp';
   String get notifApiPhoneId =>
       settingValue<String>(_map, 'cobranza.notif_api_phone_id', '');
   String get notifApiTemplateGracia =>
@@ -651,10 +701,27 @@ final puedeGestionarEstadoContratoProvider = Provider<bool>((ref) {
 /// 4 "cancelaciones" de la base (45 de 61 tienen un contrato hermano con plan
 /// distinto), perdiendo el historial en cada una.
 ///
+/// `admin_usuarios` SE AGREGO el 2026-08-24, y es el arreglo del mismo problema
+/// que describe el parrafo de arriba — que se habia resuelto para
+/// `admin_cobranza` y quedo abierto para el rol que hace CASI TODA la gestion.
+/// Medido en las solicitudes reales de los dos tenants: `admin_usuarios` metio
+/// 61 cancelaciones y 207 contratos nuevos, y CERO cambios de plan, porque el
+/// boton no le aparecia. Veia "Solicitar cancelacion" —
+/// `puedeGestionarEstadoContratoProvider` (arriba) SI lo incluye— y no veia
+/// este, asi que cancelar+crear era su unica salida para un cambio de servicio.
+/// Cada una de esas veces deja al cliente con dos contratos y dos cuotas en el
+/// ciclo, que es el descuadre "usuarios != cuotas" que reporto el dueño.
+///
+/// El rol NO ejecuta el cambio: lo PIDE (`requiereAprobacionPara` devuelve true
+/// para todo el que no sea admin) y lo aprueba quien corresponde. El server ya
+/// lo acepta — 'cambiar_plan' esta en el CHECK de `solicitudes_accion.tipo` y
+/// la policy de INSERT solo excluye a `lectura` —, asi que no hace falta
+/// migracion: el boton estaba oculto para un flujo que ya funcionaba.
+///
 /// `lectura`, `cobrador` y `tecnico` quedan afuera: no gestionan el contrato.
 final puedeVerCambiarPlanProvider = Provider<bool>((ref) {
   if (!ref.watch(appSettingsProvider).cambioPlanHabilitado) return false;
   final c = ref.watch(cobradorActualProvider).valueOrNull;
   if (c == null || c.esLectura) return false;
-  return c.esAdmin || c.esAdminCobranza || c.esSuperAdmin;
+  return c.esAdmin || c.esAdminCobranza || c.esAdminUsuarios || c.esSuperAdmin;
 });

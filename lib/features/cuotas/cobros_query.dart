@@ -4,6 +4,10 @@
 /// igual que la suma del detalle). La UI vive en `cuotas_list_screen.dart`.
 library;
 
+// `plan_tipo.dart` es Dart puro (sin Flutter) justamente para poder
+// importarse desde acá sin romper la propiedad de este archivo.
+import '../../data/utils/plan_tipo.dart' show kPlanSinPlan;
+
 /// Filtro de estado de la lista de Cobros (los chips de la pantalla).
 enum CobrosFiltro { todas, mora, gracia, parciales, hoy, proxima, verTodo }
 
@@ -63,9 +67,13 @@ const kSinCobradorFiltro = '__sin_cobrador__';
 /// centinela `kSinCobradorFiltro` mapea a `cobrador_id IS NULL`. Un set VACÍO
 /// (todo deseleccionado) = **sin filtrar** (nunca produce lista vacía por
 /// accidente — rework 2026-06-21; la UI además coacciona vacío→null).
+/// [planIds] va con default null a propósito: `cobrosResumenQuery` alimenta
+/// TAMBIÉN la pantalla de Avisos, que no tiene filtro de plan. Con el default,
+/// esa pantalla no se entera de que este parámetro existe.
 (String, List<Object?>) cobrosAdminFilterSql({
   Set<String>? cobradorIds,
   Set<String>? comunidadIds,
+  Set<String>? planIds,
 }) {
   var sql = '';
   final params = <Object?>[];
@@ -84,6 +92,28 @@ const kSinCobradorFiltro = '__sin_cobrador__';
     sql +=
         'AND c.comunidad_id IN (${List.filled(comunidadIds.length, '?').join(', ')}) ';
     params.addAll(comunidadIds);
+  }
+  // Plan del contrato de la CUOTA (`ct.plan_id`), no "el cliente tiene algún
+  // contrato de ese plan": si alguien tiene dos contratos en planes distintos,
+  // filtrar por uno tiene que dejar sólo las cuotas de ESE. Las tres consultas
+  // que usan este helper tienen `ct` en alcance donde se inyecta este SQL.
+  //
+  // El centinela "Sin plan" mapea a `ct.plan_id IS NULL`, que acá son los
+  // CARGOS MANUALES sueltos (cuotas con `contrato_id` NULL — reconexiones,
+  // instalaciones, cobros puntuales). Sin esa rama se evaporarían de la lista
+  // en cuanto alguien tocara el filtro, y nadie lo notaría hasta que faltara un
+  // cobro. En "Fuera de ruta" el JOIN a contratos no es LEFT, así que ahí esta
+  // rama simplemente no matchea — que es lo correcto.
+  if (planIds != null && planIds.isNotEmpty) {
+    final sinPlan = planIds.contains(kPlanSinPlan);
+    final reales = planIds.where((id) => id != kPlanSinPlan).toList();
+    final conds = <String>[];
+    if (reales.isNotEmpty) {
+      conds.add('ct.plan_id IN (${List.filled(reales.length, '?').join(', ')})');
+      params.addAll(reales);
+    }
+    if (sinPlan) conds.add('ct.plan_id IS NULL');
+    if (conds.isNotEmpty) sql += 'AND (${conds.join(' OR ')}) ';
   }
   return (sql, params);
 }
@@ -112,11 +142,15 @@ const kSinCobradorFiltro = '__sin_cobrador__';
   required int diasVisibles,
   Set<String>? cobradorIds,
   Set<String>? comunidadIds,
+  Set<String>? planIds,
 }) {
   final (estadoSql, estadoParams) = cobrosEstadoFilterSql(filtro,
       diasGracia: diasGracia, diasVisibles: diasVisibles);
   final (adminSql, adminParams) =
-      cobrosAdminFilterSql(cobradorIds: cobradorIds, comunidadIds: comunidadIds);
+      cobrosAdminFilterSql(
+          cobradorIds: cobradorIds,
+          comunidadIds: comunidadIds,
+          planIds: planIds);
   final sql = '''
     WITH lineas AS (
       SELECT cu.id AS cuota_id, cu.cliente_id AS cliente_id,
@@ -198,11 +232,15 @@ const kSinCobradorFiltro = '__sin_cobrador__';
   required int diasVisibles,
   Set<String>? cobradorIds,
   Set<String>? comunidadIds,
+  Set<String>? planIds,
 }) {
   final (estadoSql, estadoParams) = cobrosEstadoFilterSql(filtro,
       diasGracia: diasGracia, diasVisibles: diasVisibles);
   final (adminSql, adminParams) =
-      cobrosAdminFilterSql(cobradorIds: cobradorIds, comunidadIds: comunidadIds);
+      cobrosAdminFilterSql(
+          cobradorIds: cobradorIds,
+          comunidadIds: comunidadIds,
+          planIds: planIds);
   final sql = '''
     WITH lineas AS (
       SELECT cu.id AS cuota_id, cu.cliente_id AS cliente_id,
@@ -285,9 +323,13 @@ const kSinCobradorFiltro = '__sin_cobrador__';
 (String, List<Object?>) cobrosFueraDeRutaQuery({
   Set<String>? cobradorIds,
   Set<String>? comunidadIds,
+  Set<String>? planIds,
 }) {
   final (adminSql, adminParams) =
-      cobrosAdminFilterSql(cobradorIds: cobradorIds, comunidadIds: comunidadIds);
+      cobrosAdminFilterSql(
+          cobradorIds: cobradorIds,
+          comunidadIds: comunidadIds,
+          planIds: planIds);
   final sql = '''
     WITH lineas AS (
       SELECT cu.id AS cuota_id, cu.cliente_id AS cliente_id,

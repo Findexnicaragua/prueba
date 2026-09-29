@@ -38,6 +38,13 @@ Future<pw.Document> buildPdfDeudaSuspension({
   String fechaPrefijo = 'Suspensión',
   String fechaKvLabel = 'Suspendido el',
   String pieNota = 'Los meses suspendidos no se facturan. Documento informativo.',
+  // El encabezado de la columna y el renglón del total también cambian de
+  // sentido entre los dos documentos: al suspender la plata SIGUE adeudada, al
+  // cancelar se condonó. Hasta el 2026-08-26 estaban hardcodeados en
+  // "Saldo"/"Total adeudado", así que el papel que se le entregaba al cliente
+  // le reclamaba una deuda que el ISP acababa de perdonarle.
+  String columnaMontoLabel = 'Saldo',
+  String totalLabel = 'Total adeudado',
 }) async {
   final doc = pw.Document(theme: await pdfTheme());
 
@@ -93,7 +100,7 @@ Future<pw.Document> buildPdfDeudaSuspension({
                     child: pw.Text('Período', style: estiloColumna)),
                 pw.Padding(
                     padding: const pw.EdgeInsets.all(5),
-                    child: pw.Text('Saldo',
+                    child: pw.Text(columnaMontoLabel,
                         style: estiloColumna, textAlign: pw.TextAlign.right)),
               ],
             ),
@@ -120,7 +127,7 @@ Future<pw.Document> buildPdfDeudaSuspension({
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text('Total adeudado', style: estiloTotal),
+            pw.Text(totalLabel, style: estiloTotal),
             pw.Text(fmtCordobas(total), style: estiloTotal),
           ],
         ),

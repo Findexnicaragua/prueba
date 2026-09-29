@@ -33,10 +33,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// watchea a través de `syncReadyProvider` y la app entera depende de
 /// que sobreviva el ciclo de Flutter.
 class AuthIdentityState {
-  const AuthIdentityState({this.userId, this.changedAt});
+  const AuthIdentityState({
+    this.userId,
+    this.changedAt,
+    this.entrandoATenant = false,
+  });
 
   final String? userId;
   final DateTime? changedAt;
+
+  /// El cambio de identidad fue **entrar a una empresa impersonando**, no un
+  /// login ni un cambio de usuario.
+  ///
+  /// Existe para una sola cosa: que el plazo de gracia de 8s del sync gate NO
+  /// aplique en ese caso (ver `syncGateGraceProvider`). Entrar a una empresa
+  /// baja la empresa ENTERA —~190.000 filas en Telecable Mairena— y 8 segundos
+  /// alcanzan para una fracción: el gate se abría solo y el super_admin entraba
+  /// a una app vacía, que es justo lo contrario de para lo que entró.
+  final bool entrandoATenant;
 }
 
 class AuthIdentityNotifier extends StateNotifier<AuthIdentityState> {
@@ -84,7 +98,41 @@ class AuthIdentityNotifier extends StateNotifier<AuthIdentityState> {
   /// ENTRAR a un tenant; al salir, el super vuelve a /super/tenants (vista
   /// propia online, no necesita gate).
   void onImpersonationChanged() {
-    state = AuthIdentityState(userId: state.userId, changedAt: DateTime.now());
+    // `entrandoATenant: true` desactiva el plazo de gracia del gate: acá SÍ hay
+    // que esperar a que el sync termine. Es seguro y no deja a nadie atascado
+    // —`SyncGateScreen` muestra progreso real de descarga y ofrece reintentar a
+    // los 2 minutos y volver al login a los 3— y es lo que el dueño pidió
+    // explícitamente: *"como dev necesito ver data"*.
+    //
+    // El costo se paga UNA sola vez por empresa: al volver a entrar, PowerSync
+    // sólo baja los cambios desde la última vez (medido y aceptado por el dueño,
+    // 2026-09-03).
+    state = AuthIdentityState(
+      userId: state.userId,
+      changedAt: DateTime.now(),
+      entrandoATenant: true,
+    );
+  }
+
+  /// Se llama cuando PowerSync confirmó el sync posterior al cambio de identidad
+  /// y completó la descarga. Limpia `changedAt` y `entrandoATenant` para que
+  /// el sync gate quede abierto durante la sesión y futuros delta-syncs de
+  /// fondo no re-disparen la pantalla de espera.
+  void onSyncCompletado() {
+    state = AuthIdentityState(
+      userId: state.userId,
+      changedAt: null,
+      entrandoATenant: false,
+    );
+  }
+
+  /// Si falló la llamada de enter tenant en el servidor, reseteamos el gate.
+  void onImpersonationFailed() {
+    state = AuthIdentityState(
+      userId: state.userId,
+      changedAt: null,
+      entrandoATenant: false,
+    );
   }
 
   void onSignOut() {

@@ -195,6 +195,44 @@ PuenteCambioFecha calcularPuenteCambioFecha({
 double montoCuotaRevaluada(double precioNuevo, double montoPagado) =>
     precioNuevo < montoPagado ? montoPagado : precioNuevo;
 
+/// Un TRAMO del prorrateo: los días que caen dentro de UN mes calendario, con
+/// el precio diario de ESE mes. Existe para poder MOSTRAR la cuenta, no para
+/// calcularla: el total sigue saliendo de [montoPuente].
+///
+/// Por qué hace falta (pedido de Rubén, 2026-09-02): la pantalla decía
+/// "+C$245,16 por los 25 días que faltan" y no había forma de rehacer la
+/// multiplicación a mano, porque **no existe un precio por día único**. Con la
+/// convención del 2026-06-14 (cada día vale `precio / días reales de SU mes`),
+/// un tramo de 25 días a caballo de junio y julio tiene DOS precios diarios:
+/// 300/30 = 10,0000 y 300/31 = 9,6774. Mostrar un promedio (245,16/25 =
+/// 9,8064) sería inventar un precio que ningún día tiene.
+class TramoProrrateo {
+  const TramoProrrateo({
+    required this.anio,
+    required this.mes,
+    required this.dias,
+    required this.precioDia,
+    required this.subtotal,
+  });
+
+  final int anio;
+
+  /// Mes calendario (1-12) al que pertenecen estos días.
+  final int mes;
+
+  /// Cuántos días del prorrateo caen en este mes.
+  final int dias;
+
+  /// Precio de UN día en este mes = `base / díasDelMes(anio, mes)`. SIN
+  /// redondear: se muestra con 4 decimales para que la cuenta cierre a mano.
+  final double precioDia;
+
+  /// `dias * precioDia`, redondeado a centavos SOLO para mostrar. La suma de
+  /// los subtotales puede diferir del total en 1 centavo por redondeo: el
+  /// total canónico es [ProrrateoCambioPlan.monto], que redondea una sola vez.
+  final double subtotal;
+}
+
 /// Resultado del prorrateo "Hoy con prorrateo" de un cambio de plan: el ajuste
 /// por los días AÚN NO SERVIDOS del ciclo en curso, valuados a la DIFERENCIA de
 /// precio (no al precio entero — los días ya consumidos quedan al plan viejo,
@@ -204,6 +242,9 @@ class ProrrateoCambioPlan {
     required this.dias,
     required this.monto,
     required this.esUpgrade,
+    this.tramos = const [],
+    this.desde,
+    this.hasta,
   });
 
   /// Días no servidos del ciclo en curso (de `hoy` EXCL a `finVentana` INCL).
@@ -216,8 +257,53 @@ class ProrrateoCambioPlan {
   /// `false` = bajó → se ACREDITA en saldos_favor (nunca devuelve efectivo).
   final bool esUpgrade;
 
+  /// El desglose por mes calendario, en orden. Vacío si no hay ajuste.
+  /// Ver [TramoProrrateo] para por qué son varios y no uno.
+  final List<TramoProrrateo> tramos;
+
+  /// Primer día cobrado (INCLUSIVO) = `hoy + 1`. Es el que se muestra como
+  /// inicio del rango; `hoy` ya está servido al plan viejo.
+  final DateTime? desde;
+
+  /// Último día cobrado (INCLUSIVO) = fin de la ventana de servicio.
+  final DateTime? hasta;
+
   /// No hay nada que cobrar/acreditar (precio igual, o no quedan días).
   bool get sinAjuste => monto == 0;
+}
+
+/// Parte el rango (`desde` EXCL, `hasta` INCL) en tramos por mes calendario,
+/// cada uno con el precio diario de SU mes. Espeja el recorrido de
+/// [montoPuente] día por día — si esa función cambia, esta tiene que cambiar
+/// con ella o la pantalla mostraría una cuenta que no da el total.
+List<TramoProrrateo> tramosPuente(
+    DateTime pagadoHasta, DateTime anclaServicio, double base) {
+  final out = <TramoProrrateo>[];
+  if (base <= 0) return out;
+  var d = _soloFecha(pagadoHasta).add(const Duration(days: 1));
+  final fin = _soloFecha(anclaServicio);
+  while (!d.isAfter(fin)) {
+    final pd = precioPorDia(d, base);
+    if (out.isNotEmpty && out.last.anio == d.year && out.last.mes == d.month) {
+      final t = out.removeLast();
+      out.add(TramoProrrateo(
+        anio: t.anio,
+        mes: t.mes,
+        dias: t.dias + 1,
+        precioDia: pd,
+        subtotal: ((t.dias + 1) * pd * 100).round() / 100,
+      ));
+    } else {
+      out.add(TramoProrrateo(
+          anio: d.year,
+          mes: d.month,
+          dias: 1,
+          precioDia: pd,
+          subtotal: (pd * 100).round() / 100));
+    }
+    d = d.add(const Duration(days: 1));
+  }
+  return out;
 }
 
 /// Prorratea el modo "Hoy" de un cambio de plan: re-valúa SOLO los días que
@@ -234,9 +320,17 @@ ProrrateoCambioPlan prorrateoCambioPlanHoy({
 }) {
   final diff = precioNuevo - precioViejo;
   final dias = diasPuente(hoy, finVentanaActual);
+  final monto = montoPuente(hoy, finVentanaActual, diff.abs());
   return ProrrateoCambioPlan(
     dias: dias < 0 ? 0 : dias,
-    monto: montoPuente(hoy, finVentanaActual, diff.abs()),
+    monto: monto,
     esUpgrade: diff >= 0,
+    // El desglose SOLO cuando hay algo que mostrar: sin ajuste no hay cuenta
+    // que rehacer, y una lista vacía evita que la UI dibuje un bloque hueco.
+    tramos: monto <= 0
+        ? const []
+        : tramosPuente(hoy, finVentanaActual, diff.abs()),
+    desde: monto <= 0 ? null : _soloFecha(hoy).add(const Duration(days: 1)),
+    hasta: monto <= 0 ? null : _soloFecha(finVentanaActual),
   );
 }

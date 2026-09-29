@@ -1,6 +1,6 @@
 import '../../../powersync/db.dart' as ps;
 
-/// Metadata humanizada de cada invariante de dinero (INV1-INV20).
+/// Metadata humanizada de cada invariante de dinero (INV1-INV31).
 class InvInfo {
   const InvInfo({
     required this.titulo,
@@ -233,10 +233,13 @@ const kInvInfo = <String, InvInfo>{
   'INV18': InvInfo(
     titulo: 'Pago anulado sin quién lo anuló',
     explicacion:
-        'Estos pagos figuran anulados pero sin usuario responsable. El único '
-        'que puede anular sin actor es el guard de sobrepago automático, y ese '
-        'deja siempre su motivo "Duplicado automático:". Cualquier otro caso '
-        'es una anulación sin rastro de quién la hizo.',
+        'Estos pagos figuran anulados pero sin usuario responsable. Hasta la '
+        'migración 0264 había un caso legítimo: el guard de sobrepago anulaba '
+        'solo el duplicado idéntico, dejando su motivo "Duplicado automático:". '
+        'Esa rama se retiró —ahora todo duplicado espera decisión de una '
+        'persona— así que de acá en adelante NINGUNA anulación nueva debería '
+        'quedar sin actor. Los casos viejos con ese motivo siguen siendo '
+        'válidos y por eso el chequeo los excluye.',
     correccion:
         'Revisá el historial (op_log) del pago para identificar al responsable '
         'y completá el motivo de anulación. Si la anulación no correspondía, '
@@ -274,6 +277,172 @@ const kInvInfo = <String, InvInfo>{
         'un trigger del server).',
     severidad: 'media',
     tipoId: 'cliente',
+  ),
+  // INV21-INV31 los agrega el RPC en 0248 (portados del archivo canónico
+  // `supabase/tests/invariantes_dinero.sql`). Misma razón que el comentario de
+  // INV18-20: sin entrada acá el panel cae al render crudo y el super_admin ve
+  // una etiqueta con UUIDs pelados, justo cuando algo se rompió.
+  'INV21': InvInfo(
+    titulo: 'Cuota vieja saltada por un cobro posterior',
+    explicacion:
+        'Estas cuotas nunca recibieron plata pero el contrato ya tiene cobrada '
+        'otra MÁS NUEVA. Se cobró salteándose la más vieja, que es la regla '
+        'de oro del cobro (invariante #11). Pasa cuando dos equipos cobran el '
+        'mismo contrato sin sincronizar entre medio: cada teléfono valida '
+        'contra lo que él conoce y ninguno ve el cobro del otro.',
+    correccion:
+        'No se corrige solo ni conviene tocar la data: la plata cobrada es '
+        'real y está bien registrada, lo que quedó mal es el ORDEN. Revisá el '
+        'contrato y cobrá la cuota vieja; si ya no se va a cobrar, anulala con '
+        'motivo. Si aparecen varias del mismo cobrador, revisá si está '
+        'trabajando con dos dispositivos.',
+    severidad: 'critica',
+    tipoId: 'cuota',
+  ),
+  'INV22': InvInfo(
+    titulo: 'Recibo vivo sin pago detrás',
+    explicacion:
+        'Estos recibos están vigentes pero el pago que los originó no existe o '
+        'fue anulado. Es un comprobante con número fiscal circulando sin plata '
+        'en caja: el cliente tiene el papel, el arqueo no tiene el monto.',
+    correccion:
+        'Si el pago se anuló, el recibo tiene que anularse también (esa es la '
+        'salida normal). Si el pago desapareció, buscá el recibo en papel y '
+        're-registrá el cobro para que vuelvan a estar emparejados.',
+    severidad: 'alta',
+    tipoId: 'texto',
+  ),
+  'INV23': InvInfo(
+    titulo: 'Pago sin exactamente un recibo vigente',
+    explicacion:
+        'Estos pagos vivos no tienen UN recibo vigente: o ninguno (cobro sin '
+        'comprobante válido) o más de uno (un duplicado que quemó un número '
+        'de correlativo). El correlativo es la numeración fiscal del talonario '
+        'y no se puede reusar.',
+    correccion:
+        'Si falta el recibo, re-emitilo desde el pago. Si hay dos, anulá el '
+        'sobrante dejando el que el cliente tiene en la mano — no borres '
+        'ninguno: el número quemado queda como hueco justificado.',
+    severidad: 'alta',
+    tipoId: 'pago',
+  ),
+  'INV24': InvInfo(
+    titulo: 'Pago vivo sobre una cuota anulada o inexistente',
+    explicacion:
+        'Estos pagos siguen contando como plata cobrada (entran al arqueo y al '
+        'dashboard) pero la cuota que pagaban ya no existe o fue anulada. La '
+        'plata está en caja y no está aplicada a nada: nadie la ve del lado '
+        'del cliente, que aparece debiendo lo que ya pagó.',
+    correccion:
+        'Buscá la cuota correcta y reasigná el pago, o reactivá la cuota si se '
+        'anuló por error. Si el cobro no correspondía, anulalo (el trigger '
+        'restaura la cuota solo).',
+    severidad: 'critica',
+    tipoId: 'pago',
+  ),
+  'INV25': InvInfo(
+    titulo: 'Contrato dado de baja que sigue facturando',
+    explicacion:
+        'Estas cuotas son de meses POSTERIORES a la baja o suspensión del '
+        'contrato y siguen vivas. Se le está facturando servicio a alguien que '
+        'ya no lo tiene: la deuda crece sola y el cobrador va a pedir plata '
+        'que el cliente no debe.',
+    correccion:
+        'Anulá las cuotas posteriores a la fecha de baja, desde Operaciones → '
+        'estado de cuota (deja preview, motivo y respaldo). El server lo hace '
+        'solo desde la reparación 0234, así que estas son anteriores a esa red '
+        'o entraron por un camino que no la dispara — típicamente contratos '
+        'cancelados sin fecha de baja registrada.',
+    severidad: 'alta',
+    tipoId: 'cuota',
+  ),
+  'INV26': InvInfo(
+    titulo: 'Cancelación de contrato sin atribuir',
+    explicacion:
+        'Estos contratos figuran cancelados pero sin quién los canceló, sin '
+        'cuándo, o sin motivo. Cancelar es el evento de plata más grande que '
+        'existe (mata todas las cuotas futuras) y es el único que no tiene un '
+        'control del server que exija el responsable.',
+    correccion:
+        'Buscá en el historial (op_log) del contrato quién lo canceló y '
+        'completá el motivo. Ningún camino de la app deja el actor vacío, así '
+        'que un caso nuevo acá significa que se tocó la data por fuera.',
+    severidad: 'media',
+    tipoId: 'contrato',
+  ),
+  'INV27': InvInfo(
+    titulo: 'Cobro sin rastro en el historial',
+    explicacion:
+        'Estos cobros existen pero no dejaron su fila en el historial '
+        '(op_log), que es el ÚNICO registro de cambios del sistema. La plata '
+        'está bien, lo que falta es el "quién y cuándo": si mañana hay una '
+        'discusión sobre ese cobro, no hay a qué recurrir.',
+    correccion:
+        'No se repone hacia atrás sin inventar datos. Lo que importa es que no '
+        'aparezcan casos NUEVOS: el historial lo escribe el teléfono junto con '
+        'el cobro, así que varios seguidos del mismo cobrador apuntan a un '
+        'problema de sincronización de ese equipo.',
+    severidad: 'media',
+    tipoId: 'pago',
+  ),
+  'INV28': InvInfo(
+    titulo: 'Devolución mayor al efectivo del día',
+    explicacion:
+        'Ese día la empresa devolvió más efectivo del que entró en efectivo. '
+        'Puede ser una devolución mal cargada, o un cobro que la respaldaba y '
+        'se anuló después. Se compara contra la caja de la EMPRESA, no la de '
+        'un cobrador: devolver es una acción de oficina y la plata sale de la '
+        'caja de la oficina, no de la calle.',
+    correccion:
+        'Revisá el arqueo de ese día y compará contra el papel. Corregí el '
+        'monto de la devolución o restituí el cobro que falta. Cada fila de '
+        'esta lista es una FECHA, no un registro suelto.',
+    severidad: 'alta',
+    tipoId: 'texto',
+  ),
+  'INV29': InvInfo(
+    titulo: 'Devolución de saldo sin quién ni cuándo',
+    explicacion:
+        'Estas devoluciones no dicen quién entregó la plata o en qué fecha. '
+        'Sin esos dos datos no caen en ningún arqueo: la empresa sigue '
+        'mostrando en caja plata que ya devolvió. Además, es lo que permite '
+        'distinguir una devolución normal de una que se metió por fuera del '
+        'sistema.',
+    correccion:
+        'Completá los dos datos desde el registro de la devolución. Si no se '
+        'puede reconstruir quién la entregó, anulala y volvé a cargarla '
+        'completa.',
+    severidad: 'alta',
+    tipoId: 'texto',
+  ),
+  'INV30': InvInfo(
+    titulo: 'Pago con moneda o tasa incoherente',
+    explicacion:
+        'Estos pagos tienen tasa de cambio cero, negativa o vacía, monto '
+        'original inválido, o están marcados en córdobas con una tasa que no '
+        'es 1. Con una tasa mal cargada el monto en córdobas queda multiplicado '
+        'o dividido: el cliente paga bien y el sistema registra otra cosa.',
+    correccion:
+        'Editá el pago con la moneda y la tasa reales del momento del cobro. '
+        'Si el cliente pagó en córdobas, la tasa siempre es 1.',
+    severidad: 'critica',
+    tipoId: 'pago',
+  ),
+  'INV31': InvInfo(
+    titulo: 'Crédito a favor sin su descuento (o al revés)',
+    explicacion:
+        'El crédito por excedente se escribe en dos lugares a la vez: se '
+        'consume el saldo a favor Y se descuenta la cuota. Acá llegó solo una '
+        'de las dos mitades. Si quedó el descuento sin consumir el saldo, el '
+        'cliente puede usar el mismo crédito una y otra vez; si quedó el '
+        'consumo sin descuento, se le comió el crédito sin darle nada.',
+    correccion:
+        'Mirá el prefijo del identificador para saber qué mitad llegó: '
+        '"saldo:" es el consumo, "cargo:" es el descuento. Quitá la mitad '
+        'huérfana y volvé a aplicar el crédito desde la cuota para que entren '
+        'las dos juntas.',
+    severidad: 'critica',
+    tipoId: 'texto',
   ),
 };
 

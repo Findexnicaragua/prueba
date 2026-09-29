@@ -177,20 +177,23 @@ class _TenantCardState extends ConsumerState<_TenantCard> {
     if (_entering) return;
     setState(() => _entering = true);
     try {
-      final service = ImpersonationService(Supabase.instance.client);
-      await service.enter(
-        tenantId: tenant.id,
-        tenantNombre: tenant.nombre,
-      );
-      // Re-armar el sync gate: no mostrar data del tenant anterior hasta que
-      // PowerSync baje la del tenant nuevo (#9 / S2). El router redirige a
-      // /sync-gate y luego a /admin cuando sincroniza la impersonación.
+      // Re-armar el sync gate ANTES de reconectar: no mostrar data del tenant
+      // anterior hasta que PowerSync termine de bajar la del tenant nuevo (#9 / S2).
+      // El router redirige a /sync-gate y luego a /admin cuando termina la descarga.
       ref.read(authIdentityProvider.notifier).onImpersonationChanged();
       // Estado optimista: el router ve impersonando=true YA (sin esperar que
       // baje la fila local) → landing a /admin sin flashear /super/tenants.
       ref.read(pendingImpersonacionProvider.notifier).state =
           PendingImpersonacion.entrando(tenant.id);
+
+      final service = ImpersonationService(Supabase.instance.client);
+      await service.enter(
+        tenantId: tenant.id,
+        tenantNombre: tenant.nombre,
+      );
     } catch (e) {
+      ref.read(authIdentityProvider.notifier).onImpersonationFailed();
+      ref.read(pendingImpersonacionProvider.notifier).state = null;
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

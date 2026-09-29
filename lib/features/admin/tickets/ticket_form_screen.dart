@@ -308,8 +308,15 @@ class _TicketFormScreenState extends ConsumerState<TicketFormScreen> {
   }
 
   Future<void> _elegirAsignado() async {
+    // Filtro de empresa (audit 2026-08-21): sin el, impersonando con residuo de
+    // la empresa anterior se podia dejar el ticket asignado a un tecnico de
+    // OTRO ISP — que nunca lo ve (el sync no le baja la fila) mientras el SLA
+    // corre igual.
     final rows = await ps.db.getAll(
-        "SELECT id, nombre FROM cobradores WHERE activo = 1 AND rol IN ('tecnico','admin_tickets','admin') ORDER BY nombre");
+        'SELECT id, nombre FROM cobradores WHERE activo = 1 '
+        "AND rol IN ('tecnico','admin_tickets','admin') AND tenant_id = ? "
+        'ORDER BY nombre',
+        [ref.read(tenantIdProvider)]);
     if (!mounted) return;
     // Fila-centinela para "sin asignar": así el null que devuelve elegir =
     // cancelar (no toca la selección actual) ≠ elegir explícitamente "ninguno".
