@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/prestamos_models.dart';
 import '../../../data/providers/cobrador_provider.dart';
 import '../../../data/repositories/prestamos_repository.dart';
 import '../../../data/utils/formatters.dart';
+import '../../../config/router.dart' show empresaNombreProvider;
+import '../reportes/estados_financieros_export.dart';
 
 class DashboardCarteraScreen extends ConsumerWidget {
   const DashboardCarteraScreen({super.key});
@@ -31,8 +33,11 @@ class DashboardCarteraScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 10,
                 children: [
                   const Text(
                     'Bienvenido, admin',
@@ -42,27 +47,58 @@ class DashboardCarteraScreen extends ConsumerWidget {
                       color: Color(0xFF2C3E50),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F5E9),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.circle, color: Color(0xFF2ECC71), size: 8),
-                        SizedBox(width: 6),
-                        Text(
-                          'Online',
-                          style: TextStyle(
-                            color: Color(0xFF2E7D32),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FilledButton.icon(
+                        icon: const Icon(Icons.file_download_outlined, size: 18),
+                        label: const Text('Exportar Estados Financieros'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1B3B6F),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                         ),
-                      ],
-                    ),
+                        onPressed: () async {
+                          final formato = await mostrarDialogoExportEstadosFinancieros(context);
+                          if (formato != null && context.mounted) {
+                            final empresaNombre =
+                                ref.read(empresaNombreProvider).valueOrNull ?? 'Findex';
+                            await exportarEstadosFinancieros(
+                              context,
+                              cartera: cartera,
+                              caja: caja,
+                              empresaNombre: empresaNombre,
+                              formato: formato,
+                            );
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.circle, color: Color(0xFF2ECC71), size: 8),
+                            SizedBox(width: 6),
+                            Text(
+                              'Online',
+                              style: TextStyle(
+                                color: Color(0xFF2E7D32),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

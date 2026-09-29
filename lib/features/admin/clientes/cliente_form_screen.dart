@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,7 +21,6 @@ import '../../shared/widgets/phone_text_field.dart';
 import '../../shared/widgets/selector_buscable.dart';
 import '../inventario/equipos_en_baja.dart';
 import 'widgets/geo_picker.dart';
-import 'widgets/red_picker.dart';
 
 class ClienteFormScreen extends ConsumerStatefulWidget {
   const ClienteFormScreen({super.key, this.clienteId});
@@ -932,22 +931,6 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                 icon: const Icon(Icons.map),
                 label: const Text('Seleccionar en mapa'),
                 onPressed: _abrirMapaPicker,
-              ),
-            ],
-          ),
-
-          // ── Conexión de red ───────────────────────────────────────────
-          _Section(
-            titulo: 'Conexión de red (opcional)',
-            children: [
-              RedPicker(
-                tenantId: ref.read(tenantIdProvider) ?? '',
-                puertoId: _puertoId,
-                clienteIdActual: widget.clienteId,
-                onChanged: (id) => setState(() {
-                  _puertoId = id;
-                  _dirty = true;
-                }),
               ),
             ],
           ),

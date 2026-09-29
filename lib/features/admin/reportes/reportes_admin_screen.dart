@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously
+﻿// ignore_for_file: use_build_context_synchronously
 //
 // Los avisos de este archivo son FALSA ALARMA, verificados uno por uno: el
 // `context` se pasa a `guardarPdfConAviso`, que chequea `context.mounted` ADENTRO antes
@@ -26,6 +26,9 @@ import '../../../powersync/db.dart' as ps;
 import 'arqueo_calculo.dart';
 import 'descarga_archivo.dart';
 import 'excel/reporte_excel.dart';
+import '../../../data/repositories/prestamos_repository.dart';
+import 'docx/reporte_docx.dart';
+import 'estados_financieros_export.dart';
 import 'pdf/reporte_anulaciones_pdf.dart';
 import 'pdf/reporte_arqueo_pdf.dart';
 import 'pdf/reporte_clientes_pdf.dart';
@@ -492,18 +495,22 @@ String _arqueoSql(String filtroCbWhere) => '''
 class _TipoReporte {
   const _TipoReporte(this.key, this.label,
       {this.pdf = true,
+      this.docx = true,
       this.soloDetallado = true,
       this.filtraCobrador = true,
       this.soloAdmin = false});
   final String key;
   final String label;
   final bool pdf;
+  final bool docx;
   final bool soloDetallado;
   final bool filtraCobrador;
   final bool soloAdmin;
 }
 
 const _tiposReporte = <_TipoReporte>[
+  _TipoReporte('estados_financieros', 'Estados Financieros (Balance y Resultados)',
+      pdf: false, docx: true, soloDetallado: false, filtraCobrador: false),
   _TipoReporte('cobranza', 'Reporte de cobranza',
       pdf: false, soloDetallado: false),
   _TipoReporte('cobros', 'Cobros del período', soloAdmin: true),
@@ -598,13 +605,14 @@ class _GenerarReporteCard extends ConsumerWidget {
       return;
     }
     var tipoKey = tipos.first.key;
-    var esExcel = true;
-    final elegido = await showDialog<({String tipo, bool excel})>(
+    var formato = 'excel'; // 'excel', 'word', 'pdf'
+    final elegido = await showDialog<({String tipo, String formato})>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
           final desc = tipos.firstWhere((t) => t.key == tipoKey);
-          if (!esExcel && !desc.pdf) esExcel = true;
+          if (formato == 'pdf' && !desc.pdf) formato = 'excel';
+          if (formato == 'word' && !desc.docx) formato = 'excel';
           return AlertDialog(
             title: const Text('Generar reporte'),
             content: Column(
@@ -642,8 +650,17 @@ class _GenerarReporteCard extends ConsumerWidget {
                       child: ChoiceChip(
                         label: const Text('Excel'),
                         avatar: const Icon(Icons.table_view, size: 18),
-                        selected: esExcel,
-                        onSelected: (_) => setLocal(() => esExcel = true),
+                        selected: formato == 'excel',
+                        onSelected: (_) => setLocal(() => formato = 'excel'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Word'),
+                        avatar: const Icon(Icons.description, size: 18),
+                        selected: formato == 'word',
+                        onSelected: (_) => setLocal(() => formato = 'word'),
                       ),
                     ),
                     if (desc.pdf) const SizedBox(width: 8),
@@ -652,8 +669,8 @@ class _GenerarReporteCard extends ConsumerWidget {
                         child: ChoiceChip(
                           label: const Text('PDF'),
                           avatar: const Icon(Icons.picture_as_pdf, size: 18),
-                          selected: !esExcel,
-                          onSelected: (_) => setLocal(() => esExcel = false),
+                          selected: formato == 'pdf',
+                          onSelected: (_) => setLocal(() => formato = 'pdf'),
                         ),
                       ),
                   ],
@@ -661,7 +678,7 @@ class _GenerarReporteCard extends ConsumerWidget {
                 if (!desc.filtraCobrador) ...[
                   const SizedBox(height: 12),
                   Text(
-                    'Es un reporte por cliente: el filtro de cobradores no aplica.',
+                    'Es un reporte por cliente / general: el filtro de cobradores no aplica.',
                     style: TextStyle(
                         color: Theme.of(ctx).colorScheme.outline, fontSize: 11),
                   ),
@@ -675,7 +692,7 @@ class _GenerarReporteCard extends ConsumerWidget {
               ),
               FilledButton(
                 onPressed: () =>
-                    Navigator.pop(ctx, (tipo: tipoKey, excel: esExcel)),
+                    Navigator.pop(ctx, (tipo: tipoKey, formato: formato)),
                 child: const Text('Generar'),
               ),
             ],
@@ -684,8 +701,10 @@ class _GenerarReporteCard extends ConsumerWidget {
       ),
     );
     if (elegido == null || !context.mounted) return;
-    if (elegido.excel) {
+    if (elegido.formato == 'excel') {
       await _generarExcel(context, ref, elegido.tipo);
+    } else if (elegido.formato == 'word') {
+      await _generarWord(context, ref, elegido.tipo);
     } else {
       await _generar(context, ref, elegido.tipo);
     }
@@ -1136,13 +1155,165 @@ class _GenerarReporteCard extends ConsumerWidget {
   /// Genera el .xlsx de [tipo] con los filtros GLOBALES (período + cobradores).
   /// Llamado por el diálogo unificado. "cobranza" = plantilla estándar;
   /// "por_cobrador" arma su hoja con columna Cobrador; el resto vía _extraerDatos.
+  Future<void> _generarWord(
+      BuildContext context, WidgetRef ref, String tipo) async {
+    try {
+      final rango = ref.read(reporteRangoProvider);
+      final cobradores = ref.read(reporteCobradoresProvider);
+      final empresaNombre =
+          ref.read(empresaNombreProvider).valueOrNull ?? 'Findex';
+      final now = DateTime.now();
+      final mm = now.month.toString().padLeft(2, '0');
+      final dd = now.day.toString().padLeft(2, '0');
+
+      if (tipo == 'estados_financieros') {
+        final tenantId = ref.read(tenantIdProvider) ?? '';
+        final repo = ref.read(prestamosRepoProvider);
+        final cartera = await repo.watchResumenCartera(tenantId).first;
+        final caja = await repo.watchEstadoCaja(tenantId).first;
+        await exportarEstadosFinancieros(
+          context,
+          cartera: cartera,
+          caja: caja,
+          empresaNombre: empresaNombre,
+          formato: FormatoExportFinanciero.word,
+        );
+        return;
+      }
+
+      if (tipo == 'cobranza') {
+        final fc = filtroCobradorSql(cobradores);
+        final rows = await ps.db.getAll('''
+          SELECT c.codigo AS cliente_codigo, c.nombre AS cliente_nombre,
+                 cb.nombre AS cobrador_nombre, cu.periodo AS cuota_periodo,
+                 ct.dia_pago AS dia_pago,
+                 p.fecha_pago,
+                 r.numero_completo AS numero_recibo,
+                 p.moneda, p.monto_original, p.monto_cordobas, p.vuelto_cordobas
+            FROM pagos p
+            JOIN cuotas cu ON cu.id = p.cuota_id
+            JOIN clientes c ON c.id = cu.cliente_id
+            JOIN contratos ct ON ct.id = cu.contrato_id
+            LEFT JOIN cobradores cb ON cb.id = p.cobrador_id
+            LEFT JOIN recibos r ON r.pago_id = p.id
+           WHERE COALESCE(p.anulado, 0) = 0
+             AND COALESCE(p.en_revision, 0) = 0
+             AND date(p.fecha_pago) BETWEEN ? AND ?${fc.sql}
+           ORDER BY p.fecha_pago ASC, r.numero_completo ASC
+        ''', [rango.desdeSql, rango.hastaSql, ...fc.params]);
+
+        final doc = DocxBuilder();
+        doc.addReportHeader(
+          empresa: empresaNombre,
+          titulo: 'Reporte de cobranza',
+          periodo: '${Fmt.fechaCorta(rango.desde)} — ${Fmt.fechaCorta(rango.hasta)}',
+        );
+        doc.addTable(
+          headers: const [
+            'ID', 'Cliente', 'Cobrador', 'Mes', 'Fecha', 'Recibo', 'Dólar', 'Córdoba'
+          ],
+          rows: rows.map((r) => [
+            r['cliente_codigo'] ?? '',
+            r['cliente_nombre'] ?? '',
+            r['cobrador_nombre'] ?? '',
+            r['cuota_periodo'] ?? '',
+            r['fecha_pago'] ?? '',
+            r['numero_recibo'] ?? '',
+            (r['moneda'] == 'USD' ? (r['monto_original'] as num? ?? 0) : 0),
+            (r['monto_cordobas'] as num? ?? 0),
+          ]).toList(),
+        );
+        doc.addSignatures();
+        final ruta = await doc.descargar(
+          fileName: 'cobranza_${now.year}_${mm}_$dd.docx',
+        );
+        if (ruta != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Reporte de cobranza en Word guardado')),
+          );
+        }
+        return;
+      }
+
+      if (tipo == 'por_cobrador') {
+        final rows = await _rowsPorCobrador(cobradores, rango);
+        final datosPC = _datosExcelPorCobrador(rows);
+        final doc = DocxBuilder();
+        doc.addReportHeader(
+          empresa: empresaNombre,
+          titulo: 'Reporte por cobrador',
+          periodo: rango.periodoLabel,
+        );
+        doc.addTable(headers: datosPC.headers, rows: datosPC.filas);
+        doc.addSignatures();
+        final ruta = await doc.descargar(
+          fileName: 'por_cobrador_${now.year}_${mm}_$dd.docx',
+        );
+        if (ruta != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Reporte Word guardado')),
+          );
+        }
+        return;
+      }
+
+      final (:headers, :filas) =
+          await _extraerDatos(tipo, rango, cobradores);
+
+      final doc = DocxBuilder();
+      doc.addReportHeader(
+        empresa: empresaNombre,
+        titulo: _tituloReporte(tipo),
+        periodo: _periodoExcel(tipo, rango),
+      );
+      doc.addTable(
+        headers: headers,
+        rows: filas,
+      );
+      doc.addSignatures();
+
+      final ruta = await doc.descargar(
+        fileName: '${tipo}_${now.year}_${mm}_$dd.docx',
+      );
+      if (ruta != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reporte Word guardado')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        final msg = e is UnsupportedError
+            ? e.message ?? 'No soportado'
+            : mensajeErrorHumano(e, contexto: 'generar el Word');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
+    }
+  }
+
   Future<void> _generarExcel(
       BuildContext context, WidgetRef ref, String tipo) async {
     try {
       final rango = ref.read(reporteRangoProvider);
       final cobradores = ref.read(reporteCobradoresProvider);
       final empresaNombre =
-          ref.read(empresaNombreProvider).valueOrNull ?? 'ISP';
+          ref.read(empresaNombreProvider).valueOrNull ?? 'Findex';
+
+      if (tipo == 'estados_financieros') {
+        final tenantId = ref.read(tenantIdProvider) ?? '';
+        final repo = ref.read(prestamosRepoProvider);
+        final cartera = await repo.watchResumenCartera(tenantId).first;
+        final caja = await repo.watchEstadoCaja(tenantId).first;
+        await exportarEstadosFinancieros(
+          context,
+          cartera: cartera,
+          caja: caja,
+          empresaNombre: empresaNombre,
+          formato: FormatoExportFinanciero.excel,
+        );
+        return;
+      }
       final now = DateTime.now();
       final mm = now.month.toString().padLeft(2, '0');
       final dd = now.day.toString().padLeft(2, '0');

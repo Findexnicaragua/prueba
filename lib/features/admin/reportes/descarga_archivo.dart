@@ -1,4 +1,4 @@
-import 'dart:io' show File, Platform;
+﻿import 'dart:io' show File, Platform;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 /// Guarda [bytes] en disco ofreciendo el diálogo nativo de guardado, para que
-/// TODOS los exports de reportes (Excel y PDF) se comporten igual:
+/// TODOS los exports de reportes (Excel, Word y PDF) se comporten igual:
 ///   - Windows (y demás desktop): diálogo "Guardar como". file_picker devuelve
 ///     la ruta pero NO escribe el contenido, así que lo escribimos nosotros.
 ///   - Android: file_picker abre el selector de ubicación del sistema y guarda
@@ -17,7 +17,7 @@ import 'package:flutter/material.dart';
 ///     target del producto, avisamos con un mensaje claro.
 ///
 /// [fileName] debe incluir la extensión (ej. 'cobros_2026_06.pdf'); [extension]
-/// es solo la extensión sin punto (ej. 'pdf' / 'xlsx') para el filtro del
+/// es solo la extensión sin punto (ej. 'pdf' / 'xlsx' / 'docx') para el filtro del
 /// diálogo. Devuelve la ruta donde se guardó, o `null` si el usuario canceló.
 Future<String?> guardarArchivo({
   required String fileName,
@@ -44,7 +44,7 @@ Future<String?> guardarArchivo({
   );
   if (path == null) return null; // el usuario canceló el diálogo
 
-  // En desktop file_picker devuelve la ruta pero NO escribe el contenido →
+  // En desktop file_picker devuelve la ruta pero NO escribe el contenido —
   // lo hacemos nosotros. En Android ya quedó escrito por el `bytes:` de arriba.
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await File(path).writeAsBytes(data, flush: true);
@@ -53,9 +53,7 @@ Future<String?> guardarArchivo({
 }
 
 /// Guarda un PDF de reporte vía [guardarArchivo] y, si el usuario no canceló,
-/// muestra un SnackBar de confirmación (B9 — antes los PDF no avisaban del
-/// guardado exitoso, solo de los errores; el Excel sí avisaba). Las excepciones
-/// (ej. web `UnsupportedError`) se propagan para que el caller las muestre.
+/// muestra un SnackBar de confirmación.
 Future<void> guardarPdfConAviso(
   BuildContext context, {
   required String fileName,
@@ -74,11 +72,48 @@ Future<void> guardarPdfConAviso(
   }
 }
 
+/// Guarda un documento Word (.docx) vía [guardarArchivo] con confirmación visual.
+Future<void> guardarDocxConAviso(
+  BuildContext context, {
+  required String fileName,
+  required List<int> bytes,
+  String mensaje = 'Documento Word (.docx) guardado con éxito',
+}) async {
+  final ruta = await guardarArchivo(
+    fileName: fileName,
+    bytes: bytes,
+    extension: 'docx',
+  );
+  if (ruta != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensaje)),
+    );
+  }
+}
+
+/// Guarda un archivo Excel (.xlsx) vía [guardarArchivo] con confirmación visual.
+Future<void> guardarExcelConAviso(
+  BuildContext context, {
+  required String fileName,
+  required List<int> bytes,
+  String mensaje = 'Reporte Excel (.xlsx) guardado con éxito',
+}) async {
+  final ruta = await guardarArchivo(
+    fileName: fileName,
+    bytes: bytes,
+    extension: 'xlsx',
+  );
+  if (ruta != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensaje)),
+    );
+  }
+}
+
 /// Inserta un timestamp (fecha + hora local) ANTES de la extensión para que
 /// cada generación/reimpresión produzca un nombre DISTINTO (no se pisan ni se
-/// confunden al reimprimir). Ej: 'clientes_2026_6.pdf' →
-/// 'clientes_2026_6_2026-06-16_144237.pdf'. Aplica a TODO lo que pase por
-/// [guardarArchivo] (reportes PDF + Excel + deuda de suspensión).
+/// confunden al reimprimir). Ej: 'clientes_2026_6.pdf' —>
+/// 'clientes_2026_6_2026-06-16_144237.pdf'.
 String _conTimestamp(String fileName) {
   final now = DateTime.now();
   String p2(int n) => n.toString().padLeft(2, '0');

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -1615,14 +1615,6 @@ class _FiltrosAdmin extends StatelessWidget {
           opciones: comunidadOpciones,
           seleccionados: comunidadSel,
           onChanged: onComunidadChanged,
-        ),
-        FiltroMultiDropdown(
-          icon: Icons.hub_outlined,
-          hint: 'Nodo',
-          buscarHint: 'Buscar nodo…',
-          opciones: nodoOpciones,
-          seleccionados: nodoSel,
-          onChanged: onNodoChanged,
         ),
       ],
     );

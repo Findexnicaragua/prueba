@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -427,15 +427,13 @@ const _adminMenu = [
   ]),
   _MenuItem(Icons.tune, 'Administración', '/admin/administracion',
       color: Color(0xFF5F5E5A), adminOnly: true,
-      subtitulo: 'personal · planes · red', children: [
+      subtitulo: 'personal · planes · etiquetas', children: [
     _MenuItem(Icons.badge, 'Personal', '/admin/cobradores',
         color: Color(0xFF0F6E56), adminOnly: true),
-    _MenuItem(Icons.wifi, 'Planes', '/admin/planes',
+    _MenuItem(Icons.credit_card, 'Planes', '/admin/planes',
         color: Color(0xFF185FA5), adminOnly: true),
     _MenuItem(Icons.location_city, 'Geografía', '/admin/geografia',
         color: Color(0xFF3B6D11), adminOnly: true),
-    _MenuItem(Icons.hub, 'Red', '/admin/red',
-        color: Color(0xFF534AB7), adminOnly: true),
     _MenuItem(Icons.sell, 'Etiquetas', '/admin/etiquetas',
         color: Color(0xFF993556), adminOnly: true),
   ]),

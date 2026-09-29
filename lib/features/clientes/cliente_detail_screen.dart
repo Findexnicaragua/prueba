@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1025,7 +1025,6 @@ class _ClienteInfo extends ConsumerWidget {
               _row(context, Icons.location_on, 'Referencia',
                   cliente.direccionReferencia),
               _row(context, Icons.location_city, 'Comunidad', ubic?.comunidad),
-              _row(context, Icons.hub, 'Red', ubic?.red),
               if (cliente.tieneUbicacion)
                 _row(context, Icons.gps_fixed, 'GPS',
                     '${cliente.latitud!.toStringAsFixed(5)}, ${cliente.longitud!.toStringAsFixed(5)}'),

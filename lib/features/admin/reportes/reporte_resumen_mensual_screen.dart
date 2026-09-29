@@ -1,9 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/prestamos_models.dart';
 import '../../../data/providers/cobrador_provider.dart';
 import '../../../data/repositories/prestamos_repository.dart';
 import '../../../data/utils/formatters.dart';
+import '../../../config/router.dart' show empresaNombreProvider;
+import 'docx/reporte_docx.dart';
+import 'excel/reporte_excel.dart';
 
 class ReporteResumenMensualScreen extends ConsumerStatefulWidget {
   const ReporteResumenMensualScreen({super.key});
@@ -178,8 +181,84 @@ class _ReporteResumenMensualScreenState extends ConsumerState<ReporteResumenMens
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exportando resumen mensual a Excel...')));
+                    onPressed: () async {
+                      if (_items.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('No hay datos en el resumen mensual para exportar')),
+                        );
+                        return;
+                      }
+                      final formato = await showDialog<String>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Row(
+                            children: [
+                              Icon(Icons.calendar_month, color: Color(0xFF1ABC9C)),
+                              SizedBox(width: 8),
+                              Text('Descargar Resumen Mensual'),
+                            ],
+                          ),
+                          content: const Text('Elija el formato para exportar el resumen mensual:'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.table_view, color: Color(0xFF1E7E34)),
+                              label: const Text('Excel (.xlsx)'),
+                              onPressed: () => Navigator.pop(ctx, 'excel'),
+                            ),
+                            FilledButton.icon(
+                              icon: const Icon(Icons.description),
+                              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1B3B6F)),
+                              label: const Text('Word (.docx)'),
+                              onPressed: () => Navigator.pop(ctx, 'word'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (formato == null || !context.mounted) return;
+                      const headers = ['#', 'Código', 'Cliente', 'Cédula', 'Sucursal', 'Oficial', 'Monto'];
+                      final filas = _items.asMap().entries.map((e) => [
+                        e.key + 1,
+                        e.value.codigo,
+                        e.value.clienteNombre,
+                        e.value.cedula,
+                        e.value.sucursal,
+                        e.value.oficialNombre,
+                        e.value.monto,
+                      ]).toList();
+                      final empresa = ref.read(empresaNombreProvider).valueOrNull ?? 'Findex';
+                      final periodo = '${Fmt.fechaCorta(_fechaInicial)} — ${Fmt.fechaCorta(_fechaFinal)}';
+                      if (formato == 'excel') {
+                        await descargarExcel(
+                          fileName: 'resumen_mensual_${_fechaInicial.year}_${_fechaInicial.month}.xlsx',
+                          hojaNombre: 'Resumen Mensual',
+                          headers: headers,
+                          filas: filas,
+                          empresaNombre: empresa,
+                          titulo: 'Resumen Mensual de Créditos',
+                          periodo: periodo,
+                        );
+                      } else {
+                        final doc = DocxBuilder();
+                        doc.addReportHeader(
+                          empresa: empresa,
+                          titulo: 'Resumen Mensual de Créditos',
+                          periodo: periodo,
+                        );
+                        doc.addCallout(
+                          'Oficial seleccionado: $_oficialSeleccionado   |   Sucursal: $_sucursalSeleccionada',
+                          title: 'PARÁMETROS DEL REPORTE',
+                        );
+                        doc.addTable(
+                          headers: headers,
+                          rows: filas,
+                          alignments: ['center', 'left', 'left', 'center', 'left', 'left', 'right'],
+                        );
+                        doc.addSignatures();
+                        await doc.descargar(
+                          fileName: 'resumen_mensual_${_fechaInicial.year}_${_fechaInicial.month}.docx',
+                        );
+                      }
                     },
                     icon: const Icon(Icons.download, size: 16),
                     label: const Text('Descargar', style: TextStyle(fontWeight: FontWeight.bold)),

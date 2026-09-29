@@ -91,6 +91,9 @@ dependencies:
   # anda en Android/Windows/web. La descarga del archivo usa file_picker
   # (ya declarado arriba). Ver lib/features/admin/reportes/excel/reporte_excel.dart.
   excel: ^4.0.6
+  # Manipulacin de archivos ZIP / OpenXML (.docx). Ya vena transitiva;
+  # la declaramos directa para importarla de forma estable.
+  archive: ^3.6.1
 
   # Decodificar/convertir el logo a raster monocromo para la térmica (ESC/POS)
   # y para procesar imágenes. esc_pos_utils_plus ya la trae transitiva; la

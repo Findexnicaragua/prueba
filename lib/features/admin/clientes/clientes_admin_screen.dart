@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
@@ -656,8 +656,6 @@ class _Filtros extends StatelessWidget {
           _CobradorChip(seleccionados: cobradorActual, onChanged: onCobrador),
           const SizedBox(width: 8),
           _ComunidadChip(seleccionados: comunidadActual, onChanged: onComunidad),
-          const SizedBox(width: 8),
-          _NodoChip(seleccionados: nodoActual, onChanged: onNodo),
           const SizedBox(width: 8),
           _EstadoServicioChip(
               seleccionados: estadoServicioActual, onChanged: onEstadoServicio),
