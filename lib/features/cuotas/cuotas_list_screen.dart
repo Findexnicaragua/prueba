@@ -16,6 +16,7 @@ import '../../data/utils/formatters.dart';
 import '../../powersync/db.dart' as ps;
 import '../cobro/cambio_fecha_dialog.dart';
 import '../shared/widgets/filtro_multi_dropdown.dart';
+import '../shared/widgets/filtro_planes.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/etiqueta_chip.dart';
 import 'cobros_query.dart';
@@ -52,6 +53,9 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
   // esos. Sólo se usan/muestran en adminMode.
   Set<String>? _cobradorIds;
   Set<String>? _comunidadIds;
+  /// Plan del contrato de la cuota. Puede incluir [kPlanSinPlan], que acá son
+  /// los CARGOS MANUALES sueltos (cuotas sin contrato).
+  Set<String>? _planIds;
 
   // Búsqueda de cliente (client-side sobre lo ya cargado, sin recrear el
   // stream en cada tecla). Plegada a forma canónica ASCII (foldBusqueda).
@@ -69,6 +73,7 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
   // colgados de la conexión cerrada → ClosedException en el cold-start.
   late Stream<List<Map<String, dynamic>>> _cobradorOpcionesStream;
   late Stream<List<Map<String, dynamic>>> _comunidadOpcionesStream;
+  late Stream<List<Map<String, dynamic>>> _planOpcionesStream;
 
   @override
   void initState() {
@@ -79,13 +84,15 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
   /// (Re)crea los streams de los dropdowns admin. Se llama en initState y cada
   /// vez que la DB se recrea (dbEpochProvider) para no leer de una DB cerrada.
   void _buildAdminStreams() {
-    // Cobradores activos del tenant (rol cobrador). RLS scopa por tenant.
+    // Cobradores activos de la EMPRESA en contexto. El supuesto viejo ("RLS
+    // scopa por tenant") no vale en el device del super_admin: baja su propia
+    // fila y conserva la empresa impersonada anterior hasta que cierra el sync.
     _cobradorOpcionesStream = ps.db.watch('''
       SELECT id, nombre
         FROM cobradores
-       WHERE rol = 'cobrador' AND activo = 1
+       WHERE rol = 'cobrador' AND activo = 1 AND tenant_id = ?
        ORDER BY nombre
-    ''');
+    ''', parameters: [ref.read(tenantIdProvider)]);
     // Comunidades que tienen al menos un cliente activo asignado.
     _comunidadOpcionesStream = ps.db.watch('''
       SELECT co.id AS id, co.nombre AS nombre, mu.nombre AS municipio
@@ -95,6 +102,11 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
        GROUP BY co.id, co.nombre, mu.nombre
        ORDER BY mu.nombre, co.nombre
     ''');
+    // Planes en uso. Va ACÁ y no en un `late final` de initState: este método
+    // se re-llama cuando la DB se recrea y cuando cambia el tenant, y un stream
+    // colgado de la DB vieja tira ClosedException en el cold-start.
+    _planOpcionesStream = ps.db
+        .watch(kPlanesFiltroSql, parameters: [ref.read(tenantIdProvider)]);
   }
 
   @override
@@ -196,6 +208,29 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
               );
             },
           ),
+          const SizedBox(width: 8),
+          // Plan — último de la barra. Las opciones salen de una consulta
+          // propia (no de las filas cargadas): si dependieran del cobrador o la
+          // zona ya elegidos, la lista de ids se achicaría y la canonización
+          // "todo marcado = sin filtrar" convertiría sola la selección en null
+          // sin que el usuario toque nada.
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _planOpcionesStream,
+            initialData: const [],
+            builder: (context, snap) {
+              final opts = opcionesDePlanes(snap.data ?? const []);
+              final allIds = opts.map((o) => o.id).toSet();
+              return FiltroMultiDropdown(
+                icon: kPlanFiltroIcono,
+                hint: 'Plan',
+                buscarHint: 'Buscar plan…',
+                opciones: opts,
+                seleccionados: _planIds ?? allIds,
+                onChanged: (s) => setState(() => _planIds =
+                    s.isEmpty || s.length >= allIds.length ? null : s),
+              );
+            },
+          ),
           const Spacer(),
           if (_filtrosActivos > 0)
             TextButton.icon(
@@ -214,6 +249,7 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
     var n = 0;
     if (_cobradorIds != null && _cobradorIds!.isNotEmpty) n++;
     if (_comunidadIds != null && _comunidadIds!.isNotEmpty) n++;
+    if (_planIds != null && _planIds!.isNotEmpty) n++;
     if (_filtro != CobrosFiltro.todas) n++;
     if (_verFueraDeRuta) n++;
     return n;
@@ -225,6 +261,7 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
     setState(() {
       _cobradorIds = null;
       _comunidadIds = null;
+      _planIds = null;
       _filtro = CobrosFiltro.todas;
       _verFueraDeRuta = false;
       _busqueda = '';
@@ -278,6 +315,12 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
     // Cold-start: al recrear la DB (cambio de schema) los streams admin quedan
     // colgados de la conexión cerrada → recrearlos. (#7 / regla audit #2)
     ref.listen(dbEpochProvider, (_, __) {
+      if (mounted && widget.adminMode) setState(_buildAdminStreams);
+    });
+    // El tenant llega por stream (null en los primeros frames) y cambia al
+    // entrar/salir de una empresa impersonada: sin esto el filtro de cobrador
+    // quedaba congelado con el valor viejo.
+    ref.listen(tenantIdProvider, (_, __) {
       if (mounted && widget.adminMode) setState(_buildAdminStreams);
     });
 
@@ -387,6 +430,7 @@ class _CuotasListScreenState extends ConsumerState<CuotasListScreen> {
             diasVisibles: diasVisibles,
             cobradorIds: widget.adminMode ? _cobradorIds : null,
             comunidadIds: widget.adminMode ? _comunidadIds : null,
+            planIds: widget.adminMode ? _planIds : null,
             verFueraDeRuta: _verFueraDeRuta,
             busqueda: _busqueda,
           ),
@@ -420,6 +464,7 @@ class _CobrosList extends ConsumerStatefulWidget {
     required this.busqueda,
     this.cobradorIds,
     this.comunidadIds,
+    this.planIds,
   });
   final bool adminMode;
   final CobrosFiltro filtro;
@@ -431,6 +476,7 @@ class _CobrosList extends ConsumerStatefulWidget {
   final String busqueda;
   // Filtros admin multi-selección (null = sin filtrar). Vista cobrador: null.
   final Set<String>? cobradorIds;
+  final Set<String>? planIds;
   final Set<String>? comunidadIds;
 
   @override
@@ -465,7 +511,11 @@ class _CobrosListState extends ConsumerState<_CobrosList> {
         old.diasGracia != widget.diasGracia ||
         old.diasVisibles != widget.diasVisibles ||
         !setEquals(old.cobradorIds, widget.cobradorIds) ||
-        !setEquals(old.comunidadIds, widget.comunidadIds)) {
+        !setEquals(old.comunidadIds, widget.comunidadIds) ||
+        // Sin esta línea el usuario marca planes y la lista NO se mueve: el
+        // stream no se rearma. No lo caza `analyze` ni ningún test — compila y
+        // no hace nada.
+        !setEquals(old.planIds, widget.planIds)) {
       setState(() => _flatStream = _buildFlatStream());
     }
     // Fuera de ruta: recrear al prenderse o al cambiar el filtro admin; soltar
@@ -473,7 +523,10 @@ class _CobrosListState extends ConsumerState<_CobrosList> {
     if (widget.verFueraDeRuta) {
       if (!old.verFueraDeRuta ||
           !setEquals(old.cobradorIds, widget.cobradorIds) ||
-          !setEquals(old.comunidadIds, widget.comunidadIds)) {
+          !setEquals(old.comunidadIds, widget.comunidadIds) ||
+          // Idem para "Fuera de ruta": el filtro de plan aplica también ahí
+          // (decisión de Rubén), igual que cobrador y zona.
+          !setEquals(old.planIds, widget.planIds)) {
         setState(() => _fueraStream = _buildFueraStream());
       }
     } else if (old.verFueraDeRuta) {
@@ -491,6 +544,7 @@ class _CobrosListState extends ConsumerState<_CobrosList> {
       diasVisibles: widget.diasVisibles,
       cobradorIds: widget.cobradorIds,
       comunidadIds: widget.comunidadIds,
+      planIds: widget.planIds,
     );
     return ps.db.watch(sql, parameters: params);
   }
@@ -501,6 +555,7 @@ class _CobrosListState extends ConsumerState<_CobrosList> {
     final (sql, params) = cobrosFueraDeRutaQuery(
       cobradorIds: widget.cobradorIds,
       comunidadIds: widget.comunidadIds,
+      planIds: widget.planIds,
     );
     return ps.db.watch(sql, parameters: params);
   }
@@ -595,6 +650,7 @@ class _CobrosListState extends ConsumerState<_CobrosList> {
   Widget _emptyState(BuildContext context) {
     final hayFiltros = widget.cobradorIds != null ||
         widget.comunidadIds != null ||
+        widget.planIds != null ||
         widget.filtro != CobrosFiltro.todas ||
         widget.verFueraDeRuta;
     final String titulo;

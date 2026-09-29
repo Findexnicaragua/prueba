@@ -21,12 +21,14 @@ import '../admin/reportes/descarga_archivo.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/foto_comprobante_view.dart';
 import '../shared/widgets/impersonation_banner.dart';
+import 'recibo_cambio_plan.dart';
 import 'recibo_cargos.dart';
 import 'recibo_mora.dart';
 import 'recibo_pdf.dart';
 import 'recibo_texto_escpos.dart';
 import 'recibo_ticket.dart';
 import '../../data/utils/errores.dart';
+import '../../data/utils/op_log.dart';
 
 /// Cache en memoria del logo YA procesado para térmica. Procesarlo (decodificar
 /// + redimensionar + híbrido) cuesta segundos con logos grandes, así que se hace
@@ -55,6 +57,14 @@ class _ReciboScreenState extends ConsumerState<ReciboScreen> {
   // admin quita un ajuste, el preview se actualiza solo.
   late final Stream<List<Map<String, dynamic>>> _cargosStream;
 
+  /// Transiciones de plan de la(s) cuota(s) de este recibo (0267), para el
+  /// PREVIEW. Va como FIELD y no como stream a proposito: el `detalle` de un
+  /// cambio de plan es INMUTABLE — se escribe una vez, dentro de la transaccion
+  /// del cambio, y nunca se edita. Un `watch` seria un stream que no emite dos
+  /// veces nunca. (El path de IMPRESION tiene el suyo en _AccionesImpresion,
+  /// que si conoce las filas del grupo.)
+  List<Map<String, dynamic>> _cambioPlan = const [];
+
   // Vista preview: si está activa, el body del recibo se constraine al
   // ancho visual de la tira térmica (según `cobranza.formato_recibo_mm`).
   // El recibo se muestra SIEMPRE simulando el ancho real del papel
@@ -70,14 +80,42 @@ class _ReciboScreenState extends ConsumerState<ReciboScreen> {
     return 300;
   }
 
+  /// Carga las transiciones de plan del PREVIEW (ver [_cambioPlan]).
+  ///
+  /// Esta clase no tiene las filas del grupo a mano —las trae el stream— asi
+  /// que las cuotas se resuelven con la MISMA condicion que `_cargosStream`:
+  /// por grupo de cobro si es multi, por el recibo si es single.
+  ///
+  /// Si falla, el bloque no se dibuja y listo: es informativo y NO puede
+  /// impedir que se vea un recibo.
+  Future<void> _cargarCambioPlan() async {
+    try {
+      final rows = _esMultiCuota
+          ? await ps.db.getAll(
+              'SELECT cuota_id FROM pagos WHERE grupo_cobro = ? AND anulado = 0',
+              [widget.grupoCobro])
+          : await ps.db.getAll(
+              'SELECT p.cuota_id FROM recibos r '
+              'JOIN pagos p ON p.id = r.pago_id WHERE r.id = ?',
+              [widget.reciboId]);
+      final ids = rows.map((r) => r['cuota_id']).whereType<String>().toList();
+      final filas = await fetchCambioPlan(ids);
+      if (mounted && filas.isNotEmpty) setState(() => _cambioPlan = filas);
+    } catch (_) {
+      // Sin bloque de transicion; el recibo se ve igual.
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _cargarCambioPlan();
     if (_esMultiCuota) {
       _reciboStream = ps.db.watch(
         '''
         SELECT r.id, r.numero_completo, r.prefijo, r.correlativo,
                r.created_at, r.impreso_en, r.reimpresiones,
+               r.periodo_label, r.plan_label,
                p.monto_cordobas, p.vuelto_cordobas, p.moneda, p.monto_original,
                p.tasa_conversion, p.metodo, p.referencia, p.fecha_pago,
                p.foto_comprobante_path, p.grupo_cobro,
@@ -111,6 +149,7 @@ class _ReciboScreenState extends ConsumerState<ReciboScreen> {
         '''
         SELECT r.id, r.numero_completo, r.prefijo, r.correlativo,
                r.created_at, r.impreso_en, r.reimpresiones,
+               r.periodo_label, r.plan_label,
                p.monto_cordobas, p.vuelto_cordobas, p.moneda, p.monto_original,
                p.tasa_conversion, p.metodo, p.referencia, p.fecha_pago,
                p.foto_comprobante_path, p.anulado AS pago_anulado, p.id AS pago_id,
@@ -323,6 +362,7 @@ class _ReciboScreenState extends ConsumerState<ReciboScreen> {
                         logoBytes: logoBytes,
                         moraRows: moraRows,
                         cargosRows: cargosRows,
+                        cambioPlanRows: _cambioPlan,
                         // Margen simétrico en Windows (WYSIWYG con la impresión).
                         margenHorizontal: impresionPorSistema ? 32 : 6,
                       ),
@@ -403,6 +443,18 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
   bool _descargandoPdf = false;
   bool _guardandoPdf = false;
 
+  /// Transiciones de plan de la(s) cuota(s) de este recibo (0267), para los
+  /// TRES paths de impresion (raster termico, PDF y ESC/POS texto). Field y no
+  /// stream: el `detalle` es inmutable, se escribe una vez en la transaccion
+  /// del cambio de plan y no se edita nunca.
+  List<Map<String, dynamic>> _cambioPlan = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarCambioPlan();
+  }
+
   /// Construye los bytes del PDF del recibo + un filename legible. Lo COMPARTEN
   /// "Descargar PDF" (web) e "Imprimir en impresora del sistema" (desktop), así
   /// la lógica de logo/mora no se duplica.
@@ -436,7 +488,8 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
     final doc = await _construirReciboDoc(
         logoBytes: logoBytes,
         moraRows: moraRows,
-        cargosRows: await _cargosParaRecibo());
+        cargosRows: await _cargosParaRecibo(),
+        cambioPlanRows: _cambioPlan);
     final bytes = await doc.save();
     final numero =
         (widget.recibo['numero_completo'] as String?) ?? widget.reciboId;
@@ -504,6 +557,7 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
     required Uint8List? logoBytes,
     required List<Map<String, dynamic>> moraRows,
     List<Map<String, dynamic>> cargosRows = const [],
+    List<Map<String, dynamic>> cambioPlanRows = const [],
   }) {
     final multiRows = widget.multiRows;
     return multiRows != null
@@ -512,13 +566,15 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
             settings: widget.settings,
             logoBytes: logoBytes,
             moraRows: moraRows,
-            cargosRows: cargosRows)
+            cargosRows: cargosRows,
+            cambioPlanRows: cambioPlanRows)
         : buildReciboPdf(
             row: widget.recibo,
             settings: widget.settings,
             logoBytes: logoBytes,
             moraRows: moraRows,
-            cargosRows: cargosRows);
+            cargosRows: cargosRows,
+            cambioPlanRows: cambioPlanRows);
   }
 
   /// Cargos/descuentos de la(s) cuota(s) del recibo para el desglose del
@@ -526,13 +582,33 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
   /// SIEMPRE se buscan: la línea "Puente de pago" (origen='puente') debe
   /// imprimirse aunque el toggle de descuentos esté off; los renderers gatean
   /// los descuentos por-cargo (el puente se muestra siempre).
-  Future<List<Map<String, dynamic>>> _cargosParaRecibo() async {
+  /// Carga las transiciones de plan una sola vez (ver [_cambioPlan]).
+  ///
+  /// Si falla, el bloque simplemente no se dibuja: es informativo y NO puede
+  /// impedir que se imprima un recibo. Misma politica que el resto de los
+  /// bloques opcionales.
+  Future<void> _cargarCambioPlan() async {
+    try {
+      final filas = await fetchCambioPlan(_cuotaIdsDelRecibo());
+      if (mounted && filas.isNotEmpty) setState(() => _cambioPlan = filas);
+    } catch (_) {
+      // Sin bloque de transicion; el recibo se imprime igual.
+    }
+  }
+
+  /// Las cuotas que cubre este recibo (single o multi).
+  List<String> _cuotaIdsDelRecibo() {
     final multiRows = widget.multiRows;
-    final cuotaIds = (multiRows != null
+    return (multiRows != null
             ? multiRows.map((r) => r['cuota_id'])
             : [widget.recibo['cuota_id']])
         .whereType<String>()
         .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _cargosParaRecibo() async {
+    final multiRows = widget.multiRows;
+    final cuotaIds = _cuotaIdsDelRecibo();
     // pago_id(s) de este recibo: scope del puente (ver fetchCargosCuotas).
     final pagoIds = (multiRows != null
             ? multiRows.map((r) => r['pago_id'])
@@ -632,6 +708,7 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
         logoBytes: logoBytes,
         moraRows: moraRows,
         cargosRows: cargosRows,
+        cambioPlanRows: _cambioPlan,
         anchoMm: widget.settings.formatoReciboMm,
         // Estrategia de tildes por-dispositivo: cp850 (occidental) / gbk
         // (alfabeto nativo chino, para firmware que ignora el FS .) / ascii
@@ -693,6 +770,7 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
       logoBytes: logoBytes,
       moraRows: moraRows,
       cargosRows: await _cargosParaRecibo(),
+      cambioPlanRows: _cambioPlan,
       // Windows: margen simétrico horneado a TAMAÑO COMPLETO (sin encoger la
       // imagen). Android/móvil sigue en 6 → captura y bytes idénticos.
       margenHorizontal: _margenImpresion.toDouble(),
@@ -809,22 +887,60 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
   /// (NO lo usa el guard del correlativo — audit 2026-06-24); el CONTEO de
   /// reimpresiones se quitó (no se muestra ni se incrementa; la columna quedó
   /// inerte).
+  ///
+  /// Si YA había una impresión previa, esto es una REIMPRESIÓN de un
+  /// comprobante de plata: deja rastro en el historial de la cuota (audit de
+  /// logs 2026-08-18 — reimprimir recibos es el clásico de la doble entrega
+  /// y antes no quedaba nada).
   Future<void> _marcarImpreso() async {
-    await ps.dbW.execute(
-      '''
-      UPDATE recibos
-         SET impreso_en = ?,
-             ultimo_formato_mm = ?,
-             ocurrido_en = ?
-       WHERE id = ?
-      ''',
-      [
-        DateTime.now().toIso8601String(),
-        widget.settings.formatoReciboMm,
-        DateTime.now().toUtc().toIso8601String(),
-        widget.reciboId,
-      ],
+    final prev = await ps.db.getAll(
+      'SELECT r.impreso_en, r.numero_completo, r.tenant_id, p.cuota_id '
+      'FROM recibos r JOIN pagos p ON p.id = r.pago_id WHERE r.id = ?',
+      [widget.reciboId],
     );
+    final esReimpresion = prev.isNotEmpty && prev.first['impreso_en'] != null;
+    final actorId = ref.read(cobradorActualProvider).valueOrNull?.id;
+    final ahoraUtc = DateTime.now().toUtc();
+
+    await ps.dbW.writeTransaction((tx) async {
+      await tx.execute(
+        '''
+        UPDATE recibos
+           SET impreso_en = ?,
+               ultimo_formato_mm = ?,
+               ocurrido_en = ?
+         WHERE id = ?
+        ''',
+        [
+          DateTime.now().toIso8601String(),
+          widget.settings.formatoReciboMm,
+          ahoraUtc.toIso8601String(),
+          widget.reciboId,
+        ],
+      );
+      if (!esReimpresion || actorId == null) return;
+      final cuotaId = prev.first['cuota_id'] as String?;
+      final tenantId = prev.first['tenant_id'] as String?;
+      if (cuotaId == null || tenantId == null) return;
+      await OpLog.escribir(
+        tx,
+        tenantId: tenantId,
+        opId: OpLog.nuevoOpId(),
+        tipoOp: 'reimpresion_recibo',
+        entidad: 'cuotas',
+        entidadId: cuotaId,
+        accion: 'update',
+        diff: {
+          'campos': const [],
+          'resumen': {
+            'recibo': prev.first['numero_completo'],
+            'formato_mm': widget.settings.formatoReciboMm,
+          },
+        },
+        actor: await OpLog.actorDeUsuario(ps.db, actorId),
+        ocurridoEn: ahoraUtc,
+      );
+    });
   }
 
   /// Imprime mandando el raster ESC/POS DIRECTO a la cola de Windows, sin

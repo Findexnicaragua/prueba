@@ -14,6 +14,14 @@ import 'data/services/foto_comprobante_service.dart';
 /// global de errores de upload de fotos).
 final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
+
+/// Si esta build es la de PRUEBA (`branding/test`).
+///
+/// Se resuelve en tiempo de COMPILACIÓN: `--dart-define=TENANT=test` lo pone el
+/// script de release a partir del slug de la marca, así que no hay forma de
+/// encenderlo por error en un build de un ISP real.
+const kEsBuildDePrueba = String.fromEnvironment('TENANT') == 'test';
+
 class IspBillingApp extends ConsumerWidget {
   const IspBillingApp({super.key});
 
@@ -67,6 +75,23 @@ class IspBillingApp extends ConsumerWidget {
       theme: AppTheme.light(),
       routerConfig: ref.watch(routerProvider),
       debugShowCheckedModeBanner: false,
+      // Cinta de esquina en la build de PRUEBA (`--dart-define=TENANT=test`,
+      // marca `branding/test`). Va en el `builder` para que se vea en TODA la
+      // app, incluidos los diálogos a pantalla completa.
+      //
+      // Por qué existe: la build de prueba apunta al MISMO Supabase que
+      // producción. Teniéndola instalada al lado de la oficial —cosa que el
+      // `applicationId` propio permite—, un cobro registrado desde la app
+      // equivocada con un usuario real es un cobro real. La cinta es lo único
+      // que avisa desde adentro cuál se abrió.
+      builder: kEsBuildDePrueba
+          ? (context, child) => Banner(
+                message: 'PRUEBA',
+                location: BannerLocation.topEnd,
+                color: const Color(0xFFB7791F),
+                child: child ?? const SizedBox.shrink(),
+              )
+          : null,
       locale: const Locale('es', 'NI'),
       supportedLocales: const [
         Locale('es', 'NI'),

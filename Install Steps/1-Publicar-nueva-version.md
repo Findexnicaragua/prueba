@@ -8,6 +8,24 @@ faltan, así no sale un APK debug-signed que las apps instaladas rechazarían).
 
 ---
 
+> ## ✅ DESDE v0.37.0 SE BUILDEA `main`
+>
+> **Decisión de Rubén, 2026-08-30.** El rediseño del dashboard se terminó, se
+> aprobó tarjeta por tarjeta y se publicó con la v0.37.0: ya no hay nada en
+> `main` que haya que dejar afuera, así que la rama `release/*` dejó de tener
+> motivo. Se buildea `main` directo.
+>
+> *Entre la v0.36.2 y la v0.36.6 fue al revés:* `main` tenía el rediseño a medio
+> hacer y cada versión salía de una rama `release/*` = `main` **menos el
+> rediseño**. La receta de cómo se armaba esa rama sigue en
+> [`1b-Armar-la-rama-de-release.md`](1b-Armar-la-rama-de-release.md) —**no la
+> borres**: el día que haya otra vez trabajo grande a medio terminar en `main`,
+> es la forma probada de sacar una versión sin él.
+>
+> **Lo que NO cambió: el build se corre desde `C:/sc-release`**, que está fuera
+> de OneDrive. Adentro de OneDrive el build falla ("unable to write new index
+> file") y `git merge` también.
+
 ## Paso 1 — Bump de versión
 
 En `pubspec.yaml`, subí la línea `version`:
@@ -15,6 +33,20 @@ En `pubspec.yaml`, subí la línea `version`:
 ```yaml
 version: 0.6.4+064   # X.Y.Z+NNN
 ```
+
+> **⚠️ COMMITEÁ EL BUMP ANTES DE BUILDEAR.** No es cosmético. El script lee la
+> versión UNA sola vez y, al terminar cada tenant, restaura el working tree con
+> `git checkout -- pubspec.yaml …` para deshacer el branding — lo que **revierte
+> también la línea `version`**. Con `-AllTenants` y el bump sin commitear, el
+> primer tenant sale bien y el **segundo se buildea con la versión VIEJA adentro
+> pero con el nombre de archivo y el manifest de la nueva**: el instalador dice
+> vX.Y.Z, la app muestra la anterior, y el auto-update queda ofreciendo para
+> siempre una versión que "ya está instalada". Desde 2026-08-23 el script lo
+> valida y aborta, pero conviene saber por qué.
+>
+> El `+NNN` (build number) tiene que **subir siempre**: Android y MSIX rechazan
+> una actualización cuyo build number no sea mayor. Si baja o repite, la
+> actualización simplemente no entra y no hay mensaje de error.
 
 - `X.Y.Z` = semver. Es lo que compara el auto-update y lo que se muestra en la
   app (login, sidebar admin, perfil cobrador).

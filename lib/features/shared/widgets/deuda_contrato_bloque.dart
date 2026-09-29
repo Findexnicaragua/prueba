@@ -2,20 +2,25 @@ import 'package:flutter/material.dart';
 
 import '../../../data/utils/formatters.dart';
 
-/// Bloque "Deuda a la fecha": total + desglose mes por mes de lo que va a
-/// quedar COBRABLE si se suspende o cancela el contrato.
+/// Bloque de deuda: total + desglose mes por mes de lo que el corte va a hacer
+/// con la plata. **El rótulo lo pone el llamador (`titulo`/`vacioTexto`) porque
+/// suspender y cancelar son OPUESTOS**: al suspender esa deuda QUEDA COBRABLE,
+/// al cancelar se CONDONA. Un rótulo fijo miente en uno de los dos casos —
+/// pasó hasta el 2026-08-26, cuando las dos pantallas de solicitud decían
+/// "Deuda que quedaría cobrable" también al cancelar.
 ///
-/// Vive acá porque lo comparten tres pantallas que tienen que mostrar el MISMO
-/// número: el diálogo de suspensión directa, el diálogo de solicitud (para el
-/// rol que necesita aprobación) y la tarjeta donde el admin aprueba. Antes era
-/// un método privado del State del diálogo de suspensión — o sea que el que
-/// pedía permiso y el que aprobaba no veían nada.
+/// Vive acá porque lo comparten cuatro pantallas que tienen que mostrar el
+/// MISMO número: los diálogos directos de suspensión y cancelación, el de
+/// solicitud (para el rol que necesita aprobación) y la tarjeta donde el admin
+/// aprueba. Antes era un método privado del State del diálogo de suspensión —
+/// o sea que el que pedía permiso y el que aprobaba no veían nada.
 ///
-/// Los datos salen siempre de `ContratosRepo.previewDeudaSuspension` (o su
-/// gemela de cancelación, que delega en la misma función). NUNCA de
-/// `contratoRecaudadoProvider.cobrable`: ése es la deuda viva TOTAL, sin
-/// clasificar por ventana de servicio, así que incluye los meses futuros que la
-/// suspensión va a anular. Mezclarlos daría una diferencia enorme y falsa.
+/// Los datos salen de `ContratosRepo.previewDeudaSuspension` o de
+/// `previewDeudaCancelacion`, que **ya no son la misma función**: cada una
+/// espeja su propia mutación (suspender clasifica por ventana de servicio y
+/// prorratea el mes en curso; cancelar pone en cero el saldo entero de toda
+/// cuota viva). NUNCA de `contratoRecaudadoProvider.cobrable`: ése no distingue
+/// ninguno de los dos casos.
 class DeudaContratoBloque extends StatelessWidget {
   const DeudaContratoBloque({
     super.key,

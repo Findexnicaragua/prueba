@@ -28,18 +28,23 @@ final syncReadyProvider = Provider<bool>((ref) {
   if (identity.userId == null) return true;
   if (identity.changedAt == null) return true;
 
-  final lastSyncedAt =
-      ref.watch(syncStatusProvider).valueOrNull?.lastSyncedAt;
+  final status = ref.watch(syncStatusProvider).valueOrNull;
+  if (status == null) return false;
+
+  // Mientras PowerSync esté descargando activamente datos, el gate no debe abrirse.
+  if (status.downloading) return false;
+
+  final lastSyncedAt = status.lastSyncedAt;
   if (lastSyncedAt == null) return false;
 
-  // Margen de 2 segundos: PowerSync puede emitir lastSyncedAt con un
-  // timestamp muy cercano a changedAt (race de milisegundos en el
-  // handshake inicial). Sin margen, el gate queda atascado porque
-  // isAfter(changedAt) retorna false cuando los timestamps son iguales
-  // o difieren por <1ms. El margen no compromete la seguridad del gate
-  // (que protege contra cache stale de otro user, no contra ms de
-  // timing). Bug reproducido 3+ veces en E2E sesión 2.
-  final threshold = identity.changedAt!.subtract(const Duration(seconds: 2));
+  // Al entrar a una empresa (impersonando):
+  // 1. El sync debe haber finalizado estrictamente DESPUÉS de que se ordenó entrar
+  //    (changedAt), SIN margen hacia atrás, porque el tenant anterior (o System)
+  //    sincronizó hace segundos y su lastSyncedAt satisfaría un margen de -2s.
+  // 2. Para login normal: mantenemos el margen de 2s defensivo contra races de ms.
+  final threshold = identity.entrandoATenant
+      ? identity.changedAt!
+      : identity.changedAt!.subtract(const Duration(seconds: 2));
   return lastSyncedAt.isAfter(threshold);
 });
 
@@ -51,8 +56,32 @@ final syncReadyProvider = Provider<bool>((ref) {
 /// cuando cambia `changedAt` (nuevo login/switch) — el watch reconstruye y el
 /// onDispose cancela el timer viejo.
 final syncGateGraceProvider = Provider<bool>((ref) {
-  final changedAt = ref.watch(authIdentityProvider).changedAt;
+  final identity = ref.watch(authIdentityProvider);
+  final changedAt = identity.changedAt;
   if (changedAt == null) return true; // sin cambio de identidad, nada que esperar
+
+  // 🔴 ENTRAR A UNA EMPRESA NO TIENE PLAZO DE GRACIA (2026-09-03).
+  //
+  // Los 8s de abajo se pensaron para un login: la app se abre rápido y el
+  // delta sync corre por atrás. Pero al impersonar se baja la empresa ENTERA
+  // —~190.000 filas en Telecable Mairena, ~34.000 en Telenet— y en 8 segundos
+  // entra una fracción. El gate se abría solo, el super_admin caía en una app
+  // con las pantallas vacías, y mientras el resto seguía bajando cada lote
+  // re-disparaba las consultas del Resumen: los gráficos giraban sin resolver.
+  //
+  // El propio comentario de abajo decía que el plazo existía por el "sync
+  // inicial lento del super_admin" — o sea que el problema ya se conocía y se
+  // había resuelto dejándolo pasar. Se cambió una espera larga por una app
+  // vacía, y para quien entra a mirar datos eso es peor.
+  //
+  // No deja a nadie atascado: `SyncGateScreen` muestra el progreso REAL de
+  // descarga (registros bajados sobre el total), avisa si se cortó la conexión,
+  // y ofrece reintentar a los 2 minutos y volver al login a los 3.
+  //
+  // Y se paga UNA vez por empresa: al reingresar, PowerSync baja sólo los
+  // cambios desde la última visita (medido y aceptado por el dueño).
+  if (identity.entrandoATenant) return false;
+
   const grace = Duration(seconds: 8);
   final elapsed = DateTime.now().difference(changedAt);
   if (elapsed >= grace) return true;

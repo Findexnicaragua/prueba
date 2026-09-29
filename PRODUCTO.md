@@ -55,6 +55,78 @@ fuga de seguridad. Ojo: viendo facturado y pendiente, lo cobrado es derivable po
 | `coordinador` | Quien reparte el trabajo de campo (módulo tickets) | `/admin-tickets/*` | Asigna técnico y ordena la cola de trabajo — y NADA más: solo puede escribir `asignado_a` y `orden_cola`, y lo enforza un TRIGGER (la RLS es row-level y no protege columnas). No ve dinero. |
 | `admin_tickets` | Encargado de tickets del ISP (módulo tickets) | `/admin-tickets/*` | Admin acotado a tickets: crea/asigna/cierra tickets y administra tipos, sin ver dinero. VIVO desde 0e72fec (2026-06-22): se ofrece al invitar/editar personal si el tenant tiene el módulo tickets; shell propio y bucket de sync `por_admin_tickets` (0 usuarios asignados en prod a hoy, pero disponible). |
 
+### 🔴 MATRIZ DE PERMISOS — qué puede y qué NO puede cada rol
+
+**Ésta es la referencia canónica.** Verificada contra el código y la RLS el
+2026-08-26. Al agregar una capacidad o cambiar un permiso, se actualiza ACÁ.
+
+Leyenda: **directo** = lo ejecuta sin pedir permiso · **solicita** = crea una
+solicitud que el `admin` aprueba · **—** = no puede o no lo ve.
+
+| Puede… | `admin` | `admin_cobranza` | `admin_usuarios` | `cobrador` |
+|---|---|---|---|---|
+| Crear y editar la ficha del cliente | directo | directo | directo | solo ver |
+| **Desactivar cliente** (cancela sus contratos y CONDONA) | directo | **no lo ve** | **solicita** | — |
+| Reactivar cliente | directo | no lo ve | directo | — |
+| Crear contrato | directo | solicita | solicita | — |
+| Suspender / reactivar contrato | directo | solicita | solicita | — |
+| **Cancelar contrato** (CONDONA la deuda) | directo | solicita | solicita | — |
+| Cambiar plan | directo | solicita | solicita | — |
+| Cambiar fecha de pago | directo | si el ajuste está ON | — | sus clientes |
+| Cobrar e imprimir recibo | directo | directo | — | directo |
+| Anular / editar un pago | directo | anular | — | solo si el tenant lo habilita |
+| Cargo, descuento o cobro puntual | directo | directo | — | — |
+| **Aprobar o rechazar solicitudes** | sí | **no llega a la pantalla** | solo ve las suyas | — |
+| Resumen y reportes | con PIN | recortado (sin recaudado ni ranking) | — | — |
+| Arqueo / cierre de caja | sí | **no** | — | — |
+| Configuración de la empresa | sí | no llega | — | — |
+| Personal: invitar, forzar contraseña | sí | — | — | — |
+| Cambiar el ROL de alguien | **no** (solo `super_admin`) | — | — | — |
+
+**`super_admin`** no entra en la tabla: impersonando ve todo, pero tiene
+bloqueada **toda acción que se atribuya a una persona** (cobrar, anular,
+aprobar, suspender, cancelar, registrar visita) porque quedaría estampada con
+su identidad del tenant System. Su terreno propio es `/super/*` y el panel de
+Operaciones de datos.
+
+**`lectura`, `tecnico`, `admin_tickets` y `coordinador`** están definidos y
+funcionando pero **hoy no hay ningún usuario con esos roles** en los dos ISPs
+(medido: 3 `admin`, 3 `admin_cobranza`, 3 `admin_usuarios`, 8 `cobrador`,
+1 `super_admin`). Sus reglas están arriba en la tabla de roles.
+
+**La regla que ordena la columna "solicita"** es el principio 6 de `AGENTS.md`:
+*toda acción con repercusión monetaria pide autorización del admin* — requiere
+aprobación **salvo que seas quien aprueba**. No es una lista de roles por
+descarte: un rol nuevo nace pidiendo permiso.
+
+**Dos huecos conocidos, con la decisión de Rubén ya tomada** (registrados para que
+nadie los descubra de nuevo como si fueran bugs):
+
+- **`coordinador` todavía no se le puede asignar a nadie — DIFERIDO A PROPÓSITO.**
+  El rol existe entero (CHECK, RLS, trigger de columnas, bucket de sync, shell
+  propio) y el desplegable ya lo ofrece, pero el Edge Function `invitar-cobrador`
+  y la RPC `set_cobrador_rol` no lo tienen en su allowlist — verificado contra
+  producción el 2026-08-26. **Decisión de Rubén (2026-08-26): sí debe poder
+  asignarse, pero todavía no, porque el módulo donde trabaja (tickets) aún no está
+  habilitado.**
+  **Disparador:** el día que se habilite el módulo de tickets en un tenant que
+  necesite coordinador. **Qué hay que tocar, exactamente dos lugares:** la lista
+  de roles válidos del Edge `invitar-cobrador` y la de `set_cobrador_rol` (hoy en
+  la migración `0250`). El resto ya está construido.
+
+- **`admin_cobranza` no llega a la cola de aprobaciones — SE DEJA ASÍ.** La RLS
+  (`solicitudes_update`) y su bucket de sync sí se lo permitirían; lo que lo frena
+  es el router. **Decisión de Rubén (2026-08-26): aprobar sigue siendo solo del
+  `admin`.**
+  **Riesgo conocido y aceptado:** en producción hay **un solo `admin` activo por
+  empresa** y se resuelven ~15 solicitudes por día (313 en Mairena y 143 en Telenet
+  en 30 días, medido el 2026-08-26). Hoy funciona —cero pendientes—, pero es un
+  único cuello: si esa persona falta, en esa empresa no se suspende, no se cancela,
+  no se crea contrato y no se da de baja a nadie. **Disparador para revisarlo:**
+  que aparezcan solicitudes pendientes acumuladas, o que el ISP pida un segundo
+  aprobador. Si se abre, hay que impedir la **auto-aprobación** (que apruebe las de
+  otros, nunca las suyas) o el permiso pierde sentido.
+
 ### Decisión de workflow CRÍTICA (onboarding sin email)
 El super_admin NO depende de email para dar de alta tenants/usuarios:
 1. Crea el ISP desde `/super/tenants` con el switch "Enviar email" en **OFF**.

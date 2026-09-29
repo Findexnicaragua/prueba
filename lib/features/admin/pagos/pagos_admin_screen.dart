@@ -71,7 +71,7 @@ class _PagosAdminScreenState extends ConsumerState<PagosAdminScreen> {
       '''
       SELECT p.id, p.cuota_id, p.monto_cordobas, p.vuelto_cordobas, p.moneda, p.monto_original,
              p.metodo, p.fecha_pago, p.referencia, p.notas,
-             p.anulado, p.anulado_en, p.motivo_anulacion,
+             p.anulado, p.anulado_en, p.motivo_anulacion, p.en_revision,
              p.grupo_cobro,
              -- Vuelto TOTAL del grupo (imputado a UN pago del grupo). Sirve para
              -- bloquear la edición de CUALQUIER pago de un grupo con vuelto: su
@@ -278,6 +278,24 @@ class _PagoCard extends ConsumerWidget {
                           ),
                         ),
                       ),
+                      // Marca de CUARENTENA (F9, audit 2026-08-19): este pago
+                      // NO cuenta en caja hasta que se resuelva en "Cobros a
+                      // revisar" — sin la marca, el admin asumía que sumaba.
+                      if (!anulado && (row['en_revision'] as int? ?? 0) == 1)
+                        Container(
+                          margin: const EdgeInsets.only(left: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: scheme.errorContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text('EN REVISIÓN',
+                              style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onErrorContainer)),
+                        ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [

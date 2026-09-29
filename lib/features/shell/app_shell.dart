@@ -9,6 +9,7 @@ import '../../data/repositories/settings_repo.dart';
 import '../../data/services/rechazos_sync_service.dart';
 import '../shared/utils/shell_nav.dart';
 import 'global_search_delegate.dart';
+import '../shared/widgets/cola_atascada_banner.dart';
 import '../shared/widgets/offline_banner.dart';
 import '../shared/widgets/update_banner.dart';
 
@@ -74,6 +75,7 @@ class AppShell extends ConsumerWidget {
       body: Column(
         children: [
           const UpdateBanner(),
+          const ColaAtascadaBanner(),
           Expanded(child: OfflineBanner(child: child)),
         ],
       ),

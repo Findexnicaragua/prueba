@@ -1,3 +1,4 @@
+import 'escala_resumen.dart';
 import 'package:flutter/material.dart';
 
 /// Botón (i) + diálogo explicativo para cada gráfica del dashboard.
@@ -109,7 +110,7 @@ Future<void> mostrarInfoGrafica(BuildContext context, InfoGrafica info) {
                   ),
                   child: Text(info.eje,
                       style: TextStyle(
-                          fontSize: 13,
+                          fontSize: TxtResumen.cifraSub,
                           height: 1.4,
                           color: scheme.onSurface)),
                 ),
@@ -133,12 +134,12 @@ Future<void> mostrarInfoGrafica(BuildContext context, InfoGrafica info) {
                           children: [
                             Text(o.nombre,
                                 style: const TextStyle(
-                                    fontSize: 13,
+                                    fontSize: TxtResumen.cifraSub,
                                     fontWeight: FontWeight.w600)),
                             const SizedBox(height: 2),
                             Text(o.detalle,
                                 style: TextStyle(
-                                    fontSize: 12.5,
+                                    fontSize: TxtResumen.cifra,
                                     height: 1.4,
                                     color: scheme.onSurfaceVariant)),
                           ],
@@ -177,7 +178,7 @@ Future<void> mostrarInfoGrafica(BuildContext context, InfoGrafica info) {
                         Expanded(
                           child: Text(info.nota!,
                               style: TextStyle(
-                                  fontSize: 12.5,
+                                  fontSize: TxtResumen.cifra,
                                   height: 1.4,
                                   color: scheme.onSurfaceVariant)),
                         ),
@@ -208,7 +209,7 @@ Widget _tituloSeccion(
       const SizedBox(width: 6),
       Text(texto,
           style: TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w600, color: color)),
+              fontSize: TxtResumen.cifraSub, fontWeight: FontWeight.w600, color: color)),
     ],
   );
 }
@@ -221,12 +222,12 @@ Widget _bullet(BuildContext context, String texto) {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('•',
-            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+            style: TextStyle(fontSize: TxtResumen.cifraSub, color: scheme.onSurfaceVariant)),
         const SizedBox(width: 8),
         Expanded(
           child: Text(texto,
               style: TextStyle(
-                  fontSize: 13, height: 1.45, color: scheme.onSurfaceVariant)),
+                  fontSize: TxtResumen.cifraSub, height: 1.45, color: scheme.onSurfaceVariant)),
         ),
       ],
     ),

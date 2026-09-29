@@ -119,6 +119,12 @@ Future<void> openDatabaseForUser(String userId) async {
     await db.initialize();
     _currentDbUserId = userId;
 
+    // Limpieza preventiva del WAL al abrir la BD (elimina archivos WAL inflados
+    // por sesiones anteriores de forma pasiva sin bloquear lecturas concurrentes).
+    try {
+      await db.execute('PRAGMA wal_checkpoint(PASSIVE)');
+    } catch (_) {}
+
     // Notificar a main.dart para re-suscribir statusStream y providers.
     onDatabaseSwitched?.call(db);
   } finally {

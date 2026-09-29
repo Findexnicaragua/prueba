@@ -297,3 +297,33 @@ jobs:
 
       - name: flutter test
         run: flutter test
+
+  reglas-de-negocio:
+    name: Reglas de negocio (superficies al dia)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cada regla con ficha declara TODAS sus superficies
+        # Una regla de negocio no vive solo en el repo que la EJECUTA: vive en
+        # los filtros, chips, conteos, exports, textos y documentacion. Este job
+        # falla si aparece una superficie que la ficha no contempla, si la ficha
+        # declara una que ya no existe, o si volvio un patron prohibido al
+        # codigo. Ver AGENTS.md -> LA REGLA DE ORO.
+        #
+        # Si el cambio es correcto, regenerar el snapshot y commitearlo:
+        #   python tools/regla.py <regla> --actualizar
+        run: python3 tools/regla.py --verificar
+
+      - name: Las tablas que ARQUITECTURA declara COMPLETAS lo estan
+        # Dos tablas de ARQUITECTURA.md se mantienen a mano y las dos se
+        # atrasaron: el "mapa EXHAUSTIVO por tabla" (§3.6.1) tenia 5 tablas de
+        # menos, y los buckets de sync (§3.8) ni siquiera existian como tabla,
+        # con 5 sin nombrar. Un documento que dice "exhaustivo" y no lo es es
+        # peor que no tenerlo: el proximo que lo lea confia en el.
+        #
+        # Corre TODO desde el repo (migraciones + sync-rules.yaml), sin tocar la
+        # base, para que no necesite credenciales. La derivacion se valido contra
+        # produccion el 2026-08-26: 50 tablas derivadas, 50 reales, cero
+        # diferencias.
+        run: python3 tools/estructura.py --verificar

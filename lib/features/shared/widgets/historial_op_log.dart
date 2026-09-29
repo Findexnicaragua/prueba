@@ -348,6 +348,39 @@ _VerboInfo _verbo(String? tipoOp, String? accion, Map<String, dynamic> resumen) 
     case 'foto_cliente_baja':
       return const _VerboInfo('Foto eliminada', Icons.no_photography,
           Color(0xFFD4537E));
+    case 'cobro_recuperado':
+      return _VerboInfo('Cobró $montoTxt (recuperado)'.trim(), Icons.payments,
+          const Color(0xFF1D9E75));
+    case 'revision_resuelta':
+      return const _VerboInfo('Cuarentena resuelta', Icons.rule,
+          Color(0xFF378ADD));
+    case 'reimpresion_recibo':
+      return const _VerboInfo('Recibo reimpreso', Icons.print,
+          Color(0xFF378ADD));
+    case 'foto_comprobante_baja':
+      return const _VerboInfo('Comprobante de pago perdido',
+          Icons.no_photography, Color(0xFFD4537E));
+    case 'limpieza_deuda':
+      return const _VerboInfo('Limpieza de deuda', Icons.cleaning_services,
+          Color(0xFF378ADD));
+    case 'correccion_invariante':
+      // Lo emite `super_admin_corregir_invariantes` (0251), una fila por cuota
+      // o contrato tocado. Sin este case caía al default y titulaba
+      // "Actualizado", que no dice que fue el sistema arreglando un descuadre.
+      return const _VerboInfo('Corrección automática de integridad',
+          Icons.auto_fix_high, Color(0xFF378ADD));
+    case 'duplicado_auto_anulado':
+      return const _VerboInfo('Duplicado anulado automáticamente',
+          Icons.layers_clear, Color(0xFFD4537E));
+    case 'anulacion_cuota':
+      // La misma familia cubre ida y vuelta: la anulación (limpieza) y la
+      // reactivación (corrección posterior). El motivo dice cuál es.
+      return (resumen['motivo'] as String? ?? '')
+              .toUpperCase()
+              .contains('REACTIVADA')
+          ? const _VerboInfo(
+              'Cuota reactivada', Icons.restore, Color(0xFF1D9E75))
+          : const _VerboInfo('Cuota anulada', Icons.block, Color(0xFFD4537E));
     case 'alta_entidad':
       return const _VerboInfo('Creado', Icons.add_circle, Color(0xFF7F77DD));
     case 'baja_entidad':
@@ -429,7 +462,7 @@ const _camposBool = {
 // título ("Descuento aplicado C$X") → sin esto salía duplicado como fila (F3).
 const _montoOcultoEnResumen = {
   'cobro', 'cobro_multiple', 'anulacion_pago',
-  'aplicar_credito', 'descuento_cuota', 'cargo_cuota',
+  'aplicar_credito', 'descuento_cuota', 'cargo_cuota', 'cobro_recuperado',
 };
 
 const _estados = {

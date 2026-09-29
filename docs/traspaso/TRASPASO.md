@@ -257,6 +257,7 @@ Seguí **`Troubleshooting SQL/GUIA-TROUBLESHOOTING-SQL.md`** al pie. Reglas no n
 | 6 | **`Install Steps/`** | Setup de PC, build, release, instalación |
 | 7 | **`Troubleshooting SQL/`** | Corregir data de un tenant en prod vía SQL |
 | 8 | `CLAUDE.md` | Shim de 1 línea (`@AGENTS.md`) — no editar |
+| 9 | **`docs/traspaso/GUIA-SUPABASE-POWERSYNC.md`** | Levantar una instancia NUEVA desde el clon: Supabase desde cero + PowerSync self-hosted + el enlace entre ambos (rol de replicación, publicación, JWKS, sync rules) con todos los gotchas |
 
 `docs/archive/` = históricos solo para arqueología, no mantener.
 

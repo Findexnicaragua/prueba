@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,6 +25,9 @@ import '../../shared/utils/sign_out_helper.dart';
 import '../../shared/widgets/confirm_discard_dialog.dart';
 import '../../shared/widgets/offline_banner.dart';
 import '../pagos/cobros_a_revisar_screen.dart' show cobrosARevisarCountProvider;
+import '../pagos/rechazos_sync_seccion.dart'
+    show rechazosPendientesCountProvider, rechazosPendientesProvider;
+import '../../shared/widgets/cola_atascada_banner.dart';
 
 /// Shell del admin/admin_cobranza/admin_usuarios. El menú es una **galería de inicio**
 /// (`MenuGaleriaScreen` en `/admin`): tarjetas con ícono de color por sección.
@@ -73,6 +78,7 @@ class AdminShell extends ConsumerWidget {
     final Widget bodyWithBanners = Column(
       children: [
         const UpdateBanner(),
+        const ColaAtascadaBanner(),
         if (impersonating) const ImpersonationBanner(),
         Expanded(child: bodyContent),
       ],
@@ -89,6 +95,7 @@ class AdminShell extends ConsumerWidget {
             : null,
         title: Text(titulo, overflow: TextOverflow.ellipsis),
         actions: const [
+          _CampanaAlertas(),
           _SyncIndicator(),
           SizedBox(width: 4),
           _AvatarMenu(),
@@ -389,8 +396,12 @@ String _rolDisplay(String rol) => switch (rol) {
 /// Pagos) y "Administración" (Personal/Planes/Geografía/Red/Etiquetas). El color
 /// es el del ícono en la card.
 const _adminMenu = [
+  // adminOnly desde 2026-08-27 (decision de Ruben): el Resumen es del dueno.
+  // Los demas roles no ven el modulo; los que hoy entran lo pierden con el
+  // update. Ojo: el guard REAL vive en el router (`soloAdmin`), este flag solo
+  // esconde la card — sin el del router se entra igual tipeando la URL.
   _MenuItem(Icons.space_dashboard, 'Resumen', '/admin/resumen',
-      color: Color(0xFF185FA5)),
+      color: Color(0xFF185FA5), adminOnly: true),
   _MenuItem(Icons.groups, 'Clientes', '/admin/clientes',
       color: Color(0xFF0F6E56)),
   _MenuItem(Icons.approval, 'Solicitudes', '/admin/solicitudes',
@@ -525,6 +536,141 @@ Set<String> _pantallasOn(AppSettings settings) => <String>{
       if (settings.avisosHabilitado) 'cobranza.avisos_habilitado',
     };
 
+/// Campana de alertas de PLATA en la barra del admin (paquete "bandeja
+/// humana", 2026-08-20). Visible en TODAS las pantallas del shell — el badge
+/// de la galería solo se ve desde el home. Suma cuarentena local + rechazos
+/// online (el mismo número que la card). Sin pendientes NO se muestra; con
+/// pendientes se sacude cada ~8 s (llamar la atención sin hartar) y el toque
+/// navega con `go` (regla #12: rutas del shell nunca con push).
+class _CampanaAlertas extends ConsumerStatefulWidget {
+  const _CampanaAlertas();
+
+  @override
+  ConsumerState<_CampanaAlertas> createState() => _CampanaAlertasState();
+}
+
+class _CampanaAlertasState extends ConsumerState<_CampanaAlertas>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _angulo;
+  Timer? _timer;
+  Timer? _refresco;
+
+  /// Anti-fatiga (audit UX 2026-08-20): tras N campanazos con el MISMO conteo,
+  /// la campana queda quieta (el badge sigue). Un conteo nuevo la despierta.
+  int _sacudidasConEsteConteo = 0;
+  int _ultimoConteo = 0;
+  bool _enLaBandeja = false;
+  static const _maxSacudidas = 6;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900));
+    // Secuencia de campanazo: oscilación que decae hasta el reposo.
+    _angulo = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0, end: 0.22), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 0.22, end: -0.18), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -0.18, end: 0.12), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 0.12, end: -0.06), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -0.06, end: 0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _timer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (!mounted || !_hayPendientes) return;
+      // Parado EN la bandeja no hace falta llamar la atención (audit UX #7),
+      // y tras _maxSacudidas con el mismo conteo se calla (fatiga de alarma).
+      if (_enLaBandeja || _sacudidasConEsteConteo >= _maxSacudidas) return;
+      _sacudidasConEsteConteo++;
+      _ctrl.forward(from: 0);
+    });
+    // La campana vive en el AppBar de TODAS las pantallas → mantiene vivo el
+    // FutureProvider de rechazos PARA SIEMPRE y sin esto el fetch online
+    // corría UNA sola vez por sesión (audit UX #1: avisaba cosas resueltas y
+    // callaba las nuevas). Mismo período que el refresh de la bandeja.
+    _refresco = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted) ref.invalidate(rechazosPendientesProvider);
+    });
+  }
+
+  bool get _hayPendientes => _conteo > 0;
+
+  int get _conteo =>
+      (ref.read(cobrosARevisarCountProvider).valueOrNull ?? 0) +
+      ref.read(rechazosPendientesCountProvider);
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _refresco?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final int conteo =
+        (ref.watch(cobrosARevisarCountProvider).valueOrNull ?? 0).toInt() +
+            ref.watch(rechazosPendientesCountProvider);
+    _enLaBandeja = GoRouterState.of(context).matchedLocation ==
+        '/admin/cobros-a-revisar';
+    if (conteo != _ultimoConteo) {
+      // Conteo nuevo = novedad real → la campana recupera la voz.
+      _ultimoConteo = conteo;
+      _sacudidasConEsteConteo = 0;
+    }
+    if (conteo == 0) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: 'Cobros que esperan decisión',
+      onPressed: () => context.go('/admin/cobros-a-revisar'),
+      icon: Badge(
+        label: Text('$conteo'),
+        backgroundColor: scheme.error,
+        child: AnimatedBuilder(
+          animation: _angulo,
+          builder: (_, child) => Transform.rotate(
+            angle: _angulo.value,
+            alignment: Alignment.topCenter,
+            child: child,
+          ),
+          child: Icon(Icons.notifications_active, color: scheme.error),
+        ),
+      ),
+    );
+  }
+}
+
+/// Latido suave del badge de las cards de PLATA de la galería (solo Cobranza
+/// y Cobros a revisar — pulsar todos los badges diluye la señal).
+class _BadgePulso extends StatefulWidget {
+  const _BadgePulso({required this.child});
+  final Widget child;
+
+  @override
+  State<_BadgePulso> createState() => _BadgePulsoState();
+}
+
+class _BadgePulsoState extends State<_BadgePulso>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 800))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ScaleTransition(
+        scale: Tween(begin: 1.0, end: 1.12)
+            .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut)),
+        child: widget.child,
+      );
+}
+
 /// Conteo de alerta para el badge de la card: Tickets (en riesgo),
 /// Inventario (stock bajo), Solicitudes (pendientes), Cobros a revisar
 /// (cuotas cobradas de más). 0 = sin badge.
@@ -565,8 +711,11 @@ class MenuGaleriaScreen extends ConsumerWidget {
         ref.watch(inventarioStockBajoCountProvider).valueOrNull ?? 0;
     final solicitudesPend =
         ref.watch(solicitudesPendientesCountProvider).valueOrNull ?? 0;
-    final cobrosARevisar =
-        ref.watch(cobrosARevisarCountProvider).valueOrNull ?? 0;
+    // Cuarentena LOCAL (offline) + rechazos de sync en el SERVER (online;
+    // sin red suma 0). El mismo numero que ve la pantalla.
+    final int cobrosARevisar =
+        (ref.watch(cobrosARevisarCountProvider).valueOrNull ?? 0) +
+            ref.watch(rechazosPendientesCountProvider);
 
     final items = _adminMenu
         .where((m) => _menuVisible(m,
@@ -645,7 +794,9 @@ class SubGaleriaScreen extends ConsumerWidget {
       items: items,
       ticketsEnRiesgo: 0,
       stockBajo: 0,
-      cobrosARevisar: ref.watch(cobrosARevisarCountProvider).valueOrNull ?? 0,
+      cobrosARevisar:
+          (ref.watch(cobrosARevisarCountProvider).valueOrNull ?? 0) +
+              ref.watch(rechazosPendientesCountProvider),
       destino: (m) => m.path,
     );
   }
@@ -733,7 +884,13 @@ class _GaleriaCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               alerta > 0
-                  ? Badge(label: Text('$alerta'), child: ico)
+                  // Las cards de PLATA laten para llamar la atención del
+                  // admin (paquete bandeja humana); las demás quedan quietas.
+                  ? (item.path == '/admin/cobranza' ||
+                          item.path == '/admin/cobros-a-revisar'
+                      ? _BadgePulso(
+                          child: Badge(label: Text('$alerta'), child: ico))
+                      : Badge(label: Text('$alerta'), child: ico))
                   : ico,
               SizedBox(height: item.subtitulo == null ? 12 : 6),
               Text(

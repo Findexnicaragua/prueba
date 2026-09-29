@@ -13,6 +13,7 @@ import '../../../data/utils/op_log.dart';
 import '../../../data/utils/formatters.dart';
 import '../../../powersync/db.dart' as ps;
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/filtro_planes.dart';
 import '../../shared/widgets/etiqueta_chip.dart';
 import '../../shared/widgets/filtro_multi_dropdown.dart';
 import '../../../data/utils/errores.dart';
@@ -30,7 +31,21 @@ const _kSinCobrador = '__sin_cobrador__';
 /// Reemplaza los toggles sueltos "Con mora" + "Suspendidos" (se pisaban con
 /// "Solo activos"). Incluye los DEUDORES fuera de ruta (suspendido/cancelado),
 /// que antes solo se veían entrando al contrato.
-enum EstadoServicio { alDia, gracia, mora, suspendidoDeuda, canceladoDeuda, sinContrato }
+/// **NO volver a agregar la categoría «Cancelado con deuda»** (existió hasta el
+/// 2026-08-26). Ofrecía "cliente con contrato cancelado que todavía debe", y
+/// desde que **cancelar CONDONA la deuda** esa categoría no puede tener
+/// miembros: al sacarla devolvía 0 clientes, y no por casualidad — el server
+/// pone el saldo en cero en la misma transacción en que cancela (`0259`).
+/// La ficha `docs/reglas/cancelacion.md` lo tiene como patrón PROHIBIDO, así
+/// que el CI falla si el identificador vuelve al código.
+///
+/// Se mantuvo viva un tiempo a propósito, mientras existieron los 5 contratos
+/// de Telenet que `0258` había preservado: era la única forma de encontrarlos.
+/// Al condonarlos (`0261`) el filtro quedó estructuralmente vacío.
+///
+/// `suspendidoDeuda` SÍ se queda: suspender conserva la deuda y hoy devuelve 30
+/// clientes reales. Son opuestas, no variantes de lo mismo.
+enum EstadoServicio { alDia, gracia, mora, suspendidoDeuda, sinContrato }
 
 extension EstadoServicioMeta on EstadoServicio {
   String get clave => name;
@@ -39,7 +54,6 @@ extension EstadoServicioMeta on EstadoServicio {
         EstadoServicio.gracia => 'En gracia',
         EstadoServicio.mora => 'En mora',
         EstadoServicio.suspendidoDeuda => 'Suspendido con deuda',
-        EstadoServicio.canceladoDeuda => 'Cancelado con deuda',
         EstadoServicio.sinContrato => 'Sin contrato',
       };
 }
@@ -78,13 +92,6 @@ extension EstadoServicioMeta on EstadoServicio {
             'AND (cu.monto + COALESCE(cu.cargos_neto,0) - COALESCE(cu.monto_pagado, 0)) > 0)',
         params: const [],
       );
-    case EstadoServicio.canceladoDeuda:
-      return (
-        sql: 'c.id IN (SELECT cu.cliente_id FROM cuotas cu JOIN contratos ct ON ct.id = cu.contrato_id '
-            "WHERE ct.estado = 'cancelado' AND cu.estado IN ('pendiente','parcial') "
-            'AND (cu.monto + COALESCE(cu.cargos_neto,0) - COALESCE(cu.monto_pagado, 0)) > 0)',
-        params: const [],
-      );
     case EstadoServicio.sinContrato:
       return (
         sql: 'c.id NOT IN (SELECT cliente_id FROM contratos WHERE cliente_id IS NOT NULL)',
@@ -103,6 +110,7 @@ extension EstadoServicioMeta on EstadoServicio {
   required Set<String>? cobrador,
   required Set<String>? comunidad,
   required Set<String>? nodo,
+  required Set<String>? plan,
   required Set<String>? estadoServicio,
   required bool soloActivos,
   required int diasGracia,
@@ -143,6 +151,36 @@ extension EstadoServicioMeta on EstadoServicio {
         'JOIN red_hubs h ON h.id = p.hub_id WHERE h.nodo_id IN '
         '(${List.filled(nodo.length, '?').join(', ')}))');
     params.addAll(nodo);
+  }
+
+  // Plan del contrato VIVO (`contratos.plan_id`), no el del momento del cobro:
+  // el filtro sirve para buscar con la última información. Un cliente puede
+  // tener más de un contrato activo (pasa en el Test Tenant), así que la
+  // semántica es "AL MENOS UNO de sus contratos activos está en alguno de los
+  // planes elegidos".
+  //
+  // El set puede traer el centinela "Sin plan" → clientes sin ningún contrato
+  // activo. Sin esa rama desaparecerían del filtro sin aviso: son 61 en Mairena
+  // y 35 en Telenet. Es el mismo patrón que `_kSinCobrador` de arriba.
+  if (plan != null && plan.isNotEmpty) {
+    final ids = plan.where((x) => x != kPlanSinPlan).toList();
+    final ors = <String>[];
+    if (ids.isNotEmpty) {
+      // `COALESCE(estado,'activo')` es el predicado canónico del archivo (el
+      // mismo del JOIN de cuotas y de los subselects de conteo).
+      ors.add('EXISTS (SELECT 1 FROM contratos ct WHERE ct.cliente_id = c.id '
+          "AND COALESCE(ct.estado,'activo') = 'activo' "
+          'AND ct.plan_id IN (${List.filled(ids.length, '?').join(', ')}))');
+      params.addAll(ids);
+    }
+    if (plan.contains(kPlanSinPlan)) {
+      // NOT EXISTS y no `NOT IN`: con `NOT IN` un solo NULL en la subconsulta
+      // haría que la condición no matchee NUNCA, en silencio.
+      ors.add('NOT EXISTS (SELECT 1 FROM contratos ct '
+          'WHERE ct.cliente_id = c.id '
+          "AND COALESCE(ct.estado,'activo') = 'activo')");
+    }
+    if (ors.isNotEmpty) where.add('(${ors.join(' OR ')})');
   }
 
   // Estado de servicio: OR de los predicados seleccionados (orden del enum para
@@ -187,6 +225,8 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
   Set<String>? _cobradorFilter; // null/vacío = sin filtrar; puede incluir _kSinCobrador
   Set<String>? _comunidadFilter;
   Set<String>? _nodoFilter; // null = todos (topología de red)
+  /// Plan del contrato vivo. Puede incluir el centinela [kPlanSinPlan].
+  Set<String>? _planFilter;
   Set<String>? _estadoServicio; // null/vacío = sin filtrar (EstadoServicio.clave)
   bool _soloActivos = true; // true=activos, false=inactivos (binario; sin "todos")
   final Set<String> _seleccionados = {};
@@ -312,6 +352,7 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
           cobradorActual: _cobradorFilter,
           comunidadActual: _comunidadFilter,
           nodoActual: _nodoFilter,
+          planActual: _planFilter,
           estadoServicioActual: _estadoServicio,
           soloActivos: _soloActivos,
           filtrosActivos: _filtrosActivos,
@@ -325,6 +366,12 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
           }),
           onNodo: (v) => setState(() {
             _nodoFilter = v;
+            _resetSeleccion();
+          }),
+          onPlan: (v) => setState(() {
+            _planFilter = v;
+            // `_resetSeleccion` como los demás: si no, la selección masiva
+            // queda con ids de clientes que el filtro nuevo ya no muestra.
             _resetSeleccion();
           }),
           onEstadoServicio: (v) => setState(() {
@@ -355,6 +402,7 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
             cobradorFilter: _cobradorFilter,
             comunidadFilter: _comunidadFilter,
             nodoFilter: _nodoFilter,
+            planFilter: _planFilter,
             estadoServicio: _estadoServicio,
             soloActivos: _soloActivos,
             diasGracia: diasGracia,
@@ -417,11 +465,20 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
         : const OpLogActor.systemAdmin();
     // try/catch: sin él, la guardia de solo-lectura (0198) escapaba como error
     // async no manejado y el botón "no hacía nada" en silencio.
+    // Se cuentan los REALMENTE aplicados: el guard de empresa de abajo puede
+    // saltear clientes, y avisar "50 actualizados" cuando no se movió ninguno
+    // manda al cobrador a la calle con una ruta vacía (audit 2026-08-21).
+    var aplicados = 0;
     try {
       await ps.dbW.writeTransaction((tx) async {
       for (final id in ids) {
         final antes =
             (await tx.getAll('SELECT * FROM clientes WHERE id = ?', [id])).first;
+        // Guard de empresa (2026-08-20): al cambiar de empresa impersonada, la
+        // copia local conserva los clientes de la anterior hasta que cierra el
+        // sync. Reasignarlos les pondría un cobrador de OTRA empresa.
+        if (tenantId != null && antes['tenant_id'] != tenantId) continue;
+        aplicados++;
         await tx.execute(
           'UPDATE clientes SET cobrador_id = ?, updated_at = ?, ocurrido_en = ? WHERE id = ?',
           [seleccion.id, now, ocurridoEn, id],
@@ -445,8 +502,15 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
       return;
     }
     if (context.mounted) {
+      final omitidos = ids.length - aplicados;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${ids.length} cliente(s) actualizados')),
+        SnackBar(
+          content: Text(omitidos == 0
+              ? '$aplicados cliente(s) actualizados'
+              : '$aplicados actualizado(s). $omitidos son de otra empresa y se '
+                  'omitieron: entrá a esa empresa para reasignarlos.'),
+          duration: Duration(seconds: omitidos == 0 ? 4 : 7),
+        ),
       );
       setState(() => _seleccionados.clear());
     }
@@ -564,6 +628,7 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
       cobrador: _cobradorFilter,
       comunidad: _comunidadFilter,
       nodo: _nodoFilter,
+      plan: _planFilter,
       estadoServicio: _estadoServicio,
       soloActivos: _soloActivos,
       diasGracia: diasGracia,
@@ -581,6 +646,7 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
     if (_cobradorFilter != null && _cobradorFilter!.isNotEmpty) n++;
     if (_comunidadFilter != null && _comunidadFilter!.isNotEmpty) n++;
     if (_nodoFilter != null && _nodoFilter!.isNotEmpty) n++;
+    if (_planFilter != null && _planFilter!.isNotEmpty) n++;
     if (_estadoServicio != null && _estadoServicio!.isNotEmpty) n++;
     if (!_soloActivos) n++; // "Inactivos" es un filtro no-default
     return n;
@@ -591,6 +657,7 @@ class _ClientesAdminScreenState extends ConsumerState<ClientesAdminScreen> {
       _cobradorFilter = null;
       _comunidadFilter = null;
       _nodoFilter = null;
+      _planFilter = null;
       _estadoServicio = null;
       _soloActivos = true;
       _resetSeleccion();
@@ -622,12 +689,14 @@ class _Filtros extends StatelessWidget {
     required this.cobradorActual,
     required this.comunidadActual,
     required this.nodoActual,
+    required this.planActual,
     required this.estadoServicioActual,
     required this.soloActivos,
     required this.filtrosActivos,
     required this.onCobrador,
     required this.onComunidad,
     required this.onNodo,
+    required this.onPlan,
     required this.onEstadoServicio,
     required this.onSoloActivos,
     required this.onLimpiar,
@@ -636,12 +705,14 @@ class _Filtros extends StatelessWidget {
   final Set<String>? cobradorActual;
   final Set<String>? comunidadActual;
   final Set<String>? nodoActual;
+  final Set<String>? planActual;
   final Set<String>? estadoServicioActual;
   final bool soloActivos;
   final int filtrosActivos;
   final ValueChanged<Set<String>?> onCobrador;
   final ValueChanged<Set<String>?> onComunidad;
   final ValueChanged<Set<String>?> onNodo;
+  final ValueChanged<Set<String>?> onPlan;
   final ValueChanged<Set<String>?> onEstadoServicio;
   final ValueChanged<bool> onSoloActivos;
   final VoidCallback onLimpiar;
@@ -662,6 +733,7 @@ class _Filtros extends StatelessWidget {
           _EstadoServicioChip(
               seleccionados: estadoServicioActual, onChanged: onEstadoServicio),
           const SizedBox(width: 8),
+          _PlanChip(seleccionados: planActual, onChanged: onPlan),
           _ActivoChip(soloActivos: soloActivos, onChanged: onSoloActivos),
           if (filtrosActivos > 0) ...[
             const SizedBox(width: 8),
@@ -745,33 +817,45 @@ class _ActivoChip extends StatelessWidget {
   }
 }
 
-class _CobradorChip extends StatefulWidget {
+class _CobradorChip extends ConsumerStatefulWidget {
   const _CobradorChip({required this.seleccionados, required this.onChanged});
   final Set<String>? seleccionados; // null = todos
   final ValueChanged<Set<String>?> onChanged;
 
   @override
-  State<_CobradorChip> createState() => _CobradorChipState();
+  ConsumerState<_CobradorChip> createState() => _CobradorChipState();
 }
 
-class _CobradorChipState extends State<_CobradorChip> {
-  /// Stream cacheado — query fija, no depende de props.
-  late final Stream<List<Map<String, dynamic>>> _cobradoresStream;
+class _CobradorChipState extends ConsumerState<_CobradorChip> {
+  late Stream<List<Map<String, dynamic>>> _cobradoresStream;
+  String? _tenantDelStream;
 
   @override
   void initState() {
     super.initState();
+    _rehacerStream();
+  }
+
+  /// El tenant llega por stream: en el primer frame puede ser null (el chip
+  /// saldría VACÍO) y cambia al entrar/salir de una empresa impersonada.
+  void _rehacerStream() {
+    _tenantDelStream = ref.read(tenantIdProvider);
     _cobradoresStream = ps.db.watch(
       '''
       SELECT id, nombre FROM cobradores
-       WHERE activo = 1 AND rol = 'cobrador'
+       WHERE activo = 1 AND rol = 'cobrador' AND tenant_id = ?
        ORDER BY nombre
       ''',
+      // Filtro de empresa (2026-08-20): el device del super_admin puede tener
+      // cobradores de la empresa impersonada anterior hasta que cierra el sync.
+      parameters: [_tenantDelStream],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final tenantId = ref.watch(tenantIdProvider);
+    if (tenantId != _tenantDelStream) _rehacerStream();
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _cobradoresStream,
       initialData: const [],
@@ -911,6 +995,65 @@ class _NodoChipState extends State<_NodoChip> {
   }
 }
 
+/// Filtro por PLAN del contrato vivo, agrupado por tipo de servicio.
+///
+/// Calca el patrón de [_CobradorChip] y no el de [_NodoChip]: la consulta va
+/// **escopeada por tenant**, porque el SQLite del super_admin no es mono-tenant
+/// (conserva la empresa anterior hasta que cierra el sync) y sin el filtro el
+/// chip listaría planes de otro ISP. El SQL y el armado de opciones son
+/// compartidos con Cobros y Mapa — viven en `filtro_planes.dart`.
+class _PlanChip extends ConsumerStatefulWidget {
+  const _PlanChip({required this.seleccionados, required this.onChanged});
+  final Set<String>? seleccionados; // null = todos
+  final ValueChanged<Set<String>?> onChanged;
+
+  @override
+  ConsumerState<_PlanChip> createState() => _PlanChipState();
+}
+
+class _PlanChipState extends ConsumerState<_PlanChip> {
+  late Stream<List<Map<String, dynamic>>> _planesStream;
+  String? _tenantDelStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _rehacerStream();
+  }
+
+  void _rehacerStream() {
+    _tenantDelStream = ref.read(tenantIdProvider);
+    _planesStream =
+        ps.db.watch(kPlanesFiltroSql, parameters: [_tenantDelStream]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tenantId = ref.watch(tenantIdProvider);
+    if (tenantId != _tenantDelStream) _rehacerStream();
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _planesStream,
+      initialData: const [],
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return Chip(label: Text(mensajeErrorHumano(snap.error!)));
+        }
+        final opts = opcionesDePlanes(snap.data!);
+        final allIds = opts.map((o) => o.id).toSet();
+        return FiltroMultiDropdown(
+          icon: kPlanFiltroIcono,
+          hint: 'Plan',
+          buscarHint: 'Buscar plan…',
+          opciones: opts,
+          seleccionados: widget.seleccionados ?? allIds,
+          onChanged: (s) => widget
+              .onChanged(s.isEmpty || s.length >= allIds.length ? null : s),
+        );
+      },
+    );
+  }
+}
+
 /// Barra fina (sin selección) para entrar al modo masivo: selecciona TODOS
 /// los clientes que matchean el filtro actual, no solo la página visible.
 class _SeleccionarTodosBar extends StatelessWidget {
@@ -984,6 +1127,7 @@ class _Lista extends StatefulWidget {
     required this.cobradorFilter,
     required this.comunidadFilter,
     required this.nodoFilter,
+    required this.planFilter,
     required this.estadoServicio,
     required this.soloActivos,
     required this.diasGracia,
@@ -997,6 +1141,7 @@ class _Lista extends StatefulWidget {
   final Set<String>? cobradorFilter;
   final Set<String>? comunidadFilter;
   final Set<String>? nodoFilter;
+  final Set<String>? planFilter;
   final Set<String>? estadoServicio;
   final bool soloActivos;
   final int diasGracia;
@@ -1124,6 +1269,7 @@ class _ListaState extends State<_Lista> {
         !setEquals(old.cobradorFilter, widget.cobradorFilter) ||
         !setEquals(old.comunidadFilter, widget.comunidadFilter) ||
         !setEquals(old.nodoFilter, widget.nodoFilter) ||
+        !setEquals(old.planFilter, widget.planFilter) ||
         !setEquals(old.estadoServicio, widget.estadoServicio) ||
         old.soloActivos != widget.soloActivos ||
         old.diasGracia != widget.diasGracia ||
@@ -1153,6 +1299,7 @@ class _ListaState extends State<_Lista> {
       cobrador: widget.cobradorFilter,
       comunidad: widget.comunidadFilter,
       nodo: widget.nodoFilter,
+      plan: widget.planFilter,
       estadoServicio: widget.estadoServicio,
       soloActivos: widget.soloActivos,
       diasGracia: widget.diasGracia,
@@ -1172,6 +1319,7 @@ class _ListaState extends State<_Lista> {
       cobrador: widget.cobradorFilter,
       comunidad: widget.comunidadFilter,
       nodo: widget.nodoFilter,
+      plan: widget.planFilter,
       estadoServicio: widget.estadoServicio,
       soloActivos: widget.soloActivos,
       diasGracia: widget.diasGracia,
@@ -1207,6 +1355,18 @@ class _ListaState extends State<_Lista> {
              (SELECT COUNT(*) FROM contratos ct
                WHERE ct.cliente_id = c.id
                  AND COALESCE(ct.estado, 'activo') = 'activo') AS contratos_activos,
+             -- Los NO activos, para que el chip diga la VERDAD cuando activos=0.
+             -- Antes mostraba "Sin contrato" en ese caso, y era falso para 70
+             -- clientes que SI tienen contrato (30 suspendidos + 40 con solo
+             -- cancelados, medido 2026-08-25). Ademas chocaba con el filtro
+             -- homonimo, que exige CERO contratos: el chip decia una cosa y
+             -- filtrar por lo mismo devolvia otra. Con esto los dos coinciden.
+             (SELECT COUNT(*) FROM contratos ct
+               WHERE ct.cliente_id = c.id
+                 AND ct.estado = 'suspendido') AS contratos_suspendidos,
+             (SELECT COUNT(*) FROM contratos ct
+               WHERE ct.cliente_id = c.id
+                 AND ct.estado = 'cancelado') AS contratos_cancelados,
              (SELECT GROUP_CONCAT(e.nombre || char(31) || e.color || char(31) || e.icono, char(30))
                 FROM cliente_etiquetas ce JOIN etiquetas e ON e.id = ce.etiqueta_id
                WHERE ce.cliente_id = c.id) AS etiquetas_concat
@@ -1248,6 +1408,7 @@ class _ListaState extends State<_Lista> {
           (widget.cobradorFilter?.isNotEmpty ?? false) ||
           (widget.comunidadFilter?.isNotEmpty ?? false) ||
           (widget.nodoFilter?.isNotEmpty ?? false) ||
+          (widget.planFilter?.isNotEmpty ?? false) ||
           (widget.estadoServicio?.isNotEmpty ?? false) ||
           !widget.soloActivos;
       return EmptyState(
@@ -1332,6 +1493,8 @@ class _ClienteCard extends ConsumerWidget {
     final vencidas = row['vencidas'] as int? ?? 0;
     final enGracia = row['en_gracia'] as int? ?? 0;
     final contratos = row['contratos_activos'] as int? ?? 0;
+    final suspendidos = row['contratos_suspendidos'] as int? ?? 0;
+    final cancelados = row['contratos_cancelados'] as int? ?? 0;
     final saldo = (row['saldo'] as num? ?? 0).toDouble();
     final fueraRuta = (row['saldo_fuera_ruta'] as num? ?? 0).toDouble();
     final sinCobrador = row['cobrador_id'] == null;
@@ -1425,8 +1588,18 @@ class _ClienteCard extends ConsumerWidget {
                         // Tag de contratos SIEMPRE visible (P4): cuántos
                         // servicios activos tiene el cliente de un vistazo
                         // (la mora y el saldo agregan todos los contratos).
-                        // 0 activos (nuevo sin contrato o único suspendido)
-                        // → "Sin contrato" en gris.
+                        //
+                        // Sin activos NO es lo mismo que "Sin contrato": si el
+                        // único contrato está suspendido o cancelado, el chip lo
+                        // dice. Antes los tres casos se pintaban igual y el
+                        // resultado era una pantalla que se contradecía sola —
+                        // el dueño del ISP vio a una clienta rotulada "Sin
+                        // contrato" debiendo C$1.116,58, cuando en realidad
+                        // tenía su contrato SUSPENDIDO (y suspender conserva la
+                        // deuda: es correcto que deba). Eran 70 clientes.
+                        // Además el filtro homónimo exige CERO contratos, así
+                        // que el chip prometía una categoría que al filtrar
+                        // devolvía otra cosa. Ahora los dos significan lo mismo.
                         if (contratos >= 1)
                           Chip(
                             avatar: Icon(Icons.description_outlined,
@@ -1436,6 +1609,31 @@ class _ClienteCard extends ConsumerWidget {
                                 : '$contratos contratos'),
                             backgroundColor:
                                 scheme.primaryContainer.withValues(alpha: 0.3),
+                            visualDensity: VisualDensity.compact,
+                          )
+                        else if (suspendidos >= 1)
+                          Chip(
+                            avatar: Icon(Icons.pause_circle_outline,
+                                size: 14, color: colores.gracia),
+                            label: Text(
+                                suspendidos == 1
+                                    ? '1 suspendido'
+                                    : '$suspendidos suspendidos',
+                                style: TextStyle(color: colores.gracia)),
+                            backgroundColor:
+                                colores.gracia.withValues(alpha: 0.12),
+                            visualDensity: VisualDensity.compact,
+                          )
+                        else if (cancelados >= 1)
+                          Chip(
+                            avatar: Icon(Icons.cancel_outlined,
+                                size: 14, color: scheme.outline),
+                            label: Text(
+                                cancelados == 1
+                                    ? '1 cancelado'
+                                    : '$cancelados cancelados',
+                                style: TextStyle(color: scheme.outline)),
+                            backgroundColor: scheme.surfaceContainerHighest,
                             visualDensity: VisualDensity.compact,
                           )
                         else

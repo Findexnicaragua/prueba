@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,10 +13,19 @@ import '../../../data/utils/op_log.dart';
 import '../../../data/utils/periodo_dashboard.dart';
 import '../../../powersync/db.dart' as ps;
 import '../../shared/widgets/rango_fechas_dialog.dart';
+import 'estado_actual_card.dart';
 import 'info_grafica.dart';
 import 'info_grafica_textos.dart';
-import 'mora_historica_card.dart';
+import 'recaudo_mora_card.dart';
+import 'mora_zona_card.dart';
+import 'caja_ciclo_card.dart';
+import 'dashboard_tarjetas.dart';
+import 'distribucion_cuotas_card.dart';
+import 'mora_ciclos_card.dart';
+import 'proyeccion_cobros_card.dart';
+import 'quien_cobro_card.dart';
 import 'tendencia_cobros_card.dart';
+import 'resumen_watch.dart';
 
 /// Gate del resumen financiero: pide el PIN del admin ANTES de mostrarlo.
 ///
@@ -428,11 +438,70 @@ class _NumKey extends StatelessWidget {
   }
 }
 
-class DashboardAdminScreen extends ConsumerWidget {
+/// Borde de las tarjetas del RESUMEN, más marcado que el del tema.
+///
+/// El tema global pinta las Card blancas (`#FFFFFF`) con un filete de 0,5px en
+/// `#E5E5EA`, sobre un fondo de página `#FAFAFC`. En una pantalla de lista eso
+/// alcanza, porque las filas se separan por su contenido. Acá no: el Resumen es
+/// una PILA de siete tarjetas grandes, y con 0,4% de diferencia entre la tarjeta
+/// y el fondo más un filete que a escala normal casi no se ve, las siete se
+/// leen como una sola masa continua. Reporte del dueño (2026-09-01): *"me
+/// gustaría una separación clara entre cada gráfico"*.
+///
+/// 1px de `#D1D1D6` (el gris 4 de la paleta iOS que la app ya imita) dibuja
+/// cada tarjeta sin cambiarle el color a nada. Se descartó oscurecer el FONDO
+/// del Resumen a `#F2F2F7` —más efectivo, pero dejaba esta pantalla de otro
+/// color que el resto de la app— y se descartó tocar el `cardTheme` global,
+/// que le cambiaría el borde a toda Card de la app (clientes, contratos,
+/// tickets). Por eso el override va en un `Theme` que envuelve SOLO esta
+/// pantalla.
+const _bordeTarjetaResumen = Color(0xFFD1D1D6);
+
+/// Aire entre tarjetas. Era 16 y subía a 28 en el mismo pedido: el borde
+/// separa cada objeto, el aire dice cuánto respiran entre sí. Uno sin el otro
+/// deja la pila igual de apretada o igual de indistinta.
+const _aireEntreTarjetas = 28.0;
+
+class DashboardAdminScreen extends ConsumerStatefulWidget {
   const DashboardAdminScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardAdminScreen> createState() =>
+      _DashboardAdminScreenState();
+}
+
+class _DashboardAdminScreenState extends ConsumerState<DashboardAdminScreen> {
+  Timer? _autoRefreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // 1) Refrescar de inmediato al abrir el dashboard resumen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _refrescar();
+    });
+    // 2) Auto-refresco cada 10 minutos mientras la pantalla permanezca abierta
+    _autoRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      if (!mounted) return;
+      _refrescar();
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _refrescar() {
+    ref.read(dashboardRefreshEpochProvider.notifier).state++;
+    ref.read(dashboardUltimaActualizacionProvider.notifier).state =
+        DateTime.now();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final now = DateTime.now();
     // Cada sección es toggleable por el super_admin por tenant (settings
     // 'dashboard.*_visible', grupo super-only en Avanzado, migración 0133).
@@ -440,298 +509,137 @@ class DashboardAdminScreen extends ConsumerWidget {
     final esAdminCobranza =
         ref.watch(cobradorActualProvider).valueOrNull?.esAdminCobranza ?? false;
 
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Text('Resumen', style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 4),
-        Text(
-          '${Fmt.diaSemana(now)}, ${Fmt.fechaLarga(now)}',
-          style: TextStyle(color: Theme.of(context).colorScheme.outline),
+    // El override vive ACÁ y no en `theme.dart` a propósito: las Card de los
+    // diálogos y las hojas que se abren DESDE el Resumen (el (i) de cada
+    // gráfica, los selectores) viven en el overlay, o sea en otro subtree, y
+    // siguen con el borde del tema. Cambia la pila del Resumen, nada más.
+    final tema = Theme.of(context);
+    return Theme(
+      data: tema.copyWith(
+        cardTheme: tema.cardTheme.copyWith(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: _bordeTarjetaResumen, width: 1),
+          ),
         ),
-        const SizedBox(height: 24),
-        // El rol admin_cobranza NO ve montos recolectados, pero SÍ gestiona
-        // mora y recuperación de cartera. Antes se le ocultaban estas tarjetas
-        // ENTERAS para cumplir lo primero, y el resultado era que entraba al
-        // Resumen y no veía nada — ni la mora, que es su trabajo. Ahora las ve
-        // con el recorte ADENTRO: lo facturado y lo que falta, sin lo cobrado
-        // ni la curva de cobrado acumulado.
-        if (s.dashCobrosVisible) ...[
-          TendenciaCobrosCard(ocultarRecaudado: esAdminCobranza),
-          const SizedBox(height: 16),
-        ],
-        if (s.dashRecuperacionVisible) ...[
-          TendenciaMoraCard(ocultarRecaudado: esAdminCobranza),
-          const SizedBox(height: 16),
-          // Va pegada a la de mora del ciclo y bajo el MISMO ajuste: son la
-          // misma medida, una responde "cuánta hay" y la otra "vamos mejor o
-          // peor". Separarlas en dos ajustes dejaría prender media respuesta.
-          MoraHistoricaCard(ocultarRecaudado: esAdminCobranza),
-          const SizedBox(height: 16),
-        ],
-        // Caja pura (lo que ENTRÓ, por fecha de pago): esto sí queda fuera.
-        if (s.dashCobrosVisible && !esAdminCobranza) ...[
-          const _CobrosKPIs(),
-          const SizedBox(height: 16),
-          const _ConsultarPeriodoCard(),
-          const SizedBox(height: 24),
-        ],
-        // La proyección es lo ESPERADO a cobrar (cuotas que vencen), no lo
-        // recolectado: es exactamente "lo pendiente por recolectar".
-        if (s.dashProyeccionVisible) ...[
-          const _ProyeccionCobrosCard(),
-          const SizedBox(height: 24),
-        ],
-        if (s.dashTopCobradoresVisible && !esAdminCobranza)
-          LayoutBuilder(
-            builder: (context, c) {
-              if (c.maxWidth >= 700) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: Row(
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: _TopCobradoresCard(
-                          titulo: 'Top cobradores (hoy)',
-                          provider: topCobradoresHoyProvider,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _TopCobradoresCard(
-                          titulo: 'Top cobradores (período)',
-                          provider: topCobradoresProvider,
-                        ),
+                      Text('Resumen',
+                          style: Theme.of(context).textTheme.headlineMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${Fmt.diaSemana(now)}, ${Fmt.fechaLarga(now)}',
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.outline),
                       ),
                     ],
                   ),
-                );
-              }
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _TopCobradoresCard(
-                      titulo: 'Top cobradores (hoy)',
-                      provider: topCobradoresHoyProvider,
-                    ),
-                    const SizedBox(height: 16),
-                    _TopCobradoresCard(
-                      titulo: 'Top cobradores (período)',
-                      provider: topCobradoresProvider,
-                    ),
-                  ],
                 ),
-              );
-            },
-          ),
-        if (s.dashRecuperacionVisible) ...[
-          const _RecuperacionCard(),
-          const SizedBox(height: 24),
-        ],
-        if (s.dashSparklineVisible && !esAdminCobranza) ...[
-          const _Sparkline7d(),
-          const SizedBox(height: 24),
-        ],
-        if (s.dashOperativoVisible) ...[
-          const _OperativoKPIs(),
-          const SizedBox(height: 24),
-        ],
-        if (s.dashDistribucionVisible) ...[
-          const _DistribucionCuotasCard(),
-        ],
-      ],
-    );
-  }
-}
-
-/// Encabezado con título + (i) para las filas de KPIs que no viven en un Card
-/// con título propio (Cobros del período, Estado actual).
-class _TituloConInfo extends StatelessWidget {
-  const _TituloConInfo(this.titulo, this.info, {this.icon});
-  final String titulo;
-  final InfoGrafica info;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        if (icon != null) ...[
-          Icon(icon, size: 18, color: scheme.primary),
-          const SizedBox(width: 8),
-        ],
-        Expanded(
-          child: Text(titulo, style: Theme.of(context).textTheme.titleMedium),
-        ),
-        InfoGraficaBoton(info),
-      ],
-    );
-  }
-}
-
-class _CobrosKPIs extends ConsumerWidget {
-  const _CobrosKPIs();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(cobrosKpisProvider);
-    // El KPI grande acumula el PERÍODO (corte del 15), no el mes calendario.
-    //
-    // NO tiene por qué dar igual que el "Recuperado" de la gráfica de arriba,
-    // aunque compartan ventana: este suma por `pagos.fecha_pago` (plata que
-    // entró a caja en el período — invariante #4, caja bruta) y la gráfica
-    // suma pagos filtrados por `cuotas.fecha_vencimiento` (cuánto se recuperó
-    // de lo facturado en el período). Ejes distintos, los dos correctos.
-    final v = ventanaPeriodoActual();
-    final desdePeriodo =
-        '${v.inicio.day} ${mesCortoPeriodo(v.inicio.month)}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _TituloConInfo('Cobros del período', kInfoCobrosKpis,
-            icon: Icons.payments),
-        const SizedBox(height: 8),
-        async.when(
-          data: (k) => _Kpis(items: [
-            _KpiData(
-                'Hoy', Fmt.cordobas(k.hoy), '${k.qtyHoy} cobros', Icons.today),
-            _KpiData('Esta semana', Fmt.cordobas(k.semana),
-                '${k.qtySemana} cobros · desde el domingo',
-                Icons.calendar_view_week),
-            _KpiData('Este período', Fmt.cordobas(k.periodo),
-                '${k.qtyPeriodo} cobros · desde $desdePeriodo',
-                Icons.calendar_month,
-                primary: true),
-          ]),
-          loading: () => const SizedBox(
-              height: 100, child: Center(child: CircularProgressIndicator())),
-          // M13: antes el error desaparecía el KPI en silencio (parecía "en 0").
-          error: (_, __) => Text('No se pudo calcular',
-              style: TextStyle(
-                  fontSize: 12, color: Theme.of(context).colorScheme.error)),
-        ),
-        const SizedBox(height: 8),
-        const _DesgloseCajaCard(),
-      ],
-    );
-  }
-}
-
-/// "¿De qué cuotas era esta plata?" — descompone la caja del período según el
-/// vencimiento de la cuota que pagó cada peso.
-///
-/// Es la tarjeta que responde el reclamo del dueño (2026-08-08): la caja del
-/// período y el "Cobrado" de la gráfica NO tienen por qué coincidir, porque la
-/// caja incluye atrasos de ciclos anteriores y adelantos, y en cambio deja
-/// afuera lo que se cobró por adelantado ANTES de que el ciclo arrancara.
-/// Los renglones CON PORCENTAJE suman exactamente el KPI de arriba, a
-/// propósito: el dueño tiene que poder auditarlo con la calculadora. La
-/// sub-línea de mora vieja va SIN % porque está contenida en "Atrasos", y
-/// "Sin cuota asociada" es defensiva (`pagos.cuota_id` es NOT NULL con FK, así
-/// que en régimen no se dibuja nunca).
-class _DesgloseCajaCard extends ConsumerWidget {
-  const _DesgloseCajaCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final diasGracia =
-        ref.watch(appSettingsProvider.select((s) => s.diasGracia));
-    final async = ref.watch(desgloseCajaProvider(diasGracia));
-    final scheme = Theme.of(context).colorScheme;
-
-    return async.maybeWhen(
-      data: (d) {
-        if (d.total <= 0) return const SizedBox.shrink();
-        double pct(num v) => d.total == 0 ? 0 : (v / d.total) * 100;
-
-        Widget linea(String label, num monto,
-            {bool conPct = true, bool sub = false}) {
-          final estilo = TextStyle(
-              fontSize: sub ? 11 : 12,
-              color: sub ? scheme.outline : scheme.onSurface);
-          return Padding(
-            padding: EdgeInsets.only(left: sub ? 16 : 0, top: 3, bottom: 3),
-            child: Row(
-              children: [
-                if (sub)
-                  Icon(Icons.subdirectory_arrow_right,
-                      size: 12, color: scheme.outline),
-                if (sub) const SizedBox(width: 4),
-                Expanded(
-                    child: Text(label,
-                        style: estilo, overflow: TextOverflow.ellipsis)),
-                const SizedBox(width: 8),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Text(Fmt.cordobas(monto), style: estilo),
-                ),
-                SizedBox(
-                  width: 40,
-                  child: Text(conPct ? '${pct(monto).round()}%' : '',
-                      style: TextStyle(fontSize: 11, color: scheme.outline),
-                      textAlign: TextAlign.right),
-                ),
+                _BotonActualizarResumen(onActualizar: _refrescar),
               ],
             ),
-          );
-        }
-
-        return Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('¿De qué cuotas era esta plata?',
-                    style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 2),
-                // NO prometer un CONTEO de renglones: la sub-línea de mora
-                // vieja está DENTRO de "Atrasos" y sumarla da +33% (justo el
-                // error que originó el reclamo). El discriminador es la columna
-                // de %, que la sub-línea deja en blanco a propósito.
-                Text('por fecha de pago · los renglones con % suman el total',
-                    style: TextStyle(fontSize: 11, color: scheme.outline)),
-                const SizedBox(height: 10),
-                linea('De este ciclo', d.delCiclo),
-                linea('Atrasos de ciclos anteriores', d.atrasos),
-                if (d.moraVieja > 0.009)
-                  linea('incluido en Atrasos — mora vieja recuperada',
-                      d.moraVieja,
-                      conPct: false, sub: true),
-                linea('Adelantos a cuotas futuras', d.adelantos),
-                if (d.sinCuota > 0.009) linea('Sin cuota asociada', d.sinCuota),
-                Divider(height: 18, color: scheme.outlineVariant),
-                Row(
-                  children: [
-                    const Expanded(
-                        child: Text('Total que entró',
-                            style: TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w500))),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(Fmt.cordobas(d.total),
-                          style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w500)),
-                    ),
-                    const SizedBox(width: 40),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-      orElse: () => const SizedBox.shrink(),
+            const SizedBox(height: 24),
+            // El rol admin_cobranza NO ve montos recolectados, pero SÍ gestiona
+            // mora y recuperación de cartera. Antes se le ocultaban estas tarjetas
+            // ENTERAS para cumplir lo primero, y el resultado era que entraba al
+            // Resumen y no veía nada — ni la mora, que es su trabajo. Ahora las ve
+            // con el recorte ADENTRO: lo facturado y lo que falta, sin lo cobrado
+            // ni la curva de cobrado acumulado.
+            // La tarjeta de 4 líneas (recaudo vs meta, mora vs límite) es 100%
+            // montos: el rol que no ve montos recolectados no la monta.
+            // ── EL ORDEN Y EL ENCENDIDO LOS DECIDE EL AJUSTE, NO ESTE ARCHIVO ──
+            //
+            // Hasta el 2026-08-29 la lista estaba escrita aca y cada tarjeta tenia
+            // su propio `dashboard.*_visible`. Ahora vive en `dashboard.tarjetas`
+            // (migracion 0263), que guarda ORDEN y encendido juntos y se edita en
+            // Ajustes > Avanzado > Tarjetas del Resumen, por empresa.
+            //
+            // Este archivo aporta el MAPA id -> widget. Si un id del ajuste no esta
+            // en el mapa se ignora; si una tarjeta del mapa no esta en el ajuste,
+            // `leerOrdenTarjetas` la agrega al final encendida. Asi una tarjeta
+            // nueva nunca nace invisible en un tenant con ajuste viejo.
+            //
+            // El GATE DE ROL manda sobre el ajuste: `admin_cobranza` no ve montos
+            // cobrados, asi que encender "Caja del ciclo" para su empresa igual no
+            // se la muestra a el.
+            ..._tarjetasOrdenadas(s, esAdminCobranza),
+          ],
+        ),
+      ),
     );
   }
+
+  /// Arma las tarjetas en el orden del ajuste, con su separacion.
+  List<Widget> _tarjetasOrdenadas(AppSettings s, bool esAdminCobranza) {
+    // El mapa id -> widget. Una tarjeta que no este aca simplemente no se
+    // dibuja aunque el ajuste la nombre.
+    Widget? construir(String id) {
+      switch (id) {
+        case 'caja':
+          return esAdminCobranza ? null : const CajaCicloCard();
+        case 'cobertura':
+          return TendenciaCobrosCard(ocultarRecaudado: esAdminCobranza);
+        case 'mora_ciclo':
+          return MoraCiclosCard(ocultarRecaudado: esAdminCobranza);
+        case 'proyeccion':
+          return const ProyeccionCobrosCard();
+        case 'mora_zona':
+          return const MoraZonaCard();
+        case 'quien_cobro':
+          return esAdminCobranza ? null : const QuienCobroCard();
+        // ── Las que quedaron fuera del Resumen de 2026-08-27 ──
+        // Se conservan enteras: apagadas por defecto, pero prendibles desde el
+        // ajuste sin tocar codigo.
+        case 'recaudo_mora':
+          return esAdminCobranza ? null : const RecaudoMoraCard();
+        case 'consultar_periodo':
+          return esAdminCobranza ? null : const _ConsultarPeriodoCard();
+        case 'sparkline':
+          return esAdminCobranza ? null : const _Sparkline7d();
+        case 'operativo':
+          return const EstadoActualCard();
+        case 'distribucion':
+          return const DistribucionCuotasCard();
+      }
+      return null;
+    }
+
+    final out = <Widget>[];
+    for (final f in leerOrdenTarjetas(s.dashTarjetasOrden)) {
+      if (!f.encendida) continue;
+      final w = construir(f.id);
+      if (w == null) continue;
+      // Separacion UNIFORME. Habia 16 y 24 mezclados, y un 16+16 seguido que
+      // abria un hueco de 32 sin motivo; despues quedo en 16 para todas y el
+      // 2026-09-01 subio a 28 (ver `_aireEntreTarjetas`).
+      if (out.isNotEmpty) {
+        out.add(const SizedBox(height: _aireEntreTarjetas));
+      }
+      out.add(w);
+    }
+    return out;
+  }
 }
+
+// `_TituloConInfo` se fue con `_OperativoKPIs` (2026-09-01): era el encabezado
+// de las filas de KPIs que NO vivían en un Card con título propio, y ya no
+// queda ninguna — todas las tarjetas del Resumen son Cards autocontenidas.
+
+// `_CobrosKPIs` y `_DesgloseCajaCard` se mudaron a `caja_ciclo_card.dart`
+// (2026-08-28): la tarjeta pasa a tener retroceso propio por bloque y, como
+// el resto del Resumen, vive en su propio archivo sin compartir nada.
 
 class _ConsultarPeriodoCard extends ConsumerStatefulWidget {
   const _ConsultarPeriodoCard();
@@ -844,13 +752,13 @@ class _Sparkline7dState extends State<_Sparkline7d> {
   @override
   void initState() {
     super.initState();
-    _stream = ps.db.watch('''
-      SELECT date(fecha_pago) AS dia,
+    _stream = watchResumen('''
+      SELECT fecha_cobro AS dia,
              COALESCE(SUM(monto_cordobas), 0) AS total
         FROM pagos
        WHERE COALESCE(anulado, 0) = 0 AND COALESCE(en_revision, 0) = 0
-         AND date(fecha_pago) >= date('now', '-6 hours', '-6 days')
-       GROUP BY date(fecha_pago)
+         AND fecha_cobro >= date('now', '-6 hours', '-6 days')
+       GROUP BY fecha_cobro
        ORDER BY dia
     ''');
   }
@@ -981,781 +889,48 @@ class _SparklinePainter extends CustomPainter {
       old.values != values || old.color != color;
 }
 
-class _OperativoKPIs extends ConsumerWidget {
-  const _OperativoKPIs();
+class _BotonActualizarResumen extends ConsumerWidget {
+  const _BotonActualizarResumen({required this.onActualizar});
+  final VoidCallback onActualizar;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(operativoKpisProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _TituloConInfo('Estado actual', kInfoOperativo,
-            icon: Icons.donut_large),
-        const SizedBox(height: 8),
-        async.when(
-          data: (k) => _Kpis(items: [
-            _KpiData('Clientes activos', '${k.clientes}', null, Icons.people),
-            _KpiData('Cuotas por cobrar', '${k.cuotasPend}',
-                Fmt.cordobas(k.saldo), Icons.pending),
-            _KpiData(
-              'En mora',
-              '${k.vencidas}',
-              Fmt.cordobas(k.saldoVencido),
-              Icons.warning,
-              error: true,
-            ),
-            // Deuda de contratos suspendidos: fuera del titular "por cobrar" (no
-            // está en rutas) pero visible porque sigue contando en contabilidad.
-            if (k.cuotasSuspendidas > 0)
-              _KpiData(
-                'Suspendido (por reactivar)',
-                '${k.cuotasSuspendidas}',
-                Fmt.cordobas(k.saldoSuspendido),
-                Icons.pause_circle_outline,
-              ),
-          ]),
-          loading: () => const SizedBox.shrink(),
-          // M13: antes el error desaparecía el KPI en silencio (parecía "en 0").
-          error: (_, __) => Text('No se pudo calcular',
-              style: TextStyle(
-                  fontSize: 12, color: Theme.of(context).colorScheme.error)),
+    final ultima = ref.watch(dashboardUltimaActualizacionProvider);
+    final horaStr = Fmt.hora(ultima);
+    return Tooltip(
+      message: 'Actualizar datos del Resumen (última: $horaStr)',
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         ),
-      ],
-    );
-  }
-}
-
-class _Kpis extends StatelessWidget {
-  const _Kpis({required this.items});
-  final List<_KpiData> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      final cols = c.maxWidth >= 900 ? 3 : c.maxWidth >= 500 ? 2 : 1;
-      return GridView.count(
-        crossAxisCount: cols,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 16,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        // Mobile (1 col): ratio 2.3 — el contenido del card (icon+label
-        // row + headlineMedium value + sub-label + 3 spacings + padding
-        // 20×2) necesita ~132px de alto. Con viewport 375px y padding
-        // del padre (~32px), el ancho del card es ~343px → ratio 2.3
-        // da ~149px de alto, holgado. Probado: 4.0 → "BOTTOM OVERFLOWED
-        // BY 18 PIXELS", 3.0 → "BY 23 PIXELS", 2.3 → entra OK.
-        // 2 / 3 columnas (tablet/desktop) mantienen 2.2 — el ancho del
-        // card es menor pero el contenido entra holgado.
-        childAspectRatio: cols == 1 ? 2.3 : 2.2,
-        children: items.map((k) => _KpiCard(data: k)).toList(),
-      );
-    });
-  }
-}
-
-class _KpiData {
-  const _KpiData(this.label, this.value, this.sub, this.icon,
-      {this.primary = false, this.error = false});
-  final String label;
-  final String value;
-  final String? sub;
-  final IconData icon;
-  final bool primary;
-  final bool error;
-}
-
-class _KpiCard extends StatelessWidget {
-  const _KpiCard({required this.data});
-  final _KpiData data;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final color = data.error
-        ? scheme.error
-        : (data.primary ? scheme.primary : scheme.outline);
-    return Card(
-      color:
-          data.primary ? scheme.primaryContainer.withValues(alpha: 0.4) : null,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(data.icon, size: 20, color: color),
-                const SizedBox(width: 8),
-                Text(data.label,
-                    style: TextStyle(color: scheme.onSurfaceVariant)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(data.value,
-                style: Theme.of(context).textTheme.headlineMedium),
-            if (data.sub != null) ...[
-              const SizedBox(height: 4),
-              Text(data.sub!,
-                  style: TextStyle(color: scheme.onSurfaceVariant)),
-            ],
-          ],
+        onPressed: onActualizar,
+        icon: const Icon(Icons.refresh, size: 18),
+        label: Text(
+          'Actualizar · $horaStr',
+          style: const TextStyle(fontSize: 12),
         ),
       ),
     );
   }
 }
 
-class _TopCobradoresCard extends ConsumerWidget {
-  const _TopCobradoresCard({
-    required this.titulo,
-    required this.provider,
-  });
-  final String titulo;
-  final StreamProvider<List<TopCobrador>> provider;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(provider);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(titulo,
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-                const InfoGraficaBoton(kInfoTopCobradores),
-              ],
-            ),
-            const SizedBox(height: 16),
-            async.when(
-              data: (rows) {
-                if (rows.isEmpty) {
-                  return Text('Sin cobradores activos',
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.outline));
-                }
-                final maxTotal = rows
-                    .map((r) => r.total.toDouble())
-                    .reduce((a, b) => a > b ? a : b);
-                return Column(
-                  children: rows.map((r) {
-                    final total = r.total.toDouble();
-                    final pct = maxTotal > 0 ? total / maxTotal : 0.0;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(child: Text(r.nombre)),
-                              Text(Fmt.cordobas(total),
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: pct,
-                              minHeight: 6,
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              // M13: antes el error dejaba el card vacío en silencio.
-              error: (_, __) => Text('No se pudo calcular',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.error)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DistribucionCuotasCard extends ConsumerWidget {
-  const _DistribucionCuotasCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(distribucionCuotasProvider);
-    final pagoParcialOn = ref.watch(pagoParcialHabilitadoProvider);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text('Distribución de cuotas',
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-                const InfoGraficaBoton(kInfoDistribucion),
-              ],
-            ),
-            const SizedBox(height: 16),
-            async.when(
-              data: (k) {
-                final scheme = Theme.of(context).colorScheme;
-                // Eje vigencia: distribución disjunta que suma al total.
-                // 'Con pago parcial' es un overlay transversal (cruza los de
-                // arriba); se muestra solo si la feature está ON o ya hay
-                // parciales (si no, siempre sería 0 → solo haría ruido).
-                final mostrarParcial = pagoParcialOn || k.parcial > 0;
-                return Column(
-                  children: [
-                    _row('Al día', '${k.alDia}', scheme.primary, Icons.event),
-                    _row('En gracia', '${k.enGracia}', Colors.amber.shade700,
-                        Icons.schedule),
-                    _row('Vencidas', '${k.vencida}', scheme.error,
-                        Icons.warning),
-                    _row('Pagadas', '${k.pagada}', scheme.outline, Icons.check),
-                    if (mostrarParcial) ...[
-                      const Divider(height: 20),
-                      _row('Con pago parcial', '${k.parcial}',
-                          Colors.teal.shade700, Icons.hourglass_bottom),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 26, bottom: 4),
-                        child: Text('incluidas en los buckets de arriba',
-                            style: TextStyle(
-                                fontSize: 11, color: scheme.outline)),
-                      ),
-                    ],
-                  ],
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              // M13: antes el error dejaba el card vacío en silencio.
-              error: (_, __) => Text('No se pudo calcular',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.error)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _row(String label, String value, Color color, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(child: Text(label)),
-          Text(value,
-              style: TextStyle(fontWeight: FontWeight.w600, color: color)),
-        ],
-      ),
-    );
-  }
-}
+// `_OperativoKPIs` (+ `_Kpis`, `_KpiData`, `_KpiCard`) se mudaron a
+// `estado_actual_card.dart`, y `_DistribucionCuotasCard` a
+// `distribucion_cuotas_card.dart` (2026-09-02).
+//
+// Las dos habian quedado FUSIONADAS el 2026-09-01 con el argumento de que
+// contaban la misma particion —"Cuotas por cobrar" es exactamente al dia + en
+// gracia + vencidas, y "En mora" salia repetido en las dos—. El argumento
+// sigue siendo cierto; el dueño lo escucho con sus propios numeros y pidio las
+// dos igual, separadas y en el estilo de produccion (ver ARQUITECTURA,
+// §Dashboard admin, "Las cuatro tarjetas que volvieron"). Cada una en su
+// archivo, como el resto: la pantalla solo las instancia.
 
 /// Proyección de cobros por cobrador (sección nueva). Por defecto muestra lo que
 /// cada cobrador asignado debería cobrar HOY; el toggle suma las cuotas que
 /// vencen dentro de los próximos `dias_cuotas_visibles` días.
-class _ProyeccionCobrosCard extends ConsumerStatefulWidget {
-  const _ProyeccionCobrosCard();
-  @override
-  ConsumerState<_ProyeccionCobrosCard> createState() =>
-      _ProyeccionCobrosCardState();
-}
-
-class _ProyeccionCobrosCardState extends ConsumerState<_ProyeccionCobrosCard> {
-  bool _incluirProximas = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final async = ref.watch(proyeccionCobrosProvider);
-    final diasProx =
-        ref.watch(appSettingsProvider.select((s) => s.diasCuotasVisibles));
-    num montoDe(ProyeccionCobrador p) =>
-        _incluirProximas ? p.montoHoy + p.montoProximas : p.montoHoy;
-    int cuotasDe(ProyeccionCobrador p) =>
-        _incluirProximas ? p.cuotasHoy + p.cuotasProximas : p.cuotasHoy;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.event_available, size: 18, color: scheme.primary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Proyección de cobros por cobrador',
-                      style: Theme.of(context).textTheme.titleMedium),
-                ),
-                const InfoGraficaBoton(kInfoProyeccion),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _incluirProximas
-                  ? 'Esperado a cobrar: vence hoy + próximos $diasProx días'
-                  : 'Esperado a cobrar: cuotas que vencen hoy',
-              style: TextStyle(fontSize: 12, color: scheme.outline),
-            ),
-            Row(
-              children: [
-                Switch(
-                  value: _incluirProximas,
-                  onChanged: (v) => setState(() => _incluirProximas = v),
-                ),
-                Expanded(
-                  child: Text('Incluir cuotas próximas ($diasProx días)',
-                      style: const TextStyle(fontSize: 13)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            async.when(
-              data: (rows) {
-                final visibles = rows.where((p) => cuotasDe(p) > 0).toList()
-                  ..sort((a, b) => montoDe(b).compareTo(montoDe(a)));
-                if (visibles.isEmpty) {
-                  return Text(
-                    _incluirProximas
-                        ? 'Nada por cobrar en el rango'
-                        : 'Nada vence hoy',
-                    style: TextStyle(color: scheme.outline),
-                  );
-                }
-                final maxMonto = visibles
-                    .map((p) => montoDe(p).toDouble())
-                    .reduce((a, b) => a > b ? a : b);
-                final total = visibles.fold<num>(0, (a, p) => a + montoDe(p));
-                return Column(
-                  children: [
-                    ...visibles.map((p) {
-                      final m = montoDe(p).toDouble();
-                      final pct = maxMonto > 0 ? m / maxMonto : 0.0;
-                      final esSin = p.cobradorId == null;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    esSin ? 'Sin cobrador asignado' : p.nombre,
-                                    style: TextStyle(
-                                        color: esSin ? scheme.outline : null),
-                                  ),
-                                ),
-                                Text('${cuotasDe(p)} cuotas',
-                                    style: TextStyle(
-                                        fontSize: 12, color: scheme.outline)),
-                                const SizedBox(width: 8),
-                                Text(Fmt.cordobas(montoDe(p)),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600)),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: pct,
-                                minHeight: 6,
-                                backgroundColor: scheme.surfaceContainerHighest,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                    const Divider(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text('Total esperado',
-                              style: TextStyle(color: scheme.onSurfaceVariant)),
-                        ),
-                        Text(Fmt.cordobas(total),
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ],
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => Text('No se pudo calcular',
-                  style: TextStyle(fontSize: 12, color: scheme.error)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Recuperación por cobrador y comunidad: mora a recuperar (vencido pasada la
-/// gracia), agrupada por cobrador asignado y comunidad. Colapsable para no
-/// empujar las secciones de abajo fuera de vista.
-class _RecuperacionCard extends ConsumerStatefulWidget {
-  const _RecuperacionCard();
-  @override
-  ConsumerState<_RecuperacionCard> createState() => _RecuperacionCardState();
-}
-
-class _RecuperacionCardState extends ConsumerState<_RecuperacionCard> {
-  bool _expandido = false;
-  // Default = mora ACUMULADA (todo lo vencido, sin límite de fecha).
-  //
-  // OJO — no invertir este default: "vencidas del período" cruza dos
-  // condiciones que casi no se solapan (vencer DENTRO del período en curso Y
-  // haber pasado ya los días de gracia). Como el período arranca el 15, sus
-  // cuotas todavía no tuvieron tiempo de entrar en mora: durante los primeros
-  // ~15+gracia días da CERO, y después una fracción mínima. Medido contra
-  // producción el 2026-07-26: C$89.315 de C$10.302.698 reales (0,87%).
-  // La vista por período sirve para "cuánta mora generó este ciclo", no para
-  // salir a cobrar — por eso es la secundaria.
-  bool _soloPeriodo = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final async = ref.watch(recuperacionPorComunidadProvider(_soloPeriodo));
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _expandido = !_expandido),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Icon(Icons.location_on, size: 18, color: scheme.error),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Recuperación por cobrador y comunidad',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 2),
-                        Text(
-                            _soloPeriodo
-                                ? 'Vencidas del período ${periodoLabelActual()} '
-                                    '(las de ciclos anteriores no se cuentan)'
-                                : 'Toda la mora acumulada (vencido pasada la gracia)',
-                            style:
-                                TextStyle(fontSize: 12, color: scheme.outline)),
-                      ],
-                    ),
-                  ),
-                  const InfoGraficaBoton(kInfoRecuperacion),
-                  const SizedBox(width: 8),
-                  async.when(
-                    data: (rows) {
-                      if (rows.isEmpty) return const SizedBox.shrink();
-                      final total =
-                          rows.fold<num>(0, (a, f) => a + f.porRecuperar);
-                      return Text(Fmt.cordobas(total),
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                              color: scheme.error));
-                    },
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                  ),
-                  const SizedBox(width: 4),
-                  AnimatedRotation(
-                    turns: _expandido ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child:
-                        Icon(Icons.expand_more, size: 24, color: scheme.outline),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            child: Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('Toda la mora'),
-                  selected: !_soloPeriodo,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (v) {
-                    if (v) setState(() => _soloPeriodo = false);
-                  },
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Vencidas del período'),
-                  selected: _soloPeriodo,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (v) {
-                    if (v) setState(() => _soloPeriodo = true);
-                  },
-                ),
-              ],
-            ),
-          ),
-          AnimatedCrossFade(
-            firstChild: const SizedBox(width: double.infinity),
-            secondChild: async.when(
-              data: (rows) {
-                if (rows.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                    child: Text(
-                        _soloPeriodo
-                            ? 'Sin mora en este período'
-                            : 'Sin mora para recuperar',
-                        style: TextStyle(color: scheme.outline)),
-                  );
-                }
-                final byCobrador = <String, List<RecuperacionFila>>{};
-                final nombres = <String, String>{};
-                final totales = <String, num>{};
-                final cuotasTot = <String, int>{};
-                for (final f in rows) {
-                  final k = f.cobradorId ?? '__sin__';
-                  byCobrador.putIfAbsent(k, () => []).add(f);
-                  nombres[k] =
-                      f.cobradorId == null ? 'Sin cobrador' : f.cobrador;
-                  totales[k] = (totales[k] ?? 0) + f.porRecuperar;
-                  cuotasTot[k] = (cuotasTot[k] ?? 0) + f.cuotas;
-                }
-                final orden = byCobrador.keys.toList()
-                  ..sort((a, b) => totales[b]!.compareTo(totales[a]!));
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: Column(
-                    children: [
-                      for (var gi = 0; gi < orden.length; gi++) ...[
-                        if (gi > 0) const Divider(height: 20),
-                        Builder(builder: (_) {
-                          final k = orden[gi];
-                          final filas = byCobrador[k]!
-                            ..sort((a, b) =>
-                                b.porRecuperar.compareTo(a.porRecuperar));
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(nombres[k]!,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600)),
-                                  ),
-                                  Text(
-                                      '${Fmt.cordobas(totales[k]!)} · ${cuotasTot[k]} cuotas',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: scheme.error)),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              ...filas.map((f) => _ComunidadRow(
-                                    fila: f,
-                                    soloPeriodo: _soloPeriodo,
-                                  )),
-                            ],
-                          );
-                        }),
-                      ],
-                    ],
-                  ),
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Text('No se pudo calcular',
-                    style: TextStyle(fontSize: 12, color: scheme.error)),
-              ),
-            ),
-            crossFadeState: _expandido
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 200),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Una fila de comunidad dentro de la card de recuperación. Toca para desplegar
-/// el desglose por monto (cuántas cuotas de cada saldo), cuya suma cierra contra
-/// el total de la fila. Colapsada por default: no se pide el desglose hasta que
-/// alguien la abre (el provider es autoDispose → se descarta al colapsar).
-class _ComunidadRow extends ConsumerStatefulWidget {
-  const _ComunidadRow({required this.fila, required this.soloPeriodo});
-  final RecuperacionFila fila;
-  final bool soloPeriodo;
-
-  @override
-  ConsumerState<_ComunidadRow> createState() => _ComunidadRowState();
-}
-
-class _ComunidadRowState extends ConsumerState<_ComunidadRow> {
-  bool _abierto = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final f = widget.fila;
-    final nombre = f.comunidadId == null ? 'Sin comunidad' : f.comunidad;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InkWell(
-          onTap: () => setState(() => _abierto = !_abierto),
-          child: Padding(
-            padding: const EdgeInsets.only(left: 6, top: 3, bottom: 3),
-            child: Row(
-              children: [
-                Icon(_abierto ? Icons.expand_more : Icons.chevron_right,
-                    size: 18, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: Text(nombre,
-                      style: TextStyle(
-                          fontSize: 13, color: scheme.onSurfaceVariant)),
-                ),
-                Text('${Fmt.cordobas(f.porRecuperar)} · ${f.cuotas}',
-                    style:
-                        TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-        ),
-        if (_abierto) _Desglose(fila: f, soloPeriodo: widget.soloPeriodo),
-      ],
-    );
-  }
-}
-
-/// El desglose por monto de una comunidad + la línea de verificación (suma y
-/// conteo del desglose contra el total de la fila).
-class _Desglose extends ConsumerWidget {
-  const _Desglose({required this.fila, required this.soloPeriodo});
-  final RecuperacionFila fila;
-  final bool soloPeriodo;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final async = ref.watch(recuperacionDesgloseProvider(RecuperacionDetalleKey(
-      cobradorId: fila.cobradorId,
-      comunidadId: fila.comunidadId,
-      soloPeriodo: soloPeriodo,
-    )));
-    return Container(
-      margin: const EdgeInsets.only(left: 22, top: 2, bottom: 6),
-      padding: const EdgeInsets.only(left: 12),
-      decoration: BoxDecoration(
-        border: Border(
-            left: BorderSide(color: scheme.outlineVariant, width: 2)),
-      ),
-      child: async.when(
-        loading: () => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Text('Cargando…',
-              style: TextStyle(fontSize: 12, color: scheme.outline)),
-        ),
-        error: (_, __) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Text('No se pudo desglosar',
-              style: TextStyle(fontSize: 12, color: scheme.error)),
-        ),
-        data: (lineas) {
-          final sumaMonto =
-              lineas.fold<num>(0, (a, l) => a + l.subtotal);
-          final sumaCuotas = lineas.fold<int>(0, (a, l) => a + l.cuotas);
-          // Cuadra si la suma del desglose == el total de la fila (tolerancia
-          // 1 centavo, igual que los invariantes). Si NO, se avisa en rojo: es
-          // una señal de bug, no algo para esconder.
-          final cuadra = (sumaMonto - fila.porRecuperar).abs() < 0.01 &&
-              sumaCuotas == fila.cuotas;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final l in lineas)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                            '${Fmt.cordobas(l.monto)} × ${l.cuotas} '
-                            '${l.cuotas == 1 ? 'cuota' : 'cuotas'}',
-                            style: TextStyle(
-                                fontSize: 12, color: scheme.onSurfaceVariant)),
-                      ),
-                      Text(Fmt.cordobas(l.subtotal),
-                          style: TextStyle(
-                              fontSize: 12, color: scheme.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Row(
-                  children: [
-                    Icon(cuadra ? Icons.check_circle_outline : Icons.error_outline,
-                        size: 14,
-                        color: cuadra
-                            ? scheme.primary
-                            : scheme.error),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        cuadra
-                            ? 'Coincide: $sumaCuotas cuotas · ${Fmt.cordobas(sumaMonto)}'
-                            : 'No cuadra: desglose $sumaCuotas/${Fmt.cordobas(sumaMonto)} '
-                                'vs fila ${fila.cuotas}/${Fmt.cordobas(fila.porRecuperar)}',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: cuadra ? scheme.primary : scheme.error),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
+// Aca vivian `_ComunidadRow` y `_Desglose`, el detalle de la tarjeta vieja de
+// Recuperacion. Se fueron con ella el 2026-08-28: la reemplazo
+// `DeudaZonaCard`, que trae su propio desglose por comunidad.

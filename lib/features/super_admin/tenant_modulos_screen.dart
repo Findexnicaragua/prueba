@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/models/modulo.dart';
@@ -391,19 +390,21 @@ class _EntrarTenantButtonState extends ConsumerState<_EntrarTenantButton> {
   Future<void> _entrar() async {
     setState(() => _busy = true);
     try {
-      await ImpersonationService(Supabase.instance.client).enter(
-        tenantId: widget.tenantId,
-        tenantNombre: widget.tenantNombre,
-      );
-      if (!mounted) return;
-      // Re-armar el sync gate: no mostrar data del tenant anterior hasta que
-      // PowerSync baje la del tenant nuevo (#9 / S2).
+      // Re-armar el sync gate ANTES de reconectar: no mostrar data del tenant
+      // anterior hasta que PowerSync termine de bajar la del tenant nuevo (#9 / S2).
       ref.read(authIdentityProvider.notifier).onImpersonationChanged();
       // Estado optimista: impersonando=true YA (sin esperar la fila local).
       ref.read(pendingImpersonacionProvider.notifier).state =
           PendingImpersonacion.entrando(widget.tenantId);
-      context.go('/admin');
+
+      await ImpersonationService(Supabase.instance.client).enter(
+        tenantId: widget.tenantId,
+        tenantNombre: widget.tenantNombre,
+      );
+      // El router redirige a /sync-gate y luego a /admin cuando termina el sync.
     } catch (e) {
+      ref.read(authIdentityProvider.notifier).onImpersonationFailed();
+      ref.read(pendingImpersonacionProvider.notifier).state = null;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al entrar al tenant: $e')),

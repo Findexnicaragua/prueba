@@ -29,6 +29,9 @@ Future<String?> descargarExcel({
   String? empresaNombre,
   String? titulo,
   String? periodo,
+  List<SeccionExcel>? secciones,
+  List<HojaExcel> hojasExtra = const [],
+  List<Object?>? total,
 }) async {
   final bytes = construirExcelBytes(
     hojaNombre: hojaNombre,
@@ -37,12 +40,41 @@ Future<String?> descargarExcel({
     empresaNombre: empresaNombre,
     titulo: titulo,
     periodo: periodo,
+    secciones: secciones,
+    hojasExtra: hojasExtra,
+    total: total,
   );
   return guardarArchivo(fileName: fileName, bytes: bytes, extension: 'xlsx');
 }
 
 /// Arma los bytes del .xlsx (separado de la descarga para poder testearlo
 /// sin diálogo de guardado).
+/// Un bloque de filas con su propio encabezado y subtotal dentro de una hoja.
+/// Lo usa el export del dashboard para separar los 6 ciclos: sin corte, 29
+/// filas seguidas no dejan ver donde termina un mes y empieza el otro.
+class SeccionExcel {
+  const SeccionExcel({required this.titulo, required this.filas, this.subtotal});
+
+  final String titulo;
+  final List<List<Object?>> filas;
+
+  /// Fila de cierre del bloque. Null = sin subtotal.
+  final List<Object?>? subtotal;
+}
+
+/// Una hoja adicional del libro. El export del dashboard la usa para las
+/// cuotas ANULADAS: no entran en ningun numero de la tarjeta, pero esconderlas
+/// del archivo deja sin explicar por que la ventana tiene mas cuotas que las
+/// que la pantalla cuenta.
+class HojaExcel {
+  const HojaExcel(
+      {required this.nombre, required this.headers, required this.filas});
+
+  final String nombre;
+  final List<String> headers;
+  final List<List<Object?>> filas;
+}
+
 List<int> construirExcelBytes({
   required String hojaNombre,
   required List<String> headers,
@@ -50,6 +82,12 @@ List<int> construirExcelBytes({
   String? empresaNombre,
   String? titulo,
   String? periodo,
+  /// Si viene, reemplaza a [filas]: cada seccion se pinta con su encabezado,
+  /// sus filas y su subtotal, separadas por una fila en blanco.
+  List<SeccionExcel>? secciones,
+  List<HojaExcel> hojasExtra = const [],
+  /// Fila de cierre de toda la tabla (el gran total).
+  List<Object?>? total,
 }) {
   final excel = Excel.createExcel();
   // createExcel arranca con una hoja default ('Sheet1'); la renombramos a algo
@@ -120,33 +158,114 @@ List<int> construirExcelBytes({
     cell.cellStyle = headerStyle;
   }
 
-  // Filas de datos: aplicamos formato numérico a las celdas num según su tipo.
-  for (var r = 0; r < filas.length; r++) {
-    final fila = filas[r];
-    final rowIndex = filaHeaders + 1 + r;
+  final seccionStyle = CellStyle(
+      bold: true,
+      fontColorHex: ExcelColor.blueGrey800,
+      backgroundColorHex: ExcelColor.blueGrey100);
+  final totalStyle = CellStyle(bold: true, backgroundColorHex: ExcelColor.green50);
+  final totalNumStyle = CellStyle(
+      bold: true,
+      backgroundColorHex: ExcelColor.green50,
+      horizontalAlign: HorizontalAlign.Right,
+      numberFormat: NumFormat.custom(formatCode: '#,##0.00'));
+
+  /// Pinta una fila en `rowIndex`, con formato numerico segun el tipo de cada
+  /// celda. `estilo`/`estiloNum` pisan el default (se usa en subtotales).
+  void pintarFila(Sheet hoja, int rowIndex, List<Object?> fila,
+      {CellStyle? estilo, CellStyle? estiloNum}) {
     for (var c = 0; c < fila.length; c++) {
       final v = fila[c];
       final celda = _celda(v);
       if (celda == null) continue;
-      final cell = sheet
+      final cell = hoja
           .cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex));
       cell.value = celda;
       if (v is int) {
-        cell.cellStyle = intStyle;
+        cell.cellStyle = estiloNum ?? intStyle;
       } else if (v is num) {
-        cell.cellStyle = moneyStyle;
+        cell.cellStyle = estiloNum ?? moneyStyle;
+      } else if (estilo != null) {
+        cell.cellStyle = estilo;
       }
+    }
+  }
+
+  var fila = filaHeaders + 1;
+  if (secciones == null) {
+    for (final f in filas) {
+      pintarFila(sheet, fila, f);
+      fila++;
+    }
+  } else {
+    for (final sec in secciones) {
+      final cab = sheet
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: fila));
+      cab.value = TextCellValue(sec.titulo);
+      cab.cellStyle = seccionStyle;
+      // El fondo se extiende a lo ancho para que el corte se vea de un vistazo.
+      for (var c = 1; c < headers.length; c++) {
+        sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: fila))
+            .cellStyle = seccionStyle;
+      }
+      fila++;
+      for (final f in sec.filas) {
+        pintarFila(sheet, fila, f);
+        fila++;
+      }
+      if (sec.subtotal != null) {
+        pintarFila(sheet, fila, sec.subtotal!,
+            estilo: CellStyle(bold: true),
+            estiloNum: CellStyle(
+                bold: true,
+                horizontalAlign: HorizontalAlign.Right,
+                numberFormat: NumFormat.custom(formatCode: '#,##0.00')));
+        fila++;
+      }
+      fila++; // separacion entre ciclos
+    }
+  }
+  if (total != null) {
+    pintarFila(sheet, fila, total,
+        estilo: totalStyle, estiloNum: totalNumStyle);
+  }
+
+  for (final extra in hojasExtra) {
+    final hoja = excel[extra.nombre];
+    for (var c = 0; c < extra.headers.length; c++) {
+      final cell =
+          hoja.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
+      cell.value = TextCellValue(extra.headers[c]);
+      cell.cellStyle = headerStyle;
+    }
+    for (var r = 0; r < extra.filas.length; r++) {
+      pintarFila(hoja, r + 1, extra.filas[r]);
+    }
+    for (var c = 0; c < extra.headers.length; c++) {
+      var maxLen = extra.headers[c].length;
+      for (final f in extra.filas) {
+        if (c < f.length) {
+          final s = f[c]?.toString() ?? '';
+          if (s.length > maxLen) maxLen = s.length;
+        }
+      }
+      hoja.setColumnWidth(c, (maxLen + 3).clamp(12, 50).toDouble());
     }
   }
 
   // Ancho de columnas según el contenido más largo (encabezado o celda),
   // acotado a un rango razonable para que no quede ni cortado ni gigante.
   // Las filas de branding no cuentan: están mergeadas a lo ancho.
+  final todasLasFilas = <List<Object?>>[
+    ...filas,
+    for (final s in secciones ?? const <SeccionExcel>[]) ...s.filas,
+    if (total != null) total,
+  ];
   for (var c = 0; c < headers.length; c++) {
     var maxLen = headers[c].length;
-    for (final fila in filas) {
-      if (c < fila.length) {
-        final s = fila[c]?.toString() ?? '';
+    for (final f in todasLasFilas) {
+      if (c < f.length) {
+        final s = f[c]?.toString() ?? '';
         if (s.length > maxLen) maxLen = s.length;
       }
     }

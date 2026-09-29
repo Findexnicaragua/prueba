@@ -25,6 +25,7 @@ import '../features/admin/pagos/cobros_a_revisar_screen.dart';
 import '../features/admin/pagos/pagos_admin_screen.dart';
 import '../features/admin/planes/planes_admin_screen.dart';
 import '../features/admin/reportes/reportes_admin_screen.dart';
+import '../features/admin/settings/dashboard_tarjetas_screen.dart';
 import '../features/admin/settings/op_log_campos_screen.dart';
 import '../features/admin/solicitudes/solicitudes_screen.dart';
 import '../features/admin/tickets/admin_tickets_shell.dart';
@@ -35,6 +36,7 @@ import '../features/admin/etiquetas/etiquetas_admin_screen.dart';
 import '../features/admin/tickets/tickets_list_screen.dart';
 import '../features/admin/settings/settings_admin_screen.dart';
 import '../features/admin/shell/admin_shell.dart';
+import '../data/providers/auth_identity_provider.dart';
 import '../data/providers/cobrador_provider.dart';
 import '../data/providers/db_epoch_provider.dart';
 import '../data/providers/impersonation_provider.dart';
@@ -47,6 +49,7 @@ import '../features/auth/auth_flow_provider.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/set_password_screen.dart';
 import '../features/shared/widgets/sync_gate_screen.dart';
+import '../features/super_admin/diagnostico_screen.dart';
 import '../features/super_admin/miembro_detalle_screen.dart';
 import '../features/super_admin/super_shell.dart';
 import '../features/super_admin/tenant_modulos_screen.dart';
@@ -195,7 +198,12 @@ final routerProvider = Provider<GoRouter>((ref) {
   // Sync gate (R7): cuando PowerSync confirma sync post-cambio de
   // identidad, syncReady flippa a true y queremos que el redirect
   // saque al user de /sync-gate hacia su pantalla por rol.
-  ref.listen(syncReadyProvider, (_, __) => refresh.poke());
+  ref.listen(syncReadyProvider, (prev, next) {
+    if (prev == false && next == true) {
+      ref.read(authIdentityProvider.notifier).onSyncCompletado();
+    }
+    refresh.poke();
+  });
   // Grace timeout del sync gate (8s): cuando vence, el redirect debe
   // re-evaluarse para liberar el gate aunque PowerSync no haya confirmado.
   ref.listen(syncGateGraceProvider, (_, __) => refresh.poke());
@@ -345,6 +353,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // opcionales Pagos / Notificaciones (alineado con el menú del shell,
       // que las marca adminOnly).
       const soloAdmin = [
+        // El Resumen es del dueno (decision de Ruben 2026-08-27). Va PRIMERO
+        // porque es la unica de esta lista que antes era accesible: el resto
+        // ya estaba cerrado. `admin_usuarios` ya lo tenia bloqueado por su
+        // allowlist estricta de mas abajo.
+        '/admin/resumen',
         '/admin/cobradores',
         '/admin/geografia',
         '/admin/red',
@@ -598,6 +611,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/admin/settings/historial-campos',
               pageBuilder: (_, s) => _fadePage(s, _titled(
                   'Campos del historial', const OpLogCamposScreen()))),
+          // Orden y encendido de las tarjetas del Resumen (0263). Vive bajo
+          // /admin/settings, cuya tab "Avanzado" sólo ve el super_admin.
+          GoRoute(path: '/admin/settings/tarjetas-resumen',
+              pageBuilder: (_, s) => _fadePage(s, _titled(
+                  'Tarjetas del Resumen', const DashboardTarjetasScreen()))),
         ],
       ),
 
@@ -605,18 +623,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         builder: (_, state, child) {
           final loc = state.matchedLocation;
-          final titulo = loc.contains('/miembros/')
-              ? 'Detalle del miembro'
-              : (loc.startsWith('/super/tenants/') &&
-                      loc.length > '/super/tenants/'.length
-                  ? 'Configurar tenant'
-                  : 'Tenants');
+          final titulo = loc == '/super/diagnostico'
+              ? 'Diagnóstico'
+              : loc.contains('/miembros/')
+                  ? 'Detalle del miembro'
+                  : (loc.startsWith('/super/tenants/') &&
+                          loc.length > '/super/tenants/'.length
+                      ? 'Configurar tenant'
+                      : 'Tenants');
           return SuperShell(titulo: titulo, child: child);
         },
         routes: [
           GoRoute(
             path: '/super/tenants',
             pageBuilder: (_, s) => _fadePage(s, const TenantsListScreen()),
+          ),
+          GoRoute(
+            path: '/super/diagnostico',
+            pageBuilder: (_, s) => _fadePage(s, const DiagnosticoScreen()),
           ),
           GoRoute(
             path: '/super/tenants/:id',

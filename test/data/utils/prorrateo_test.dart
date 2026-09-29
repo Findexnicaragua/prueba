@@ -257,4 +257,209 @@ void main() {
       expect(r.monto, 0);
     });
   });
+
+  // ==========================================================================
+  // El clamp del prorrateo al suspender/cancelar (audit 2026-08-22, CRITICO).
+  //
+  // La cuota es un SNAPSHOT del precio de su momento; `precioMensual` es el
+  // precio LIVE del plan. Si el plan subio -o la cuota venia de un plan
+  // anterior- el prorrateo de los dias consumidos podia superar el monto de la
+  // propia cuota: darse de baja a mitad de mes salia MAS CARO que el mes
+  // entero. Caso real que motivo el fix: SE0338 de Mairena, cuota de C$513 con
+  // el plan a C$1.282, suspendida al dia 26 de su ciclo -> quedaba en C$1.075.
+  //
+  // Estos tests fijan la REGLA, no la implementacion: prorratear nunca sube una
+  // cuota, y nunca esconde plata ya cobrada.
+  // ==========================================================================
+  // Pedido de Rubén (2026-09-02): "me gustaría que dijera cuánto es el
+  // prorrateo por día para así hacer la suma de cuántos días son los que está
+  // calculando". El punto de estos tests es que la CUENTA QUE SE MUESTRA dé el
+  // TOTAL QUE SE COBRA: si divergen, la pantalla miente y el cliente no puede
+  // rehacer el número.
+  group('cambio de plan — tramos del prorrateo (la cuenta que se muestra)', () {
+    // El caso exacto que Rubén tiene en pantalla: 500 → 800, día_pago 15,
+    // cambio el 20-jun. Ciclo en curso 15-jun → 15-jul.
+    final hoy = DateTime(2026, 6, 20);
+    final finVentana = servicioFin(DateTime(2026, 7, 1), 15); // 15-jul
+
+    ProrrateoCambioPlan r() => prorrateoCambioPlanHoy(
+        hoy: hoy,
+        finVentanaActual: finVentana,
+        precioViejo: 500,
+        precioNuevo: 800);
+
+    test('parte por MES calendario: 25 días → 2 tramos, no 1', () {
+      final t = r().tramos;
+      expect(t.length, 2, reason: 'el rango cruza junio y julio');
+      expect(t[0].mes, 6);
+      expect(t[0].dias, 10); // 21-jun..30-jun
+      expect(t[1].mes, 7);
+      expect(t[1].dias, 15); // 1-jul..15-jul
+      expect(t[0].dias + t[1].dias, r().dias);
+    });
+
+    test('cada tramo usa el precio diario de SU mes (no un promedio)', () {
+      final t = r().tramos;
+      // La diferencia es 300: junio la divide por 30, julio por 31.
+      expect(t[0].precioDia, closeTo(10.0000, 0.0001));
+      expect(t[1].precioDia, closeTo(9.6774, 0.0001));
+      // Y por eso NO son iguales: es justamente lo que hace imposible mostrar
+      // "25 días × un precio". El promedio 245,16/25 = 9,8064 no es el precio
+      // de ningún día real y no debe aparecer en ninguna superficie.
+      expect(t[0].precioDia, isNot(closeTo(t[1].precioDia, 0.01)));
+      expect(t[0].precioDia, isNot(closeTo(9.8064, 0.01)));
+      expect(t[1].precioDia, isNot(closeTo(9.8064, 0.01)));
+    });
+
+    test('LA CUENTA CIERRA: la suma de los subtotales == el monto cobrado', () {
+      final p = r();
+      final suma = p.tramos.fold<double>(0, (a, t) => a + t.subtotal);
+      expect(p.monto, closeTo(245.16, 0.005));
+      // Tolerancia de 1 centavo: el total redondea UNA vez y los subtotales
+      // redondean cada uno. Si esto se va de un centavo, la pantalla está
+      // mostrando una cuenta que no da el número que se cobra.
+      expect(suma, closeTo(p.monto, 0.01));
+      expect(p.tramos[0].subtotal, closeTo(100.00, 0.005));
+      expect(p.tramos[1].subtotal, closeTo(145.16, 0.005));
+    });
+
+    test('el rango mostrado arranca en hoy+1 (hoy ya se sirvió al plan viejo)',
+        () {
+      final p = r();
+      expect(p.desde, DateTime(2026, 6, 21));
+      expect(p.hasta, DateTime(2026, 7, 15));
+    });
+
+    test('un rango dentro de UN solo mes da UN tramo', () {
+      final p = prorrateoCambioPlanHoy(
+          hoy: DateTime(2026, 7, 1),
+          finVentanaActual: DateTime(2026, 7, 15),
+          precioViejo: 500,
+          precioNuevo: 800);
+      expect(p.tramos.length, 1);
+      expect(p.tramos.single.dias, 14);
+      expect(p.tramos.single.mes, 7);
+      final suma = p.tramos.fold<double>(0, (a, t) => a + t.subtotal);
+      expect(suma, closeTo(p.monto, 0.01));
+    });
+
+    test('el downgrade también trae el desglose (el crédito hay que explicarlo)',
+        () {
+      final p = prorrateoCambioPlanHoy(
+          hoy: hoy,
+          finVentanaActual: finVentana,
+          precioViejo: 800,
+          precioNuevo: 500);
+      expect(p.esUpgrade, isFalse);
+      expect(p.tramos.length, 2);
+      final suma = p.tramos.fold<double>(0, (a, t) => a + t.subtotal);
+      expect(suma, closeTo(p.monto, 0.01));
+    });
+
+    test('sin ajuste no hay desglose ni rango (nada que explicar)', () {
+      final p = prorrateoCambioPlanHoy(
+          hoy: hoy,
+          finVentanaActual: finVentana,
+          precioViejo: 500,
+          precioNuevo: 500);
+      expect(p.sinAjuste, isTrue);
+      expect(p.tramos, isEmpty);
+      expect(p.desde, isNull);
+      expect(p.hasta, isNull);
+    });
+
+    test('un ciclo ya vencido no inventa tramos', () {
+      final p = prorrateoCambioPlanHoy(
+          hoy: DateTime(2026, 7, 20), // después del fin de ventana
+          finVentanaActual: finVentana,
+          precioViejo: 500,
+          precioNuevo: 800);
+      expect(p.dias, 0);
+      expect(p.tramos, isEmpty);
+    });
+
+    // Barrido del año: la propiedad tiene que valer en TODOS los ciclos, no
+    // solo en el de junio. Febrero (28) es el que más se aparta.
+    test('la cuenta cierra en los 12 ciclos del año', () {
+      for (var m = 1; m <= 12; m++) {
+        final fin = servicioFin(DateTime(2026, m, 1), 15);
+        final desde = DateTime(2026, m - 1 < 1 ? 12 : m - 1, 20);
+        final p = prorrateoCambioPlanHoy(
+            hoy: desde,
+            finVentanaActual: fin,
+            precioViejo: 500,
+            precioNuevo: 800);
+        if (p.sinAjuste) continue;
+        final suma = p.tramos.fold<double>(0, (a, t) => a + t.subtotal);
+        expect(suma, closeTo(p.monto, 0.01), reason: 'ciclo mes $m');
+        expect(p.tramos.fold<int>(0, (a, t) => a + t.dias), p.dias,
+            reason: 'días del ciclo mes $m');
+      }
+    });
+  });
+
+  group('clamp del prorrateo (suspension/cancelacion)', () {
+    // Reproduce la formula de contratos_repo: prorrateo acotado por arriba al
+    // monto de la cuota y por abajo a lo ya pagado.
+    double montoTrasCorte({
+      required DateTime periodo,
+      required int diaPago,
+      required DateTime fechaCorte,
+      required double precioMensual,
+      required double montoCuota,
+      required double pagado,
+    }) {
+      final v = ventanaServicio(periodo, diaPago);
+      final prorrateado = montoPuente(v.inicio, fechaCorte, precioMensual);
+      final acotado = prorrateado > montoCuota ? montoCuota : prorrateado;
+      return acotado < pagado ? pagado : acotado;
+    }
+
+    test('el caso SE0338: cuota barata + plan caro NO puede superar la cuota', () {
+      final m = montoTrasCorte(
+        periodo: DateTime(2026, 8, 1),
+        diaPago: 27,
+        fechaCorte: DateTime(2026, 8, 22), // ~26 dias del ciclo consumidos
+        precioMensual: 1282, // precio LIVE del plan
+        montoCuota: 513, // lo que decia SU cuota
+        pagado: 0,
+      );
+      expect(m, lessThanOrEqualTo(513),
+          reason: 'prorratear jamas puede cobrar mas que el mes entero de esa cuota');
+      expect(m, 513, reason: 'con el ciclo casi completo, queda topeado en su monto');
+    });
+
+    test('cuota alineada al plan: el prorrateo normal NO se altera', () {
+      final v = ventanaServicio(DateTime(2026, 8, 1), 15);
+      final corte = v.inicio.add(const Duration(days: 10));
+      final esperado = montoPuente(v.inicio, corte, 1000);
+      final m = montoTrasCorte(
+        periodo: DateTime(2026, 8, 1), diaPago: 15, fechaCorte: corte,
+        precioMensual: 1000, montoCuota: 1000, pagado: 0,
+      );
+      expect(m, esperado, reason: 'el clamp no debe tocar el caso sano');
+      expect(m, lessThan(1000));
+    });
+
+    test('lo ya pagado nunca se esconde (piso), aun con el techo puesto', () {
+      final m = montoTrasCorte(
+        periodo: DateTime(2026, 8, 1), diaPago: 27,
+        fechaCorte: DateTime(2026, 8, 3), // pocos dias -> prorrateo chico
+        precioMensual: 1282, montoCuota: 513,
+        pagado: 400, // el cliente ya abono 400
+      );
+      expect(m, greaterThanOrEqualTo(400),
+          reason: 'bajar el monto por debajo del pago dejaria plata cobrada sin cuota');
+    });
+
+    test('sube el precio del plan a mitad de ciclo: la cuota vieja no se infla', () {
+      // Cuota generada cuando el plan valia 600; hoy el plan vale 900.
+      final m = montoTrasCorte(
+        periodo: DateTime(2026, 8, 1), diaPago: 10,
+        fechaCorte: DateTime(2026, 8, 31),
+        precioMensual: 900, montoCuota: 600, pagado: 0,
+      );
+      expect(m, lessThanOrEqualTo(600));
+    });
+  });
 }

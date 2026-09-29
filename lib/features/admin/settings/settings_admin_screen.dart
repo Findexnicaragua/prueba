@@ -229,14 +229,15 @@ const _superAdminOnly = {
   'cobranza.pantalla_pagos',
   // Registro de visitas (0125): default OFF, lo habilita el super_admin.
   'cobranza.registrar_visitas',
-  // Secciones del dashboard (toggleables por tenant, super-only — migración 0133).
-  'dashboard.cobros_visible',
-  'dashboard.proyeccion_visible',
-  'dashboard.recuperacion_visible',
-  'dashboard.sparkline_visible',
-  'dashboard.operativo_visible',
-  'dashboard.top_cobradores_visible',
-  'dashboard.distribucion_visible',
+  // Las secciones del dashboard YA NO son toggles sueltos (0263): orden y
+  // encendido viven juntos en `dashboard.tarjetas` y se editan en la pantalla
+  // "Tarjetas del Resumen" de esta misma tab.
+  //
+  // Los siete `dashboard.*_visible` se retiraron de acá el 2026-08-29. Tres de
+  // ellos (`proyeccion`, `recuperacion`, `top_cobradores`) ya no hacían NADA
+  // desde el 2026-08-28 —sus getters se habían retirado al encender las
+  // tarjetas— y esta pantalla los seguía ofreciendo. Un interruptor que no
+  // mueve nada es peor que no tenerlo: el que lo usa cree que apagó algo.
   // Pantalla de Avisos (gracia/mora) — toggle super_admin (migración 0134).
   'cobranza.avisos_habilitado',
   // Notificar por WhatsApp desde Avisos — toggle super_admin (migración 0135).
@@ -1007,16 +1008,18 @@ class _PlantillaEditorDialog extends StatefulWidget {
     required this.inicial,
     required this.porDefecto,
     required this.empresa,
-    this.paraMeta = false,
+    this.proveedor,
   });
   final String titulo;
   final String inicial;
   final String porDefecto;
   final String empresa;
-  // Cuando true (modo API), agrega el bloque "Copiar para Meta" que convierte el
-  // texto a variables con nombre de Meta ({{nombre}}…) para pegar al crear la
-  // plantilla. El cuerpo redactado se guarda igual (de referencia), no se envía.
-  final bool paraMeta;
+  // null = modo gratis (wa.me): el texto se manda tal cual, sin bloque de copia.
+  // 'meta' | 'whatchimp' = modo API: agrega el bloque "Copiar para …" que
+  // convierte el texto a la forma de variable QUE USA ESE PROVEEDOR, para pegar
+  // al crear la plantilla de su lado. El cuerpo redactado acá se guarda solo
+  // como referencia — lo que se envía es la plantilla aprobada del proveedor.
+  final String? proveedor;
 
   @override
   State<_PlantillaEditorDialog> createState() => _PlantillaEditorDialogState();
@@ -1065,13 +1068,35 @@ class _PlantillaEditorDialogState extends State<_PlantillaEditorDialog> {
         .replaceAll('{empresa}', emp);
   }
 
-  // Convierte el texto del editor a variables CON NOMBRE de Meta: {nombre} →
-  // {{nombre}}. Es lo que se pega al crear la plantilla en Meta (modo API).
-  String _aMeta(String t) => t
-      .replaceAll('{nombre}', '{{nombre}}')
-      .replaceAll('{monto}', '{{monto}}')
-      .replaceAll('{dias}', '{{dias}}')
-      .replaceAll('{empresa}', '{{empresa}}');
+  // El ORDEN es el contrato con el envío: la edge function manda siempre estas
+  // cuatro, en esta secuencia (ORDEN_VARIABLES en whatsapp-enviar/index.ts).
+  // Tocar el orden acá sin tocarlo allá manda el monto donde va el nombre.
+  static const _orden = ['nombre', 'monto', 'dias', 'empresa'];
+
+  bool get _posicional => widget.proveedor == 'whatchimp';
+
+  String get _nombreProveedor =>
+      _posicional ? 'WhatChimp' : 'Meta';
+
+  // Convierte el texto del editor a la forma de variable del proveedor:
+  //   meta      → {nombre}  →  {{nombre}}   (con nombre; el orden no importa)
+  //   whatchimp → {nombre}  →  {{1}}        (posicional; el orden ES el de _orden)
+  String _aPlantilla(String t) {
+    var out = t;
+    for (var i = 0; i < _orden.length; i++) {
+      final v = _orden[i];
+      out = out.replaceAll('{$v}', _posicional ? '{{${i + 1}}}' : '{{$v}}');
+    }
+    return out;
+  }
+
+  // Las variables de _orden que NO aparecen en el texto. Solo importa en
+  // WhatChimp: el envío manda SIEMPRE las 4 posiciones, así que si la plantilla
+  // aprobada usa menos, los números no coinciden y el mensaje sale con los datos
+  // corridos (o Meta rechaza la plantilla por sobrar parámetros). En Meta da
+  // igual: al ir por nombre, la que falta simplemente no se usa.
+  List<String> get _faltantes =>
+      _orden.where((v) => !_ctrl.text.contains('{$v}')).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -1149,7 +1174,7 @@ class _PlantillaEditorDialogState extends State<_PlantillaEditorDialog> {
                   style: const TextStyle(
                       fontSize: 13, color: Color(0xFF0B2E13), height: 1.45)),
             ),
-            if (widget.paraMeta) ...[
+            if (widget.proveedor != null) ...[
               const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -1160,14 +1185,15 @@ class _PlantillaEditorDialogState extends State<_PlantillaEditorDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(children: [
-                      Icon(Icons.content_copy,
+                    Row(children: [
+                      const Icon(Icons.content_copy,
                           size: 15, color: Color(0xFF0C447C)),
-                      SizedBox(width: 6),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                            'Para crear la plantilla en Meta — copiá este cuerpo:',
-                            style: TextStyle(
+                            'Para crear la plantilla en $_nombreProveedor — '
+                            'copiá este cuerpo:',
+                            style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color: Color(0xFF0C447C))),
@@ -1181,31 +1207,56 @@ class _PlantillaEditorDialogState extends State<_PlantillaEditorDialog> {
                         color: scheme.surface,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: SelectableText(_aMeta(_ctrl.text),
+                      child: SelectableText(_aPlantilla(_ctrl.text),
                           style: const TextStyle(
                               fontSize: 12,
                               height: 1.4,
                               fontFamily: 'monospace')),
                     ),
                     const SizedBox(height: 8),
+                    // En WhatChimp el número ES la posición: hay que mostrar el
+                    // mapeo, porque {{2}} solo no dice qué dato trae.
+                    if (_posicional && _faltantes.isNotEmpty) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(9),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFAEEDA),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                            'Ojo: falta ${_faltantes.join(', ')}. WhatChimp '
+                            'numera por posición y el envío manda siempre las '
+                            'cuatro, así que si la plantilla usa menos, los '
+                            'datos salen corridos. Usá las cuatro.',
+                            style: const TextStyle(
+                                fontSize: 11,
+                                height: 1.35,
+                                color: Color(0xFF633806))),
+                      ),
+                    ],
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                              'Variables con nombre: {{nombre}} {{monto}} '
-                              '{{dias}} {{empresa}}',
-                              style: TextStyle(
+                              _posicional
+                                  ? 'Variables por posición: {{1}} nombre · '
+                                      '{{2}} monto · {{3}} días · {{4}} empresa'
+                                  : 'Variables con nombre: {{nombre}} {{monto}} '
+                                      '{{dias}} {{empresa}}',
+                              style: const TextStyle(
                                   fontSize: 11, color: Color(0xFF0C447C))),
                         ),
                         TextButton.icon(
                           onPressed: () {
                             Clipboard.setData(
-                                ClipboardData(text: _aMeta(_ctrl.text)));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Copiado para Meta'),
-                                    duration: Duration(seconds: 2)));
+                                ClipboardData(text: _aPlantilla(_ctrl.text)));
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content:
+                                    Text('Copiado para $_nombreProveedor'),
+                                duration: const Duration(seconds: 2)));
                           },
                           icon: const Icon(Icons.copy, size: 16),
                           label: const Text('Copiar'),
@@ -1617,7 +1668,7 @@ class _WhatsappApiCardState extends ConsumerState<_WhatsappApiCard> {
         inicial: actual,
         porDefecto: def,
         empresa: ref.read(appSettingsProvider).empresaNombre,
-        paraMeta: true,
+        proveedor: ref.read(appSettingsProvider).notifApiProveedor,
       ),
     );
     if (nuevo == null || !mounted) return;
@@ -1651,7 +1702,10 @@ class _WhatsappApiCardState extends ConsumerState<_WhatsappApiCard> {
         const SizedBox(height: 8),
         TextField(
           controller: nameCtrl,
-          decoration: _deco('Nombre de la plantilla en Meta'),
+          decoration: _deco(
+              ref.watch(appSettingsProvider).notifApiVariablesPosicionales
+                  ? 'Nombre de la plantilla en WhatChimp'
+                  : 'Nombre de la plantilla en Meta'),
           onSubmitted: (v) => _save(nameClave, v.trim(), 'string'),
         ),
         const SizedBox(height: 6),
@@ -1786,11 +1840,49 @@ class _WhatsappApiCardState extends ConsumerState<_WhatsappApiCard> {
       children: [
         const Divider(height: 8),
         const SizedBox(height: 10),
+        // Proveedor — de esto dependen las etiquetas y la forma de las variables
+        // de plantilla de todo lo que sigue, así que va primero.
+        _seccionHeader(
+            Icons.alt_route_outlined, 'Por dónde se manda', scheme),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(
+                value: 'meta',
+                label: Text('Meta directo'),
+                icon: Icon(Icons.hub_outlined, size: 16)),
+            ButtonSegment(
+                value: 'whatchimp',
+                label: Text('WhatChimp'),
+                icon: Icon(Icons.dashboard_outlined, size: 16)),
+          ],
+          selected: {s.notifApiProveedor},
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          onSelectionChanged: (sel) =>
+              _save('cobranza.notif_api_proveedor', sel.first, 'string'),
+        ),
+        const SizedBox(height: 6),
+        Text(
+            s.notifApiVariablesPosicionales
+                ? 'La clave y el ID del número salen de WhatChimp → Ajustes → '
+                    'Consola de desarrollador.'
+                : 'El token y el Phone Number ID salen del Business Manager de Meta.',
+            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 14),
         // Credenciales
-        _seccionHeader(Icons.key_outlined, 'Credenciales de Meta', scheme),
+        _seccionHeader(
+            Icons.key_outlined,
+            s.notifApiVariablesPosicionales
+                ? 'Credenciales de WhatChimp'
+                : 'Credenciales de Meta',
+            scheme),
         TextField(
             controller: _phone,
-            decoration: _deco('Phone Number ID'),
+            decoration: _deco(s.notifApiVariablesPosicionales
+                ? 'ID del número (phone_number_id)'
+                : 'Phone Number ID'),
             onSubmitted: (v) =>
                 _save('cobranza.notif_api_phone_id', v.trim(), 'string')),
         const SizedBox(height: 10),
@@ -1800,10 +1892,14 @@ class _WhatsappApiCardState extends ConsumerState<_WhatsappApiCard> {
                 controller: _token,
                 obscureText: true,
                 decoration: _deco(
-                    'Access Token',
+                    s.notifApiVariablesPosicionales
+                        ? 'Clave de API'
+                        : 'Access Token',
                     s.notifApiTokenConfigurado
                         ? 'Ya configurado — pegá uno nuevo para reemplazar'
-                        : 'Pegá el token de Meta')),
+                        : s.notifApiVariablesPosicionales
+                            ? 'Pegá la clave de WhatChimp'
+                            : 'Pegá el token de Meta')),
           ),
           const SizedBox(width: 8),
           FilledButton(
@@ -1898,10 +1994,18 @@ class _WhatsappApiCardState extends ConsumerState<_WhatsappApiCard> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                  'Redactá el mensaje con "Editar mensaje" (chips + vista previa) '
-                  'y usá "Copiar para Meta": te da el cuerpo con variables '
-                  '{{nombre}} {{monto}} {{dias}} {{empresa}} para pegar al crear '
-                  'la plantilla en Meta. El nombre de acá debe coincidir con el de Meta.',
+                  s.notifApiVariablesPosicionales
+                      ? 'Redactá el mensaje con "Editar mensaje" (chips + vista '
+                          'previa) y usá "Copiar para WhatChimp": te da el cuerpo '
+                          'con variables {{1}} {{2}} {{3}} {{4}} para pegar al '
+                          'crear la plantilla. Usá las cuatro y en ese orden — '
+                          'WhatChimp numera por posición. El nombre de acá debe '
+                          'coincidir con el de la plantilla.'
+                      : 'Redactá el mensaje con "Editar mensaje" (chips + vista '
+                          'previa) y usá "Copiar para Meta": te da el cuerpo con '
+                          'variables {{nombre}} {{monto}} {{dias}} {{empresa}} '
+                          'para pegar al crear la plantilla en Meta. El nombre de '
+                          'acá debe coincidir con el de Meta.',
                   style: TextStyle(
                       fontSize: 11,
                       height: 1.3,
@@ -2038,6 +2142,20 @@ class _HistorialCamposCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Divider(height: 12),
+            // Las tarjetas del Resumen: orden y encendido, por empresa
+            // (migración 0263). Reemplaza a los toggles sueltos
+            // `dashboard.*_visible`, que no podían expresar el ORDEN.
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.dashboard_customize_outlined),
+              title: const Text('Tarjetas del Resumen'),
+              subtitle: const Text(
+                'Cuáles se ven y en qué orden aparecen',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              // Regla #12: ruta del shell admin → go, no push.
+              onTap: () => context.go('/admin/settings/tarjetas-resumen'),
+            ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.tune),

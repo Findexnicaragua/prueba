@@ -28,6 +28,15 @@ final Map<String, List<String>> kOpLogCamposCatalogo = {
     'estado',
     'saldo',
     'monto',
+    // `cargos_neto` y `monto_pagado` los escribe el corrector de invariantes
+    // (0251, bloques INV14 e INV2) como antes→después. Sin entrada acá el diff
+    // se guarda pero NO se puede renderizar NI encender: el override del
+    // super_admin se filtra CONTRA este catálogo. El historial decía "qué pasó"
+    // y se comía el "de cuánto a cuánto", que es lo único que sirve para
+    // revisar un cambio de plata. Como el valor queda persistido en
+    // `op_log.diff`, agregarlos acá lo hace visible RETROACTIVAMENTE.
+    'cargos_neto',
+    'monto_pagado',
     'entregado',
     'vuelto',
     'metodo',
@@ -47,12 +56,27 @@ final Map<String, List<String>> kOpLogCamposVisiblesDefault = {
     'estado',
     'saldo',
     'monto',
+    // Visibles por defecto, no solo toggleables: cuando el corrector toca
+    // plata, el antes→después es justamente lo que hay que ver sin buscarlo.
+    //
+    // ⚠️ Tocar este default NO alcanza: `opLogCamposVisibles` (abajo) le da
+    // prioridad al override persistido del tenant. Un tenant con la fila
+    // `op_log.campos_visibles` guardada sigue filtrando contra SU lista vieja y
+    // el campo nuevo queda invisible — parece un bug de código y no lo es.
+    // Todo agregado acá necesita su migración compañera (precedente: 0228 para
+    // `contratos.notas`; 0256 para estos tres).
+    'cargos_neto',
+    'monto_pagado',
     'entregado',
     'vuelto',
     'metodo',
     'fecha_pago',
     'fecha_vencimiento',
     'notas',
+    // El PORQUÉ de la corrección automática. Ya estaba en el catálogo y en el
+    // override de los dos tenants que lo tienen, pero faltaba en el default:
+    // sin esto, el tenant SIN override veía los números y no la razón.
+    'motivo',
   ],
 };
 

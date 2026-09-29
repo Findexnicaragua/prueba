@@ -20,11 +20,12 @@ import '../../data/utils/formatters.dart';
 import '../../powersync/db.dart' as ps;
 import '../cobro/cambio_fecha_dialog.dart';
 import '../shared/widgets/filtro_multi_dropdown.dart';
+import '../shared/widgets/filtro_planes.dart';
 import '../shared/widgets/empty_state.dart';
 import '../shared/widgets/etiqueta_chip.dart';
 import '../shared/widgets/mapa_widgets_compartidos.dart';
 import '../../data/utils/errores.dart';
-import 'servicios/offline_routing_service.dart';
+import 'servicios/routing_service.dart';
 
 /// Centinela del dropdown de Cobrador para "Sin cobrador" (cobrador_id IS NULL),
 /// como una opción más del multi-select (igual que en Cobros/Clientes).
@@ -79,6 +80,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   Set<String>? _cobradorIds;
   Set<String>? _comunidadIds;
   Set<String>? _nodoIds;
+  /// Plan del contrato vivo. Puede incluir [kPlanSinPlan].
+  Set<String>? _planIds;
   // Toggle de capa: false = calle (OSM), true = satélite (Esri).
   bool _satelite = false;
   // Cliente enfocado por la búsqueda: cuando != null, el mapa muestra SOLO su
@@ -88,10 +91,39 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   Position? _currentPosition;
   StreamSubscription<Position>? _positionSubscription;
 
-  // Rotación del mapa y ruta activa offline
+  /// Opciones del chip Plan. Van por SUSCRIPCIÓN y no por `StreamBuilder`
+  /// porque esta pantalla ya tiene uno solo, sobre los clientes, y las opciones
+  /// se usan también en los callbacks (`planOpciones.length` de la
+  /// canonización) — anidar otro StreamBuilder ahí obligaría a reestructurar
+  /// medio build.
+  ///
+  /// Salen de una consulta PROPIA y no de las filas cargadas: si dependieran de
+  /// lo que el mapa está mostrando, la lista de ids se achicaría al filtrar y
+  /// la regla "todo marcado = sin filtrar" convertiría la selección en null
+  /// sola, sin que el usuario toque nada.
+  List<FiltroOpcion> _planOpciones = const [];
+  StreamSubscription<List<Map<String, dynamic>>>? _planSub;
+  String? _tenantDeLosPlanes;
+
+  void _suscribirPlanes(String? tenantId) {
+    _tenantDeLosPlanes = tenantId;
+    _planSub?.cancel();
+    _planSub = ps.db
+        .watch(kPlanesFiltroSql, parameters: [tenantId])
+        .listen((rows) {
+      if (mounted) setState(() => _planOpciones = opcionesDePlanes(rows));
+    }, onError: (_) {
+      // El chip es una comodidad: si la consulta falla (DB recreándose), queda
+      // sin opciones en vez de tumbar el mapa.
+    });
+  }
+
+  // Rotación del mapa y ruta activa híbrida (online OSRM + offline v2)
   double _rotationAngle = 0.0;
   List<LatLng>? _rutaActivaPoints;
   double? _rutaActivaDistancia;
+  bool _rutaActivaIsOffline = false;
+  bool _rutaActivaIsFallback = false;
   String? _rutaDestinoNombre;
   Map<String, dynamic>? _rutaDestinoCliente;
   bool _isCalculatingRoute = false;
@@ -99,8 +131,9 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _planSub?.cancel();
     _mapController.dispose();
-    OfflineRoutingService.instance.dispose();
+    RoutingService.instance.dispose();
     super.dispose();
   }
 
@@ -218,7 +251,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     setState(() => _isCalculatingRoute = true);
 
     try {
-      final routeData = await OfflineRoutingService.instance.findRoute(start, end);
+      final routeData = await RoutingService.instance.findRoute(start, end);
       if (!mounted) return;
 
       if (routeData != null) {
@@ -226,6 +259,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           _isCalculatingRoute = false;
           _rutaActivaPoints = routeData.path;
           _rutaActivaDistancia = routeData.distanceMetres;
+          _rutaActivaIsOffline = routeData.isOffline;
+          _rutaActivaIsFallback = routeData.isFallback;
           _rutaDestinoNombre = cliente['nombre'] as String;
           _rutaDestinoCliente = cliente;
         });
@@ -236,7 +271,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         setState(() => _isCalculatingRoute = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No se pudo encontrar una ruta offline.')),
+            const SnackBar(content: Text('No se pudo encontrar una ruta vial hacia el destino.')),
           );
         }
       }
@@ -345,6 +380,13 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         ? '(SELECT GROUP_CONCAT(ct.codigo, char(30)) '
             'FROM contratos ct WHERE ct.cliente_id = c.id)'
         : 'NULL';
+    // Planes del cliente. A diferencia de las dos de arriba, esta NO se apaga
+    // en "Ver todo": el chip Plan quedaría vacío justo en el modo donde más se
+    // usa. Es una búsqueda indexada por `contratos.cliente_id` y devuelve ids
+    // pelados (no nombres), así que es la más barata de las tres.
+    const subPlanes = '(SELECT GROUP_CONCAT(ct.plan_id, char(30)) '
+        'FROM contratos ct WHERE ct.cliente_id = c.id '
+        "AND COALESCE(ct.estado, 'activo') = 'activo' AND ct.plan_id IS NOT NULL)";
     final subEtiquetas = soloCobrables
         ? '(SELECT GROUP_CONCAT(e.nombre || char(31) || e.color || char(31) || e.icono, char(30)) '
             'FROM cliente_etiquetas ce JOIN etiquetas e ON e.id = ce.etiqueta_id '
@@ -383,7 +425,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                CASE WHEN c.vencimiento_mas_viejo IS NOT NULL
                    AND date(c.vencimiento_mas_viejo) > date('now', '-6 hours', '+' || ? || ' days')
                  THEN 1 ELSE 0 END AS fuera_rango,
-               $subEtiquetas AS etiquetas_concat
+               $subEtiquetas AS etiquetas_concat,
+               $subPlanes AS plan_ids
           FROM clientes c
      LEFT JOIN comunidades co ON co.id = c.comunidad_id
      LEFT JOIN municipios mu ON mu.id = co.municipio_id
@@ -435,6 +478,14 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     final esAdminView = cobrador != null &&
         !cobrador.esTecnico &&
         !esSoporte;
+
+    // El tenant llega por stream: en el primer frame puede ser null (el chip
+    // saldría vacío) y cambia al entrar o salir de una empresa impersonada.
+    // Mismo cuidado que la consulta de cobradores en Clientes.
+    final tenantId = ref.watch(tenantIdProvider);
+    if (esAdminView && tenantId != _tenantDeLosPlanes) {
+      _suscribirPlanes(tenantId);
+    }
 
     // "Ver todo" (fuera de rango + sin deuda) es exclusivo del admin. Si un rol
     // de campo quedara con ese filtro (no debería: el chip no se le muestra), lo
@@ -531,12 +582,15 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           idKey: 'nodo_id',
           labelKey: 'nodo',
         ) : const <FiltroOpcion>[];
+        final planOpciones =
+            esAdminView ? _planOpciones : const <FiltroOpcion>[];
 
         // El cobrador puro no ve los dropdowns; sus filtros quedan null para
         // que nunca recorten su set de clientes.
         final cobradorIds = esAdminView ? _cobradorIds : null;
         final comunidadIds = esAdminView ? _comunidadIds : null;
         final nodoIds = esAdminView ? _nodoIds : null;
+        final planIds = esAdminView ? _planIds : null;
 
         // Si hay un cliente buscado, el mapa muestra SOLO su pin (ignora los
         // chips y dropdowns: el usuario lo eligió explícitamente). Si ese id
@@ -547,6 +601,21 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                   (r) => r!['id'] == _clienteSeleccionadoId,
                   orElse: () => null,
                 );
+
+        // 🔴 Los planes se parsean UNA vez por emisión, no adentro del
+        // `.where`. Ese where corre en CADA build, y esta pantalla se
+        // reconstruye cada 5 metros de movimiento del GPS: con 4.484 pines,
+        // hacer el `split` por fila serían miles de splits por cada paso del
+        // cobrador. Acá es un solo recorrido y después son lookups de Set.
+        final planesPorCliente = <String, Set<String>>{};
+        if (planIds != null) {
+          for (final r in rows) {
+            final raw = r['plan_ids'] as String?;
+            if (raw == null || raw.isEmpty) continue;
+            planesPorCliente[r['id'] as String] =
+                raw.split(String.fromCharCode(30)).toSet();
+          }
+        }
 
         // Filtra qué clientes se muestran combinando las 3 condiciones:
         // estado (chips, _estadoDe) + cobrador + zona (dropdowns admin).
@@ -581,7 +650,19 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                     comunidadIds.contains(r['comunidad_id']);
                 final pasaNodo =
                     nodoIds == null || nodoIds.contains(r['nodo_id']);
-                return pasaEstado && pasaCobrador && pasaComunidad && pasaNodo;
+                // Un cliente puede tener más de un contrato activo: pasa si
+                // ALGUNO de sus planes está elegido. Sin ningún contrato activo
+                // (61 en Mairena, 35 en Telenet) cae en el centinela "Sin plan".
+                final susPlanes = planesPorCliente[r['id']];
+                final pasaPlan = planIds == null ||
+                    (susPlanes == null
+                        ? planIds.contains(kPlanSinPlan)
+                        : susPlanes.any(planIds.contains));
+                return pasaEstado &&
+                    pasaCobrador &&
+                    pasaComunidad &&
+                    pasaNodo &&
+                    pasaPlan;
               }).toList();
 
         return Stack(
@@ -704,9 +785,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                                   comunidadOpciones.map((o) => o.id).toSet(),
                               nodoSel: _nodoIds ??
                                   nodoOpciones.map((o) => o.id).toSet(),
+                              planSel: _planIds ??
+                                  planOpciones.map((o) => o.id).toSet(),
                               cobradorOpciones: cobradorOpciones,
                               comunidadOpciones: comunidadOpciones,
                               nodoOpciones: nodoOpciones,
+                              planOpciones: planOpciones,
                               // Todos o NADA marcado → null (sin filtrar): un
                               // cobrador/zona/nodo nuevo aparece solo, y
                               // deseleccionar todo nunca deja el mapa vacío.
@@ -722,6 +806,10 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                                       : s),
                               onNodoChanged: (s) => setState(() => _nodoIds =
                                   s.isEmpty || s.length >= nodoOpciones.length
+                                      ? null
+                                      : s),
+                              onPlanChanged: (s) => setState(() => _planIds =
+                                  s.isEmpty || s.length >= planOpciones.length
                                       ? null
                                       : s),
                             ),
@@ -886,6 +974,34 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                                 _estimarTiempoRuta(_rutaActivaDistancia),
                                 style: const TextStyle(fontSize: 13, color: Colors.grey),
                               ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _rutaActivaIsOffline
+                                      ? (_rutaActivaIsFallback ? Colors.amber.shade100 : Colors.blueGrey.shade100)
+                                      : Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: _rutaActivaIsOffline
+                                        ? (_rutaActivaIsFallback ? Colors.amber.shade400 : Colors.blueGrey.shade300)
+                                        : Colors.green.shade300,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  _rutaActivaIsOffline
+                                      ? (_rutaActivaIsFallback ? 'Aprox. offline' : 'Vial offline')
+                                      : 'En línea',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: _rutaActivaIsOffline
+                                        ? (_rutaActivaIsFallback ? Colors.amber.shade900 : Colors.blueGrey.shade800)
+                                        : Colors.green.shade800,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -983,6 +1099,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
     if (_cobradorIds != null && _cobradorIds!.isNotEmpty) n++;
     if (_comunidadIds != null && _comunidadIds!.isNotEmpty) n++;
     if (_nodoIds != null && _nodoIds!.isNotEmpty) n++;
+    if (_planIds != null && _planIds!.isNotEmpty) n++;
     if (_filtro != _FiltroEstado.pendientes) n++;
     return n;
   }
@@ -991,6 +1108,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
         _cobradorIds = null;
         _comunidadIds = null;
         _nodoIds = null;
+        _planIds = null;
         _filtro = _FiltroEstado.pendientes;
       });
 
@@ -1576,23 +1694,29 @@ class _FiltrosAdmin extends StatelessWidget {
     required this.cobradorSel,
     required this.comunidadSel,
     required this.nodoSel,
+    required this.planSel,
     required this.cobradorOpciones,
     required this.comunidadOpciones,
     required this.nodoOpciones,
+    required this.planOpciones,
     required this.onCobradorChanged,
     required this.onComunidadChanged,
     required this.onNodoChanged,
+    required this.onPlanChanged,
   });
 
   final Set<String> cobradorSel;
   final Set<String> comunidadSel;
   final Set<String> nodoSel;
+  final Set<String> planSel;
   final List<FiltroOpcion> cobradorOpciones;
   final List<FiltroOpcion> comunidadOpciones;
   final List<FiltroOpcion> nodoOpciones;
+  final List<FiltroOpcion> planOpciones;
   final ValueChanged<Set<String>> onCobradorChanged;
   final ValueChanged<Set<String>> onComunidadChanged;
   final ValueChanged<Set<String>> onNodoChanged;
+  final ValueChanged<Set<String>> onPlanChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1623,6 +1747,16 @@ class _FiltrosAdmin extends StatelessWidget {
           opciones: nodoOpciones,
           seleccionados: nodoSel,
           onChanged: onNodoChanged,
+        ),
+        // Plan — último. Es un Wrap, así que en teléfono baja a una segunda
+        // línea en vez de desbordar.
+        FiltroMultiDropdown(
+          icon: kPlanFiltroIcono,
+          hint: 'Plan',
+          buscarHint: 'Buscar plan…',
+          opciones: planOpciones,
+          seleccionados: planSel,
+          onChanged: onPlanChanged,
         ),
       ],
     );

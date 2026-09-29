@@ -96,6 +96,14 @@ web/powersync_sync.worker.js
 web/sqlite3.wasm
 web/powersync_db.worker.js
 web/powersync_sync.worker.js
-.claude/
+# .claude/ se ignora ENTERO salvo la config compartida del equipo: el protocolo
+# /pedido, los especialistas senior y los hooks tienen que viajar en el repo, si
+# no valen solo para la maquina donde se escribieron (que es exactamente la
+# fragilidad que vienen a arreglar). Se usa `.claude/*` y no `.claude/` porque
+# git no puede re-incluir nada adentro de un directorio excluido.
+.claude/*
+!.claude/agents/
+!.claude/skills/
+!.claude/settings.json
 backups/
 __pycache__/

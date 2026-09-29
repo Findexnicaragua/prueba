@@ -6,6 +6,8 @@ import '../../../data/providers/cobrador_provider.dart';
 import '../../../data/providers/modulos_provider.dart';
 import '../../../data/utils/busqueda_cliente.dart'
     show foldBusqueda, foldSqlExpr;
+import '../../../data/utils/formatters.dart' show Fmt;
+import '../../../data/utils/montos.dart' show parseMonto, montoInputFormatter;
 import '../../../powersync/db.dart' as ps;
 import '../../shared/widgets/selector_buscable.dart';
 import '../reportes/excel/reporte_excel.dart' show descargarExcel;
@@ -71,6 +73,17 @@ class DataOpsScreen extends ConsumerWidget {
             // sin él (bajas de la colisión de correlativo — INV5).
             _GenerarRecibosFaltantesCard(
                 tenantId: tenantId, actorLabel: actorLabel),
+            const SizedBox(height: 12),
+            // ───── DINERO — casos puntuales (RPCs 0244, v0.36.0) ─────
+            // Los 3 casos recurrentes del service: pago hecho fuera del CRM
+            // (caso Jimmy), revivir/anular una cuota (caso SS0036) y baja de
+            // deuda del cliente que se retira (flujo del cuaderno). Preview y
+            // ejecución corren la MISMA validación server-side.
+            _PagoHistoricoCard(tenantId: tenantId, actorLabel: actorLabel),
+            const SizedBox(height: 12),
+            _CuotaEstadoCard(tenantId: tenantId, actorLabel: actorLabel),
+            const SizedBox(height: 12),
+            _BajaDeudaCard(tenantId: tenantId, actorLabel: actorLabel),
             const SizedBox(height: 12),
             if (inventario) ...[
               // Diagnóstico del stock: seriales + ledger de movimientos.
@@ -517,9 +530,51 @@ class _Intro extends StatelessWidget {
   }
 }
 
-/// Card del módulo Operaciones (super_admin): corre los 20 invariantes de dinero
+/// Claves de `data_ops_log.afectados` que NO son conteos de registros.
+///
+/// `afectados` es un jsonb libre y varios productores meten ahí, además de los
+/// contadores por entidad, un DATO DE PLATA o un metadato: `baja_deuda` mete
+/// `total` (córdobas), `pago_historico` mete `monto`, `cuota_estado` mete
+/// `saldo`, `corregir_invariantes` mete `total` (que ya es la suma de sus
+/// cuatro contadores) y `op_id`.
+///
+/// Sumar todo lo numérico da un disparate. YA PASA en producción: la fila
+/// `limpieza_cuaderno_telenet_2026_08` guarda
+/// `{cuotas: 70, contratos: 27, total: 59595.51, lotes: [...]}` y el historial
+/// muestra **"59692 registros afectados"** en vez de 97 — el conteo suma los
+/// córdobas. Y las tres operaciones de dinero (0244/0245) están armadas para
+/// hacer lo mismo desde su primer uso.
+///
+/// Se filtra del lado de la LECTURA a propósito: los montos SÍ tienen que
+/// seguir guardándose (son el registro de qué pasó), y así queda arreglado
+/// también para las filas que ya están escritas.
+const _kClavesNoContadoras = {
+  'total',
+  'monto',
+  'saldo',
+  'op_id',
+  'motivo',
+  'label',
+  'fecha',
+  'comprobante',
+  'lotes',
+  'antes',
+  'despues',
+  'modulo',
+};
+
+/// Conteo de registros de una fila de `data_ops_log`: suma los contadores por
+/// entidad y descarta plata y metadatos (ver `_kClavesNoContadoras`).
+int contarAfectados(Map<String, dynamic> afectados) => afectados.entries
+    .where((e) => !_kClavesNoContadoras.contains(e.key))
+    .map((e) => e.value)
+    .whereType<num>()
+    .fold<int>(0, (a, b) => a + b.toInt());
+
+/// Card del módulo Operaciones (super_admin): corre los invariantes de dinero
 /// del tenant en contexto vía RPC `super_admin_verificar_invariantes` (0153;
-/// INV18-INV20 se sumaron en 0220) y muestra el resultado. SOLO LECTURA — es el
+/// INV18-20 en 0220, INV21-31 en 0248 — portados del archivo canónico
+/// `supabase/tests/invariantes_dinero.sql`) y muestra el resultado. SOLO LECTURA — es el
 /// cierre obligatorio de todo fix de dinero, ahora sin abrir el SQL Editor del
 /// Dashboard. Anti-pantalla-negra (regla #7): flag local + render inline, nada
 /// de showDialog.
@@ -529,7 +584,10 @@ class _VerificarInvariantesCard extends ConsumerStatefulWidget {
     this.rpc = 'super_admin_verificar_invariantes',
     this.titulo = 'Verificar invariantes de dinero',
     this.descripcion =
-        'Corre 20 chequeos de integridad contable sobre este tenant '
+        // SIN NUMERO a proposito: fue 17, 20 y ahora 31, y el texto quedaba
+        // viejo cada vez -contradiciendo al banner de al lado, que cuenta las
+        // filas que devuelve la RPC-.
+        'Corre los chequeos de integridad contable sobre este tenant '
             '(pagos, cuotas, recibos, cargos, saldo a favor, clientes). '
             'Solo lectura. Corrélo después de cualquier corrección de datos.',
     this.icono = Icons.health_and_safety_outlined,
@@ -1828,8 +1886,7 @@ class _ReasignarMasivoCardState extends ConsumerState<_ReasignarMasivoCard> {
       if (!mounted) return;
       final map = Map<String, dynamic>.from(res as Map);
       final af = Map<String, dynamic>.from(map['afectados'] as Map);
-      final n =
-          af.values.whereType<num>().fold<int>(0, (a, b) => a + b.toInt());
+      final n = contarAfectados(af);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: const Color(0xFF1B7A3D),
@@ -4012,8 +4069,7 @@ class _HistorialFilaState extends ConsumerState<_HistorialFila> {
     final afectados = row['afectados'] is Map
         ? Map<String, dynamic>.from(row['afectados'] as Map)
         : <String, dynamic>{};
-    final total =
-        afectados.values.whereType<num>().fold<int>(0, (a, b) => a + b.toInt());
+    final total = contarAfectados(afectados);
     final cuando = _fechaHist(row['created_at']);
     final tieneBackup = (row['backup_id'] as String?) != null;
 
@@ -4080,4 +4136,930 @@ String _fechaHist(dynamic raw) {
   if (dt == null) return raw.toString();
   String dos(int n) => n.toString().padLeft(2, '0');
   return '${dos(dt.day)}/${dos(dt.month)}/${dt.year} ${dos(dt.hour)}:${dos(dt.minute)}';
+}
+
+// ═════════════════ DINERO — casos puntuales (RPCs 0244) ═════════════════
+//
+// Tres cards con el mismo contrato que _OpInputCard (preview {afectados,label}
+// → ejecutar {mensaje}), pero con formularios propios porque necesitan
+// selección en cascada (cliente → cuota) y varios campos. Respetan las reglas
+// del audit: SelectorBuscable para listas DB (#10), dropdown solo para el enum
+// de método, loading por flag interno (#7) y guards `mounted` (#9).
+
+String _dinFecha(DateTime d) {
+  String dos(int n) => n.toString().padLeft(2, '0');
+  return '${dos(d.day)}/${dos(d.month)}/${d.year}';
+}
+
+String _dinFechaIso(DateTime d) {
+  String dos(int n) => n.toString().padLeft(2, '0');
+  return '${d.year}-${dos(d.month)}-${dos(d.day)}';
+}
+
+String _dinMensajeError(Object e) {
+  if (e is PostgrestException) return e.message;
+  return e.toString().replaceFirst('Exception: ', '');
+}
+
+/// Cliente del tenant elegido con buscador (código + nombre, ñ/tildes).
+Future<({String id, String label})?> _dinElegirCliente(
+    BuildContext context, String tenantId) async {
+  final rows = await ps.db.getAll(
+    'SELECT id, codigo, nombre, activo FROM clientes '
+    'WHERE tenant_id = ? ORDER BY nombre',
+    [tenantId],
+  );
+  if (!context.mounted) return null;
+  final opciones = [
+    for (final r in rows)
+      OpcionSelector<String>(
+        valor: r['id'] as String,
+        nombre: [
+          if ((r['codigo'] as String?)?.isNotEmpty == true) r['codigo'],
+          r['nombre'],
+        ].join(' — '),
+        subtitulo: (r['activo'] as int? ?? 1) == 0 ? 'DESACTIVADO' : null,
+        textoBusqueda: r['codigo'] as String?,
+      ),
+  ];
+  final id = await elegirConBuscador<String>(context,
+      titulo: 'Cliente', opciones: opciones);
+  if (id == null) return null;
+  return (id: id, label: opciones.firstWhere((o) => o.valor == id).nombre);
+}
+
+class _PagoHistoricoCard extends ConsumerStatefulWidget {
+  const _PagoHistoricoCard({required this.tenantId, required this.actorLabel});
+
+  final String tenantId;
+  final String? actorLabel;
+
+  @override
+  ConsumerState<_PagoHistoricoCard> createState() => _PagoHistoricoCardState();
+}
+
+class _PagoHistoricoCardState extends ConsumerState<_PagoHistoricoCard> {
+  String? _clienteId, _clienteLabel;
+  String? _cuotaId, _cuotaLabel;
+  double _cuotaSaldo = 0;
+  String? _cobradorId, _cobradorLabel;
+  DateTime? _fecha;
+  String _metodo = 'efectivo';
+  final _montoCtrl = TextEditingController();
+  final _refCtrl = TextEditingController();
+  bool _isLoading = false;
+  String? _error;
+  Map<String, dynamic>? _preview;
+
+  @override
+  void dispose() {
+    _montoCtrl.dispose();
+    _refCtrl.dispose();
+    super.dispose();
+  }
+
+  void _reset({bool todo = false}) {
+    _preview = null;
+    _error = null;
+    if (todo) {
+      _clienteId = null;
+      _clienteLabel = null;
+      _cuotaId = null;
+      _cuotaLabel = null;
+      _cuotaSaldo = 0;
+      _cobradorId = null;
+      _cobradorLabel = null;
+      _fecha = null;
+      _metodo = 'efectivo';
+      _montoCtrl.clear();
+      _refCtrl.clear();
+    }
+  }
+
+  Future<void> _elegirCliente() async {
+    final sel = await _dinElegirCliente(context, widget.tenantId);
+    if (sel == null || !mounted) return;
+    setState(() {
+      _reset();
+      _clienteId = sel.id;
+      _clienteLabel = sel.label;
+      // Limpiar TODO lo derivado del cliente anterior: sin esto el monto
+      // prefillado de la cuota vieja quedaba huérfano en pantalla (audit F2).
+      _cuotaId = null;
+      _cuotaLabel = null;
+      _cuotaSaldo = 0;
+      _montoCtrl.clear();
+    });
+  }
+
+  Future<void> _elegirCuota() async {
+    if (_clienteId == null) return;
+    final rows = await ps.db.getAll(
+      'SELECT id, periodo, fecha_vencimiento, monto, '
+      'COALESCE(cargos_neto,0) AS cargos, monto_pagado, estado FROM cuotas '
+      "WHERE cliente_id = ? AND estado IN ('pendiente','parcial') "
+      'ORDER BY fecha_vencimiento',
+      [_clienteId],
+    );
+    if (!mounted) return;
+    final opciones = [
+      for (final r in rows)
+        OpcionSelector<String>(
+          valor: r['id'] as String,
+          nombre: 'Vence ${_dinFecha(DateTime.parse('${r['fecha_vencimiento']}'))}'
+              ' · saldo ${Fmt.cordobas((r['monto'] as num) + (r['cargos'] as num) - (r['monto_pagado'] as num))}',
+          subtitulo: '${r['estado']}',
+        ),
+    ];
+    if (opciones.isEmpty) {
+      setState(() {
+        _preview = null;
+        _error = 'El cliente no tiene cuotas pendientes.';
+      });
+      return;
+    }
+    final id = await elegirConBuscador<String>(context,
+        titulo: 'Cuota a cubrir', opciones: opciones);
+    if (id == null || !mounted) return;
+    final r = rows.firstWhere((x) => x['id'] == id);
+    final saldo = ((r['monto'] as num) + (r['cargos'] as num) -
+            (r['monto_pagado'] as num))
+        .toDouble();
+    setState(() {
+      _preview = null;
+      _error = null;
+      _cuotaId = id;
+      _cuotaLabel = opciones.firstWhere((o) => o.valor == id).nombre;
+      _cuotaSaldo = saldo;
+      // Prefill: lo normal es que el papel cubra la cuota completa.
+      _montoCtrl.text = saldo.toStringAsFixed(2);
+    });
+  }
+
+  Future<void> _elegirCobrador() async {
+    final rows = await ps.db.getAll(
+      'SELECT id, nombre, rol, prefijo_recibo FROM cobradores '
+      'WHERE tenant_id = ? AND activo = 1 ORDER BY nombre',
+      [widget.tenantId],
+    );
+    if (!mounted) return;
+    final opciones = [
+      for (final r in rows)
+        OpcionSelector<String>(
+          valor: r['id'] as String,
+          nombre: '${r['nombre']}',
+          subtitulo: (r['prefijo_recibo'] as String?)?.isNotEmpty == true
+              ? '${r['rol']} · serie ${r['prefijo_recibo']}'
+              : '${r['rol']} · SIN prefijo de recibo',
+        ),
+    ];
+    final id = await elegirConBuscador<String>(context,
+        titulo: 'Atribuir el cobro a', opciones: opciones);
+    if (id == null || !mounted) return;
+    setState(() {
+      _preview = null;
+      _error = null;
+      _cobradorId = id;
+      _cobradorLabel = opciones.firstWhere((o) => o.valor == id).nombre;
+    });
+  }
+
+  Future<void> _elegirFecha() async {
+    final hoy = DateTime.now();
+    final sel = await showDatePicker(
+      context: context,
+      initialDate: _fecha ?? hoy,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: hoy,
+      helpText: 'Fecha REAL del pago (la del comprobante)',
+    );
+    if (sel == null || !mounted) return;
+    setState(() {
+      _preview = null;
+      _error = null;
+      _fecha = sel;
+    });
+  }
+
+  Map<String, dynamic>? _params() {
+    // parseMonto (fix M8): la coma es separador DECIMAL (teclado es-NI), no de
+    // miles — "10,50" es 10.50, jamás 1050.
+    final monto = parseMonto(_montoCtrl.text);
+    if (_cuotaId == null || _cobradorId == null || _fecha == null ||
+        monto == null || _refCtrl.text.trim().isEmpty) {
+      return null;
+    }
+    return {
+      'p_tenant': widget.tenantId,
+      'p_cuota': _cuotaId,
+      'p_monto': monto,
+      'p_fecha': _dinFechaIso(_fecha!),
+      'p_metodo': _metodo,
+      'p_cobrador': _cobradorId,
+      'p_referencia': _refCtrl.text.trim(),
+    };
+  }
+
+  Future<void> _verPreview() async {
+    final params = _params();
+    if (params == null) {
+      setState(() => _error =
+          'Completá cliente, cuota, monto, fecha, a quién se atribuye y la referencia.');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      _preview = null;
+    });
+    try {
+      final res = await Supabase.instance.client
+          .rpc('super_admin_preview_pago_historico', params: params);
+      if (!mounted) return;
+      setState(() => _preview = Map<String, dynamic>.from(res as Map));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _dinMensajeError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _ejecutar() async {
+    final params = _params();
+    if (params == null) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final res = await Supabase.instance.client.rpc(
+          'super_admin_ejecutar_pago_historico',
+          params: {...params, 'p_actor_label': widget.actorLabel});
+      if (!mounted) return;
+      final map = Map<String, dynamic>.from(res as Map);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFF1B7A3D),
+        content: Text(map['mensaje']?.toString() ?? 'Pago registrado.'),
+        duration: const Duration(seconds: 5),
+      ));
+      setState(() => _reset(todo: true));
+      ref.invalidate(_dataOpsLogProvider);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _dinMensajeError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.receipt_long_outlined, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Registrar pago histórico',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+                'El cliente pagó fuera del CRM (recibo de papel, sistema '
+                'anterior) y acá figura debiendo. Registra el pago con su '
+                'fecha real, emite el recibo CRM y deja constancia del '
+                'comprobante. Sin sobrepasos: hasta el saldo de la cuota.',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            _SelectorField(
+                label: 'Cliente',
+                valor: _clienteLabel,
+                onTap: _isLoading ? null : _elegirCliente),
+            const SizedBox(height: 10),
+            _SelectorField(
+                label: 'Cuota a cubrir',
+                valor: _cuotaLabel,
+                onTap: _isLoading || _clienteId == null ? null : _elegirCuota),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _montoCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [montoInputFormatter],
+                  decoration: InputDecoration(
+                    labelText: 'Monto (C\$)',
+                    helperText: _cuotaId != null
+                        ? 'Saldo: ${Fmt.cordobas(_cuotaSaldo)}'
+                        : null,
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                  ),
+                  onChanged: (_) {
+                    if (_preview != null || _error != null) {
+                      setState(() {
+                        _preview = null;
+                        _error = null;
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _SelectorField(
+                    label: 'Fecha real del pago',
+                    valor: _fecha == null ? null : _dinFecha(_fecha!),
+                    onTap: _isLoading ? null : _elegirFecha),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  // Enum fijo (4 opciones const) → dropdown OK (regla #10).
+                  initialValue: _metodo,
+                  decoration: const InputDecoration(
+                      labelText: 'Método',
+                      isDense: true,
+                      border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'efectivo', child: Text('Efectivo')),
+                    DropdownMenuItem(
+                        value: 'transferencia', child: Text('Transferencia')),
+                    DropdownMenuItem(value: 'deposito', child: Text('Depósito')),
+                    DropdownMenuItem(value: 'tarjeta', child: Text('Tarjeta')),
+                  ],
+                  onChanged: _isLoading
+                      ? null
+                      : (v) => setState(() {
+                            _metodo = v ?? 'efectivo';
+                            _preview = null;
+                            _error = null;
+                          }),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _SelectorField(
+                    label: 'Atribuir a',
+                    valor: _cobradorLabel,
+                    onTap: _isLoading ? null : _elegirCobrador),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _refCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Referencia del comprobante (obligatoria)',
+                hintText: 'ej. Recibo físico N. 5367 del sistema anterior',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) {
+                if (_preview != null || _error != null) {
+                  setState(() {
+                    _preview = null;
+                    _error = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            if (_preview == null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonalIcon(
+                  onPressed: _isLoading ? null : _verPreview,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.search, size: 18),
+                  label: const Text('Ver qué pasa'),
+                ),
+              )
+            else ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(_preview!['label']?.toString() ?? '',
+                    style: const TextStyle(fontSize: 12.5, height: 1.4)),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                FilledButton.icon(
+                  onPressed: _isLoading ? null : _ejecutar,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check, size: 18),
+                  label: const Text('Confirmar y registrar'),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed:
+                      _isLoading ? null : () => setState(() => _preview = null),
+                  child: const Text('Cambiar'),
+                ),
+              ]),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              _ResultBanner(ok: false, icono: Icons.error_outline, texto: _error!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CuotaEstadoCard extends ConsumerStatefulWidget {
+  const _CuotaEstadoCard({required this.tenantId, required this.actorLabel});
+
+  final String tenantId;
+  final String? actorLabel;
+
+  @override
+  ConsumerState<_CuotaEstadoCard> createState() => _CuotaEstadoCardState();
+}
+
+class _CuotaEstadoCardState extends ConsumerState<_CuotaEstadoCard> {
+  String? _clienteId, _clienteLabel;
+  String? _cuotaId, _cuotaLabel, _cuotaEstado;
+  final _motivoCtrl = TextEditingController();
+  bool _isLoading = false;
+  String? _error;
+  Map<String, dynamic>? _preview;
+
+  String get _accion => _cuotaEstado == 'anulada' ? 'revivir' : 'anular';
+
+  @override
+  void dispose() {
+    _motivoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _elegirCliente() async {
+    final sel = await _dinElegirCliente(context, widget.tenantId);
+    if (sel == null || !mounted) return;
+    setState(() {
+      _clienteId = sel.id;
+      _clienteLabel = sel.label;
+      _cuotaId = null;
+      _cuotaLabel = null;
+      _cuotaEstado = null;
+      _preview = null;
+      _error = null;
+    });
+  }
+
+  Future<void> _elegirCuota() async {
+    if (_clienteId == null) return;
+    // Sin las 'pagada': no admiten ni anular (tienen plata) ni revivir.
+    final rows = await ps.db.getAll(
+      'SELECT id, fecha_vencimiento, monto, COALESCE(cargos_neto,0) AS cargos, '
+      'monto_pagado, estado, motivo_anulacion FROM cuotas '
+      "WHERE cliente_id = ? AND estado IN ('pendiente','parcial','anulada') "
+      'ORDER BY fecha_vencimiento DESC',
+      [_clienteId],
+    );
+    if (!mounted) return;
+    final opciones = [
+      for (final r in rows)
+        OpcionSelector<String>(
+          valor: r['id'] as String,
+          nombre: 'Vence ${_dinFecha(DateTime.parse('${r['fecha_vencimiento']}'))}'
+              ' · ${Fmt.cordobas((r['monto'] as num) + (r['cargos'] as num))}'
+              ' · ${(r['estado'] as String).toUpperCase()}',
+          subtitulo: r['estado'] == 'anulada'
+              ? 'Motivo: ${r['motivo_anulacion'] ?? '—'}'
+              : null,
+        ),
+    ];
+    if (opciones.isEmpty) {
+      setState(() {
+        _preview = null;
+        _error = 'El cliente no tiene cuotas anulables ni revivibles.';
+      });
+      return;
+    }
+    final id = await elegirConBuscador<String>(context,
+        titulo: 'Cuota', opciones: opciones);
+    if (id == null || !mounted) return;
+    final r = rows.firstWhere((x) => x['id'] == id);
+    setState(() {
+      _preview = null;
+      _error = null;
+      _cuotaId = id;
+      _cuotaLabel = opciones.firstWhere((o) => o.valor == id).nombre;
+      _cuotaEstado = r['estado'] as String;
+    });
+  }
+
+  Future<void> _llamar({required bool ejecutar}) async {
+    if (_cuotaId == null || _motivoCtrl.text.trim().length < 5) {
+      setState(() =>
+          _error = 'Elegí la cuota y escribí un motivo (mínimo 5 caracteres).');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      if (!ejecutar) _preview = null;
+    });
+    try {
+      final params = {
+        'p_tenant': widget.tenantId,
+        'p_cuota': _cuotaId,
+        'p_accion': _accion,
+        'p_motivo': _motivoCtrl.text.trim(),
+        if (ejecutar) 'p_actor_label': widget.actorLabel,
+      };
+      final res = await Supabase.instance.client.rpc(
+          ejecutar
+              ? 'super_admin_ejecutar_cuota_estado'
+              : 'super_admin_preview_cuota_estado',
+          params: params);
+      if (!mounted) return;
+      final map = Map<String, dynamic>.from(res as Map);
+      if (ejecutar) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: const Color(0xFF1B7A3D),
+          content: Text(map['mensaje']?.toString() ?? 'Listo.'),
+          duration: const Duration(seconds: 5),
+        ));
+        setState(() {
+          // El CLIENTE se conserva a propósito: el caso típico encadena
+          // varias cuotas del mismo cliente (limpieza/reactivación en serie).
+          _preview = null;
+          _cuotaId = null;
+          _cuotaLabel = null;
+          _cuotaEstado = null;
+          _motivoCtrl.clear();
+        });
+        ref.invalidate(_dataOpsLogProvider);
+      } else {
+        setState(() => _preview = map);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _dinMensajeError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final esRevivir = _cuotaEstado == 'anulada';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.history_outlined, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Revivir / anular una cuota',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+                'Una cuota quedó anulada y sí se debe (se revive), o al revés '
+                '(se anula, solo si no tiene pagos). El motivo queda en el '
+                'historial para siempre. La acción se elige sola según el '
+                'estado de la cuota.',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            _SelectorField(
+                label: 'Cliente',
+                valor: _clienteLabel,
+                onTap: _isLoading ? null : _elegirCliente),
+            const SizedBox(height: 10),
+            _SelectorField(
+                label: 'Cuota',
+                valor: _cuotaLabel,
+                onTap: _isLoading || _clienteId == null ? null : _elegirCuota),
+            if (_cuotaId != null) ...[
+              const SizedBox(height: 8),
+              Row(children: [
+                Icon(esRevivir ? Icons.restore : Icons.block,
+                    size: 16,
+                    color: esRevivir
+                        ? const Color(0xFF1D9E75)
+                        : scheme.error),
+                const SizedBox(width: 6),
+                Text(
+                  esRevivir
+                      ? 'Acción: REVIVIR (vuelve a estar cobrable)'
+                      : 'Acción: ANULAR (deja de deberse)',
+                  style: const TextStyle(
+                      fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+              ]),
+            ],
+            const SizedBox(height: 10),
+            TextField(
+              controller: _motivoCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (obligatorio, queda en el historial)',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) {
+                if (_preview != null || _error != null) {
+                  setState(() {
+                    _preview = null;
+                    _error = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            if (_preview == null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonalIcon(
+                  onPressed: _isLoading ? null : () => _llamar(ejecutar: false),
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.search, size: 18),
+                  label: const Text('Ver qué pasa'),
+                ),
+              )
+            else ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(_preview!['label']?.toString() ?? '',
+                    style: const TextStyle(fontSize: 12.5, height: 1.4)),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                FilledButton.icon(
+                  style: esRevivir
+                      ? null
+                      : FilledButton.styleFrom(
+                          backgroundColor: scheme.error,
+                          foregroundColor: scheme.onError),
+                  onPressed: _isLoading ? null : () => _llamar(ejecutar: true),
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check, size: 18),
+                  label: Text(esRevivir ? 'Revivir cuota' : 'Anular cuota'),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed:
+                      _isLoading ? null : () => setState(() => _preview = null),
+                  child: const Text('Cambiar'),
+                ),
+              ]),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              _ResultBanner(ok: false, icono: Icons.error_outline, texto: _error!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BajaDeudaCard extends ConsumerStatefulWidget {
+  const _BajaDeudaCard({required this.tenantId, required this.actorLabel});
+
+  final String tenantId;
+  final String? actorLabel;
+
+  @override
+  ConsumerState<_BajaDeudaCard> createState() => _BajaDeudaCardState();
+}
+
+class _BajaDeudaCardState extends ConsumerState<_BajaDeudaCard> {
+  String? _clienteId, _clienteLabel;
+  final _motivoCtrl = TextEditingController();
+  bool _isLoading = false;
+  String? _error;
+  Map<String, dynamic>? _preview;
+
+  @override
+  void dispose() {
+    _motivoCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _elegirCliente() async {
+    final sel = await _dinElegirCliente(context, widget.tenantId);
+    if (sel == null || !mounted) return;
+    setState(() {
+      _clienteId = sel.id;
+      _clienteLabel = sel.label;
+      _preview = null;
+      _error = null;
+    });
+  }
+
+  Future<void> _llamar({required bool ejecutar}) async {
+    if (_clienteId == null || _motivoCtrl.text.trim().length < 5) {
+      setState(() => _error =
+          'Elegí el cliente y escribí un motivo (mínimo 5 caracteres).');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      if (!ejecutar) _preview = null;
+    });
+    try {
+      final res = await Supabase.instance.client.rpc(
+          ejecutar
+              ? 'super_admin_ejecutar_baja_deuda'
+              : 'super_admin_preview_baja_deuda',
+          params: {
+            'p_tenant': widget.tenantId,
+            'p_cliente': _clienteId,
+            'p_motivo': _motivoCtrl.text.trim(),
+            if (ejecutar) 'p_actor_label': widget.actorLabel,
+          });
+      if (!mounted) return;
+      final map = Map<String, dynamic>.from(res as Map);
+      if (ejecutar) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: const Color(0xFF1B7A3D),
+          content: Text(map['mensaje']?.toString() ?? 'Baja registrada.'),
+          duration: const Duration(seconds: 5),
+        ));
+        setState(() {
+          _preview = null;
+          _clienteId = null;
+          _clienteLabel = null;
+          _motivoCtrl.clear();
+        });
+        ref.invalidate(_dataOpsLogProvider);
+      } else {
+        setState(() => _preview = map);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _dinMensajeError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final afectados = _preview == null
+        ? null
+        : (_preview!['afectados'] as num?)?.toInt() ?? 0;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.person_off_outlined, color: scheme.error),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Dar de baja deuda de un cliente que se va',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text(
+                'El cliente se retira debiendo y el ISP decide no cobrar. En '
+                'orden seguro: foto de la deuda en el contrato → anular las '
+                'cuotas pendientes → cancelar el contrato → desactivar el '
+                'cliente. Lo ya cobrado no se toca; si hay pagos a medias o '
+                'cobros en cuarentena, bloquea y te dice cómo resolverlo.',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            _SelectorField(
+                label: 'Cliente',
+                valor: _clienteLabel,
+                onTap: _isLoading ? null : _elegirCliente),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _motivoCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (obligatorio, queda en el historial)',
+                hintText: 'ej. Se mudó de zona, decisión del ISP 20/08',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) {
+                if (_preview != null || _error != null) {
+                  setState(() {
+                    _preview = null;
+                    _error = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            if (_preview == null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonalIcon(
+                  onPressed: _isLoading ? null : () => _llamar(ejecutar: false),
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.search, size: 18),
+                  label: const Text('Ver qué pasa'),
+                ),
+              )
+            else ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(_preview!['label']?.toString() ?? '',
+                    style: const TextStyle(fontSize: 12.5, height: 1.4)),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                if ((afectados ?? 0) > 0)
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                        backgroundColor: scheme.error,
+                        foregroundColor: scheme.onError),
+                    onPressed: _isLoading ? null : () => _llamar(ejecutar: true),
+                    icon: _isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.check, size: 18),
+                    label: const Text('Dar de baja'),
+                  ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed:
+                      _isLoading ? null : () => setState(() => _preview = null),
+                  child: const Text('Cambiar'),
+                ),
+              ]),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              _ResultBanner(ok: false, icono: Icons.error_outline, texto: _error!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

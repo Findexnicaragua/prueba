@@ -237,6 +237,46 @@ void main() {
         reason: 'un crédito aplicado NO se borra por quitarCargo');
   });
 
+  // ── LOS CARGOS QUE GENERA UNA OPERACIÓN (no una persona) ──────────────
+  //
+  // `cambio_plan` y `puente` se suman a `liquidacion` y `credito` en
+  // [kOrigenesNoQuitables] (2026-09-02). Los cuatro comparten la forma:
+  // borrar la fila deja la cuota corta SIN deshacer la operación que la creó.
+  //
+  // El de `cambio_plan` estaba desprotegido y lo encontró Rubén probando: la
+  // cuota volvía de 846,67 a 500 mientras el contrato y las cuotas futuras
+  // quedaban en el plan nuevo. El de `puente` tenía el mismo agujero desde
+  // antes.
+  for (final origen in const ['cambio_plan', 'puente']) {
+    test('quitarCargo NO borra un cargo origen=$origen — lo genera una '
+        'operación y borrarlo la deshace a medias', () async {
+      final cuotaId = await seedCuota(monto: 500);
+      final cargoId = uuid.v4();
+      await db.execute(
+        'INSERT INTO cargos_extra (id, tenant_id, cuota_id, cobrador_id, '
+        'aplicado_por, tipo, monto, origen, descripcion, ocurrido_en) '
+        "VALUES (?, ?, ?, ?, ?, 'otro', 346.67, ?, 'Diferencia', ?)",
+        [cargoId, tenantId, cuotaId, cobradorId, adminId, origen, _now()],
+      );
+      // El neto de la cuota ya lo subió el mirror local.
+      final antes = (await db.getAll(
+              'SELECT cargos_neto FROM cuotas WHERE id = ?', [cuotaId]))
+          .first;
+
+      await repo.quitarCargo(cargoId: cargoId, aplicadoPorId: adminId);
+
+      final rows = await db
+          .getAll('SELECT id FROM cargos_extra WHERE id = ?', [cargoId]);
+      expect(rows, hasLength(1),
+          reason: 'un cargo de $origen NO se borra por quitarCargo');
+      // Y la cuota no se movió: el no-op tiene que ser completo, no dejar el
+      // cargo pero bajar el neto.
+      final despues = (await db.getAll(
+              'SELECT cargos_neto FROM cuotas WHERE id = ?', [cuotaId]))
+          .first;
+      expect(despues['cargos_neto'], antes['cargos_neto']);
+    });
+  }
   // ── PROMOS (rediseño 2026-06-11): mismo riel que los ajustes, con
   // origen='promo'. Blindan que la etiqueta viaja a la DB, que el sheet
   // las lista junto a los ajustes y que quitar también las cubre. ──
@@ -359,6 +399,80 @@ void main() {
     cuota = await getCuota(cuotaId);
     expect(num2(cuota['cargos_neto']), 0);
     expect(await repo.cargosDeCuota(cuotaId), isEmpty);
+  });
+
+  test('quitarCargo NO deja la cuota sobrepagada: si el cargo ya se cobró, '
+      'se bloquea con mensaje (INV4)', () async {
+    // El caso real que lo motivó (audit 2026-08-13): cuota de 480 + reconexión
+    // de 250 = 730. Se cobran los 730. Después alguien quita la reconexión
+    // porque no correspondía —> la cuota vuelve a costar 480 con 730 aplicados.
+    // El cliente queda con 250 a favor que el sistema no registra en ningún
+    // lado, y `invariantes_dinero.sql` empieza a reportar INV4.
+    final cuotaId = await seedCuota(monto: 480);
+    await repo.aplicarCargo(
+      tenantId: tenantId,
+      cuotaId: cuotaId,
+      tipo: 'reconexion',
+      monto: 250,
+      aplicadoPorId: adminId,
+    );
+    final cargos = await repo.cargosDeCuota(cuotaId);
+    final cargoId = cargos.first['id'] as String;
+
+    // El cobro de los 730 (lo que dejaría el trigger del server).
+    await db.execute(
+      "UPDATE cuotas SET monto_pagado = 730, estado = 'pagada' WHERE id = ?",
+      [cuotaId],
+    );
+
+    await expectLater(
+      repo.quitarCargo(cargoId: cargoId, aplicadoPorId: adminId),
+      throwsA(isA<Exception>()),
+      reason: 'quitar el cargo dejaría 730 pagados sobre una cuota de 480',
+    );
+
+    // Y no muta NADA: el guard va antes del DELETE, dentro de la transacción.
+    final cuota = await getCuota(cuotaId);
+    expect(num2(cuota['cargos_neto']), 250);
+    expect(num2(cuota['monto_pagado']), 730);
+    expect(await repo.cargosDeCuota(cuotaId), hasLength(1));
+
+    // Contraprueba: con el pago anulado (monto_pagado de vuelta a 0) el mismo
+    // quitarCargo pasa. El guard bloquea el sobrepago, no el quitar cargos.
+    await db.execute(
+      "UPDATE cuotas SET monto_pagado = 0, estado = 'pendiente' WHERE id = ?",
+      [cuotaId],
+    );
+    await repo.quitarCargo(cargoId: cargoId, aplicadoPorId: adminId);
+    expect(num2((await getCuota(cuotaId))['cargos_neto']), 0);
+  });
+
+  test('quitarCargo sí deja quitar un DESCUENTO de una cuota cobrada: sube el '
+      'total, nunca puede sobrepagar', () async {
+    // El guard mira el total PROYECTADO, no el estado. Quitar un descuento
+    // SUBE lo que cuesta la cuota, así que jamás genera sobrepago — y
+    // bloquearlo por "está pagada" sería un falso positivo.
+    final cuotaId = await seedCuota(monto: 800);
+    await repo.aplicarAjuste(
+      tenantId: tenantId,
+      cuotaId: cuotaId,
+      esPorcentaje: false,
+      valor: 300,
+      motivo: 'Descuento de prueba',
+      aplicadoPorId: adminId,
+    );
+    final cargoId = (await repo.cargosDeCuota(cuotaId)).first['id'] as String;
+    // Se cobran los 500 que quedaban.
+    await db.execute(
+      "UPDATE cuotas SET monto_pagado = 500, estado = 'pagada' WHERE id = ?",
+      [cuotaId],
+    );
+
+    await repo.quitarCargo(cargoId: cargoId, aplicadoPorId: adminId);
+    final cuota = await getCuota(cuotaId);
+    expect(num2(cuota['cargos_neto']), 0);
+    expect(num2(cuota['monto_pagado']), 500,
+        reason: 'la cuota vuelve a costar 800 y quedan 300 por cobrar');
   });
 
   test('aplicarCargo valida: tipo inválido, monto 0, otro sin descripción, '

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/providers/cobrador_provider.dart' show tenantIdProvider;
 import '../../../data/utils/busqueda_cliente.dart' show coincideTokens;
 import '../../../data/utils/errores.dart';
 import '../../../powersync/db.dart' as ps;
@@ -15,7 +17,7 @@ import '../../../powersync/db.dart' as ps;
 /// asignados HOY los clientes en juego — ej. [(Cobrador A, 95), (Cobrador B, 5),
 /// (Sin cobrador, 2)]. Se muestra arriba del selector. La pantalla Rutas lo
 /// pasa; el multi-select por cliente no.
-class SeleccionarCobradorDialog extends StatefulWidget {
+class SeleccionarCobradorDialog extends ConsumerStatefulWidget {
   const SeleccionarCobradorDialog({
     super.key,
     this.permitirDesasignar = true,
@@ -26,12 +28,14 @@ class SeleccionarCobradorDialog extends StatefulWidget {
   final List<({String etiqueta, int cantidad})>? distribucionActual;
 
   @override
-  State<SeleccionarCobradorDialog> createState() =>
+  ConsumerState<SeleccionarCobradorDialog> createState() =>
       _SeleccionarCobradorDialogState();
 }
 
-class _SeleccionarCobradorDialogState extends State<SeleccionarCobradorDialog> {
-  /// Stream cacheado — query fija, no depende de props.
+class _SeleccionarCobradorDialogState
+    extends ConsumerState<SeleccionarCobradorDialog> {
+  /// Stream cacheado — query fija salvo por el tenant, que no cambia mientras
+  /// el diálogo está abierto.
   late final Stream<List<Map<String, dynamic>>> _cobradoresStream;
   String _busqueda = '';
 
@@ -41,9 +45,13 @@ class _SeleccionarCobradorDialogState extends State<SeleccionarCobradorDialog> {
     _cobradoresStream = ps.db.watch(
       '''
       SELECT id, nombre, prefijo_recibo FROM cobradores
-       WHERE activo = 1 AND rol = 'cobrador'
+       WHERE activo = 1 AND rol = 'cobrador' AND tenant_id = ?
        ORDER BY nombre
       ''',
+      // Filtro de empresa: en el device del super_admin puede quedar el
+      // residuo de la empresa impersonada anterior hasta que cierra el sync,
+      // y asignar un cobrador ajeno a un cliente sería un cruce real.
+      parameters: [ref.read(tenantIdProvider)],
     );
   }
 

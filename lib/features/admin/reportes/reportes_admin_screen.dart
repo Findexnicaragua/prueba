@@ -24,6 +24,7 @@ import '../../../data/utils/formatters.dart';
 import '../../../features/shared/widgets/rango_fechas_dialog.dart';
 import '../../../powersync/db.dart' as ps;
 import 'arqueo_calculo.dart';
+import 'arqueo_query.dart';
 import 'descarga_archivo.dart';
 import 'excel/reporte_excel.dart';
 import 'pdf/reporte_anulaciones_pdf.dart';
@@ -352,15 +353,18 @@ class _CobradoresReporteCard extends ConsumerWidget {
 /// se pierde histórico). Si quedan TODOS marcados guarda `null` (= sin filtro).
 Future<void> editarFiltroCobradores(BuildContext context, WidgetRef ref) async {
   final rango = ref.read(reporteRangoProvider);
+  // Filtro de empresa (2026-08-20): el device del super_admin baja tambien su
+  // propia fila (tenant System) y el residuo de la empresa impersonada anterior.
   final usuarios = await ps.db.getAll('''
     SELECT cb.id, cb.nombre, cb.rol, cb.activo
       FROM cobradores cb
-     WHERE (cb.activo = 1 AND cb.rol IN ('cobrador','admin','admin_cobranza'))
+     WHERE cb.tenant_id = ?
+       AND ((cb.activo = 1 AND cb.rol IN ('cobrador','admin','admin_cobranza'))
         OR EXISTS (SELECT 1 FROM pagos p
                     WHERE p.cobrador_id = cb.id AND COALESCE(p.anulado, 0) = 0 AND COALESCE(p.en_revision, 0) = 0
-                      AND date(p.fecha_pago) BETWEEN ? AND ?)
+                      AND date(p.fecha_pago) BETWEEN ? AND ?))
      ORDER BY cb.nombre
-  ''', [rango.desdeSql, rango.hastaSql]);
+  ''', [ref.read(tenantIdProvider), rango.desdeSql, rango.hastaSql]);
   if (!context.mounted) return;
   if (usuarios.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -438,52 +442,6 @@ Future<void> editarFiltroCobradores(BuildContext context, WidgetRef ref) async {
   final esTodos = result.length == usuarios.length;
   ref.read(reporteCobradoresProvider.notifier).state = esTodos ? null : result;
 }
-
-/// Query del arqueo / cierre por cobrador. Una fila por cobrador con los
-/// efectivos separados por moneda (US$/C$, montos en `monto_original`), el
-/// vuelto total, los electrónicos por método, y el recaudado contable
-/// (`monto_cordobas`). Params: [desde, hasta] (date-only, inclusive).
-/// SQLite-válida: usa SUM(CASE WHEN…), NO FILTER. Compartida por PDF y Excel.
-/// [filtroCbWhere] = '' (todos) o 'WHERE cb.id IN (?,?,…)' del filtro de
-/// cobradores; sus params van DESPUÉS de los 4 de fechas (orden posicional).
-String _arqueoSql(String filtroCbWhere) => '''
-  SELECT cb.nombre AS cobrador_nombre,
-         COUNT(p.id) AS total_cobros,
-         COALESCE(SUM(CASE WHEN p.metodo='efectivo' AND p.moneda='USD' THEN p.monto_original ELSE 0 END),0) AS efectivo_usd,
-         SUM(CASE WHEN p.metodo='efectivo' AND p.moneda='USD' THEN 1 ELSE 0 END) AS efectivo_usd_qty,
-         -- Equivalente en córdobas del efectivo USD, a la tasa de CADA cobro
-         -- (monto_cordobas + vuelto_cordobas = monto_original × tasa_conversion,
-         -- invariante #3). NO usar la tasa de hoy: rompería la reconciliación.
-         COALESCE(SUM(CASE WHEN p.metodo='efectivo' AND p.moneda='USD' THEN COALESCE(p.monto_cordobas,0) + COALESCE(p.vuelto_cordobas,0) ELSE 0 END),0) AS efectivo_usd_equiv,
-         COALESCE(SUM(CASE WHEN p.metodo='efectivo' AND p.moneda='NIO' THEN p.monto_original ELSE 0 END),0) AS efectivo_nio,
-         SUM(CASE WHEN p.metodo='efectivo' AND p.moneda='NIO' THEN 1 ELSE 0 END) AS efectivo_nio_qty,
-         COALESCE(SUM(CASE WHEN p.metodo='efectivo' THEN p.vuelto_cordobas ELSE 0 END),0) AS efectivo_vuelto,
-         COALESCE(SUM(CASE WHEN p.metodo='efectivo' THEN p.monto_cordobas ELSE 0 END),0) AS efectivo_ingreso,
-         COALESCE(SUM(CASE WHEN p.metodo='transferencia' THEN p.monto_cordobas ELSE 0 END),0) AS transferencia,
-         SUM(CASE WHEN p.metodo='transferencia' THEN 1 ELSE 0 END) AS transferencia_qty,
-         COALESCE(SUM(CASE WHEN p.metodo='deposito' THEN p.monto_cordobas ELSE 0 END),0) AS deposito,
-         SUM(CASE WHEN p.metodo='deposito' THEN 1 ELSE 0 END) AS deposito_qty,
-         COALESCE(SUM(CASE WHEN p.metodo='tarjeta' THEN p.monto_cordobas ELSE 0 END),0) AS tarjeta,
-         SUM(CASE WHEN p.metodo='tarjeta' THEN 1 ELSE 0 END) AS tarjeta_qty,
-         COALESCE(SUM(p.monto_cordobas),0) AS ingreso_total,
-         -- Devoluciones de saldo a favor pagadas en efectivo (0127): salen de la
-         -- caja de ESTE cobrador en el rango (bucket por fecha_devolucion LOCAL).
-         -- Tabla derivada con LEFT JOIN (no subquery correlacionada) → un cobrador
-         -- que SOLO hizo devoluciones (sin pagos en el rango) igual aparece.
-         COALESCE(d.dev, 0) AS devoluciones
-    FROM cobradores cb
-    LEFT JOIN pagos p ON p.cobrador_id = cb.id AND COALESCE(p.anulado, 0) = 0 AND COALESCE(p.en_revision, 0) = 0
-                     AND date(p.fecha_pago) BETWEEN ? AND ?
-    LEFT JOIN (SELECT cobrador_id, SUM(monto) AS dev
-                 FROM saldos_favor
-                WHERE tipo = 'devuelto'
-                  AND date(fecha_devolucion) BETWEEN ? AND ?
-                GROUP BY cobrador_id) d ON d.cobrador_id = cb.id
-   $filtroCbWhere
-   GROUP BY cb.id, cb.nombre, d.dev
-  HAVING COUNT(p.id) > 0 OR COALESCE(d.dev, 0) > 0
-   ORDER BY ingreso_total DESC
-''';
 
 /// Descriptor de un tipo de reporte para el generador unificado (reforma).
 /// [soloDetallado] = aparece solo con el toggle de reportes detallados ON.
@@ -752,7 +710,12 @@ class _GenerarReporteCard extends ConsumerWidget {
             JOIN clientes c ON c.id = cu.cliente_id
        LEFT JOIN comunidades co ON co.id = c.comunidad_id
            WHERE cu.estado IN ('pendiente','parcial')
-             AND COALESCE((SELECT ct.estado FROM contratos ct WHERE ct.id = cu.contrato_id), 'activo') != 'suspendido'
+             -- Los SUSPENDIDOS entran (2026-08-26): se les corto el servicio pero se
+             -- les sigue cobrando, asi que un moroso suspendido es un moroso. Este
+             -- universo tiene que dar IGUAL que "En mora" del dashboard.
+             -- Los cancelados no se filtran porque no tienen deuda viva por
+             -- construccion (0259/0261); si alguna vez aparece una, que se VEA aca
+             -- en vez de desaparecer en silencio.
              AND date(cu.fecha_vencimiento, '+' || ? || ' days')
                  < date('now', '-6 hours')
            GROUP BY c.id, c.nombre, co.nombre
@@ -843,8 +806,8 @@ class _GenerarReporteCard extends ConsumerWidget {
       } else if (tipo == 'fiscal') {
         await _generarFiscal(context, empresaNombre, rango, logoBytes, cobradores);
       } else if (tipo == 'eficiencia') {
-        await _generarEficiencia(
-            context, empresaNombre, rango, logoBytes, cobradores);
+        await _generarEficiencia(context, empresaNombre, rango, logoBytes,
+            cobradores, ref.read(tenantIdProvider));
       } else if (tipo == 'inactivos') {
         await _generarInactivos(context, empresaNombre, logoBytes);
       } else if (tipo == 'anulaciones') {
@@ -854,7 +817,7 @@ class _GenerarReporteCard extends ConsumerWidget {
         final whereCb = cobradores == null || cobradores.isEmpty
             ? ''
             : 'WHERE cb.id IN (${List.filled(cobradores.length, '?').join(',')})';
-        final rows = await ps.db.getAll(_arqueoSql(whereCb), [
+        final rows = await ps.db.getAll(arqueoSql(whereCb), [
           rango.desdeSql, rango.hastaSql,
           rango.desdeSql, rango.hastaSql,
           ...?cobradores,
@@ -998,7 +961,8 @@ class _GenerarReporteCard extends ConsumerWidget {
   // ---------------------------------------------------------------------------
 
   Future<void> _generarEficiencia(BuildContext context, String empresaNombre,
-      RangoReporte rango, Uint8List? logoBytes, Set<String>? cobradores) async {
+      RangoReporte rango, Uint8List? logoBytes, Set<String>? cobradores,
+      String? tenantId) async {
     final fc = filtroCobradorSql(cobradores, columna: 'cb.id');
     final rows = await ps.db.getAll('''
       SELECT cb.nombre AS cobrador_nombre,
@@ -1026,11 +990,12 @@ class _GenerarReporteCard extends ConsumerWidget {
                       AND cu.estado IN ('pendiente','parcial','pagada')
                       AND date(cu.fecha_vencimiento) BETWEEN ? AND ?
    LEFT JOIN pagos p ON p.cuota_id = cu.id AND COALESCE(p.anulado, 0) = 0 AND COALESCE(p.en_revision, 0) = 0
-       WHERE cb.rol = 'cobrador' AND cb.activo = 1${fc.sql}
+       WHERE cb.rol = 'cobrador' AND cb.activo = 1
+         AND cb.tenant_id = ?${fc.sql}
        GROUP BY cb.id, cb.nombre
        ORDER BY monto_total DESC
     ''', [rango.desdeSql, rango.hastaSql, rango.desdeSql, rango.hastaSql,
-          ...fc.params]);
+          tenantId, ...fc.params]);
 
     final now = DateTime.now();
     final doc = await buildReporteEficiencia(
@@ -1214,7 +1179,8 @@ class _GenerarReporteCard extends ConsumerWidget {
         return;
       }
 
-      final datos = await _extraerDatos(tipo, rango, cobradores);
+      final datos = await _extraerDatos(
+          tipo, rango, cobradores, ref.read(tenantIdProvider));
       final ruta = await descargarExcel(
         fileName: '${tipo}_${now.year}_${mm}_$dd.xlsx',
         hojaNombre: _hojaNombre(tipo),
@@ -1291,7 +1257,8 @@ class _GenerarReporteCard extends ConsumerWidget {
   /// USD a la tasa histórica de cada cobro (`efectivo_usd_equiv`), no necesita
   /// la tasa actual.
   Future<({List<String> headers, List<List<Object?>> filas})> _extraerDatos(
-      String tipo, RangoReporte rango, Set<String>? cobradores) async {
+      String tipo, RangoReporte rango, Set<String>? cobradores,
+      String? tenantId) async {
     // Filtro de cobradores (reforma): por `p.cobrador_id` salvo los reportes
     // que agrupan por cobrador (eficiencia/arqueo → `cb.id`, ver cada case).
     final fc = filtroCobradorSql(cobradores);
@@ -1353,7 +1320,12 @@ class _GenerarReporteCard extends ConsumerWidget {
             JOIN clientes c ON c.id = cu.cliente_id
        LEFT JOIN comunidades co ON co.id = c.comunidad_id
            WHERE cu.estado IN ('pendiente','parcial')
-             AND COALESCE((SELECT ct.estado FROM contratos ct WHERE ct.id = cu.contrato_id), 'activo') != 'suspendido'
+             -- Los SUSPENDIDOS entran (2026-08-26): se les corto el servicio pero se
+             -- les sigue cobrando, asi que un moroso suspendido es un moroso. Este
+             -- universo tiene que dar IGUAL que "En mora" del dashboard.
+             -- Los cancelados no se filtran porque no tienen deuda viva por
+             -- construccion (0259/0261); si alguna vez aparece una, que se VEA aca
+             -- en vez de desaparecer en silencio.
              AND date(cu.fecha_vencimiento, '+' || ? || ' days')
                  < date('now', '-6 hours')
            GROUP BY c.id, c.nombre, co.nombre
@@ -1555,11 +1527,12 @@ class _GenerarReporteCard extends ConsumerWidget {
                           AND cu.estado IN ('pendiente','parcial','pagada')
                           AND date(cu.fecha_vencimiento) BETWEEN ? AND ?
        LEFT JOIN pagos p ON p.cuota_id = cu.id AND COALESCE(p.anulado, 0) = 0 AND COALESCE(p.en_revision, 0) = 0
-           WHERE cb.rol = 'cobrador' AND cb.activo = 1${fcCb.sql}
+           WHERE cb.rol = 'cobrador' AND cb.activo = 1
+             AND cb.tenant_id = ?${fcCb.sql}
            GROUP BY cb.id, cb.nombre
            ORDER BY monto_total DESC
         ''', [rango.desdeSql, rango.hastaSql, rango.desdeSql, rango.hastaSql,
-              ...fcCb.params]);
+              tenantId, ...fcCb.params]);
         return (
           headers: ['Cobrador', 'Cobros realizados', 'Clientes cobrados',
                     'Total recaudado (C\$)', 'Cuotas asignadas', '% de éxito'],
@@ -1653,7 +1626,7 @@ class _GenerarReporteCard extends ConsumerWidget {
         final whereCb = cobradores == null || cobradores.isEmpty
             ? ''
             : 'WHERE cb.id IN (${List.filled(cobradores.length, '?').join(',')})';
-        final rows = await ps.db.getAll(_arqueoSql(whereCb), [
+        final rows = await ps.db.getAll(arqueoSql(whereCb), [
           rango.desdeSql, rango.hastaSql, // LEFT JOIN pagos
           rango.desdeSql, rango.hastaSql, // tabla derivada devoluciones
           ...?cobradores,
@@ -1802,19 +1775,27 @@ class _RecaudacionMensualCardState extends State<_RecaudacionMensualCard> {
   }
 }
 
-class _CobradoresMesCard extends StatefulWidget {
+class _CobradoresMesCard extends ConsumerStatefulWidget {
   const _CobradoresMesCard();
 
   @override
-  State<_CobradoresMesCard> createState() => _CobradoresMesCardState();
+  ConsumerState<_CobradoresMesCard> createState() => _CobradoresMesCardState();
 }
 
-class _CobradoresMesCardState extends State<_CobradoresMesCard> {
-  late final Stream<List<Map<String, dynamic>>> _cobradoresMesStream;
+class _CobradoresMesCardState extends ConsumerState<_CobradoresMesCard> {
+  late Stream<List<Map<String, dynamic>>> _cobradoresMesStream;
+  String? _tenantDelStream;
 
   @override
   void initState() {
     super.initState();
+    _rehacerStream();
+  }
+
+  /// El tenant llega por stream: con ref.read congelado en initState la tarjeta
+  /// saldría vacía en el primer frame y no seguiría el cambio de empresa.
+  void _rehacerStream() {
+    _tenantDelStream = ref.read(tenantIdProvider);
     _cobradoresMesStream = ps.db.watch(
       '''
       SELECT co.id, co.nombre, co.prefijo_recibo,
@@ -1830,15 +1811,18 @@ class _CobradoresMesCardState extends State<_CobradoresMesCard> {
        -- rol='cobrador' esta tarjeta ocultaba ~80% de la recaudación y no
        -- cerraba con el arqueo. (La "Eficiencia por cobrador" SÍ filtra por
        -- rol, y está bien: mide cartera ASIGNADA, no lo recaudado.)
-       WHERE co.activo = 1
+       WHERE co.activo = 1 AND co.tenant_id = ?
        GROUP BY co.id, co.nombre, co.prefijo_recibo
        ORDER BY total DESC
       ''',
+      parameters: [_tenantDelStream],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final tenantId = ref.watch(tenantIdProvider);
+    if (tenantId != _tenantDelStream) _rehacerStream();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -1923,7 +1907,12 @@ class _MoraPorComunidadCardState extends State<_MoraPorComunidadCard> {
         JOIN comunidades co ON co.id = c.comunidad_id
         JOIN municipios m ON m.id = co.municipio_id
        WHERE cu.estado IN ('pendiente','parcial')
-         AND COALESCE((SELECT ct.estado FROM contratos ct WHERE ct.id = cu.contrato_id), 'activo') != 'suspendido'
+         -- Los SUSPENDIDOS entran (2026-08-26): se les corto el servicio pero se
+         -- les sigue cobrando, asi que un moroso suspendido es un moroso. Este
+         -- universo tiene que dar IGUAL que "En mora" del dashboard.
+         -- Los cancelados no se filtran porque no tienen deuda viva por
+         -- construccion (0259/0261); si alguna vez aparece una, que se VEA aca
+         -- en vez de desaparecer en silencio.
          AND date(cu.fecha_vencimiento, '+' || ? || ' days') < date('now', '-6 hours')
        GROUP BY co.id, co.nombre, m.nombre
        ORDER BY adeudo DESC

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:powersync/powersync.dart';
+import 'package:sqlite_async/sqlite_async.dart' show SqliteWriteContext;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -8,6 +9,7 @@ import '../models/pago.dart';
 import '../services/correlativo_store.dart';
 import '../utils/colchon_indefinido.dart';
 import '../utils/cuota_estado.dart';
+import '../utils/formatters.dart';
 import '../utils/op_log.dart';
 import '../utils/prorrateo.dart';
 
@@ -60,6 +62,85 @@ class CobroFueraDeOrdenException implements Exception {
       : 'Cobrá primero la cuota más antigua pendiente de este contrato '
           '(período $periodo) antes de pagar una más nueva.';
 }
+
+/// Rótulo del mes de servicio que se CONGELA en el recibo (0262).
+///
+/// Espeja EXACTAMENTE lo que los tres renderers imprimirían hoy
+/// (`recibo_ticket` / `recibo_pdf` / `recibo_texto_escpos`, rama `servicio`):
+/// una cuota sin plan es "manual" y esos renderers **omiten la fila Período**,
+/// así que acá devuelve null — congelar algo que no se imprime sería inventar.
+/// `null` es siempre seguro: el renderer cae a calcularlo, igual que antes.
+///
+/// Por qué existe: `recibos` no guardaba el mes y lo recalculaba en cada
+/// impresión, así que una reimpresión posterior a un cambio de regla
+/// contradecía el papel del cliente. Detalle en `docs/reglas/mes-servicio.md`.
+/// 🔴 NUNCA puede lanzar: corre DENTRO del `writeTransaction` del cobro, así
+/// que una excepción acá le impide COBRAR al cobrador. El rótulo es cosmético
+/// y la plata no lo es — ante cualquier duda devuelve null, que hace que el
+/// renderer lo calcule igual que antes de 0262. Concretamente: `periodo` puede
+/// no venir en formato parseable (los tests lo siembran como 'YYYY-MM') y
+/// `DateTime.parse` tira `FormatException`.
+/// Los rótulos que el recibo CONGELA al emitirse: el mes (0262) y el plan
+/// (0268). Los dos salen de la misma consulta porque nacen del mismo JOIN.
+///
+/// Por qué se congelan y no se recalculan: los dos son datos de PRESENTACIÓN
+/// que dependen de cosas que cambian después. El mes depende de la regla del
+/// rótulo, que cambió 3+ veces en 2026. El plan depende de `contrato.plan_id`,
+/// que el cambio de plan (R22) reescribe — 37 veces en Mairena en diez días.
+/// Sin congelar, una reimpresión contradice al papel que el cliente guardó.
+typedef _LabelsRecibo = ({String? periodo, String? plan});
+
+Future<_LabelsRecibo> _labelsCongelados(
+    SqliteWriteContext tx, String cuotaId) async {
+  try {
+    final rows = await tx.getAll(
+      '''
+      SELECT cu.periodo, ct.dia_pago, pl.nombre AS plan_nombre
+        FROM cuotas cu
+   LEFT JOIN contratos ct ON ct.id = cu.contrato_id
+   LEFT JOIN planes pl    ON pl.id = ct.plan_id
+       WHERE cu.id = ?
+      ''',
+      [cuotaId],
+    );
+    if (rows.isEmpty) return (periodo: null, plan: null);
+    final r = rows.first;
+    // esManual: mismo criterio que los renderers (`plan_nombre == null`). Un
+    // cobro puntual no tiene plan ni período que congelar.
+    final plan = r['plan_nombre'] as String?;
+    if (plan == null) return (periodo: null, plan: null);
+    final diaPago = (r['dia_pago'] as num?)?.toInt();
+    final periodoRaw = r['periodo'] as String?;
+    if (diaPago == null || periodoRaw == null) return (periodo: null, plan: plan);
+    final periodo = DateTime.tryParse(periodoRaw);
+    if (periodo == null) return (periodo: null, plan: plan);
+    final label = Fmt.periodoRecibo(diaPago, periodo);
+    return (
+      periodo: label.isEmpty
+          ? null
+          : label[0].toUpperCase() + label.substring(1),
+      plan: plan,
+    );
+  } catch (_) {
+    return (periodo: null, plan: null);
+  }
+}
+
+/// El DIA de un `fecha_pago`, para `pagos.fecha_cobro`.
+///
+/// `fecha_pago` se escribe como `DateTime.toIso8601String()` — hora de pared
+/// sin zona, a proposito (ver ARQUITECTURA §3.5) —, asi que el dia son los
+/// primeros 10 caracteres: `2026-09-03T17:41:48.640780` → `2026-09-03`.
+///
+/// **Por que lo escribe el cliente si el server tiene un trigger** (0273): los
+/// triggers de Postgres NO corren en el SQLite del dispositivo. Un cobro hecho
+/// offline se quedaria sin dia hasta volver del server, y en esa ventana
+/// desapareceria del Resumen — que filtra el ciclo justamente por esta columna.
+/// Es la regla de denormalizacion del checklist (#6). El server la pisa igual
+/// con el valor derivado: server gana.
+String _diaDe(String isoFechaPago) => isoFechaPago.length >= 10
+    ? isoFechaPago.substring(0, 10)
+    : isoFechaPago;
 
 class PagosRepo {
   /// [db] permite inyectar una `PowerSyncDatabase` para tests. En producción
@@ -277,8 +358,9 @@ class PagosRepo {
           id, tenant_id, cuota_id, cobrador_id,
           monto_cordobas, vuelto_cordobas, moneda, monto_original, tasa_conversion,
           metodo, referencia, foto_comprobante_path,
-          lat, lng, notas, fecha_pago, anulado, client_local_id, ocurrido_en
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+          lat, lng, notas, fecha_pago, fecha_cobro, anulado, client_local_id,
+          ocurrido_en
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
         ''',
         [
           pagoId,
@@ -297,18 +379,25 @@ class PagosRepo {
           lng,
           notas,
           now,
+          _diaDe(now),
           clientLocalIdPago,
           ocurridoEn,
         ],
       );
 
+      // 0262 + 0268: se congelan el mes Y el plan que este recibo imprime, para
+      // que una reimpresión futura no lo contradiga si la regla del rótulo
+      // cambia (mes) o si el contrato cambia de plan (plan).
+      final labels = await _labelsCongelados(tx, cuotaId);
+      final periodoLabel = labels.periodo;
       await tx.execute(
         '''
         INSERT INTO recibos (
           id, tenant_id, pago_id, cobrador_id,
           prefijo, correlativo, numero_completo,
-          reimpresiones, anulado, created_at, client_local_id, ocurrido_en
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+          reimpresiones, anulado, created_at, client_local_id, ocurrido_en,
+          periodo_label, plan_label
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)
         ''',
         [
           reciboId,
@@ -321,6 +410,8 @@ class PagosRepo {
           now,
           clientLocalIdRecibo,
           ocurridoEn,
+          periodoLabel,
+          labels.plan,
         ],
       );
 
@@ -571,31 +662,37 @@ class PagosRepo {
             id, tenant_id, cuota_id, cobrador_id,
             monto_cordobas, vuelto_cordobas, moneda, monto_original, tasa_conversion,
             metodo, referencia, foto_comprobante_path,
-            lat, lng, notas, fecha_pago, anulado, grupo_cobro, client_local_id,
-            ocurrido_en
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+            lat, lng, notas, fecha_pago, fecha_cobro, anulado, grupo_cobro,
+            client_local_id, ocurrido_en
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
           ''',
           [
             pagoId, tenantId, cuotaIds[i], cobradorId,
             montosCordobas[i], vueltoPago, moneda.value, montosOriginal[i], tasaConversion,
             metodo.value, referencia, fotoComprobantePath,
-            lat, lng, notas, now, grupoCobro, _uuid.v4(),
+            lat, lng, notas, now, _diaDe(now), grupoCobro, _uuid.v4(),
             ocurridoEn,
           ],
         );
 
+        // 0262 + 0268: un recibo por cuota, así que cada uno congela SU propio
+        // mes y SU propio plan. En un cobro múltiple que cruza un cambio de
+        // plan, dos cuotas del mismo contrato pueden legítimamente imprimir
+        // planes distintos: cada recibo dice con qué plan se facturó SU mes.
+        final labels = await _labelsCongelados(tx, cuotaIds[i]);
         await tx.execute(
           '''
           INSERT INTO recibos (
             id, tenant_id, pago_id, cobrador_id,
             prefijo, correlativo, numero_completo,
-            reimpresiones, anulado, created_at, client_local_id, ocurrido_en
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+            reimpresiones, anulado, created_at, client_local_id, ocurrido_en,
+            periodo_label, plan_label
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)
           ''',
           [
             reciboId, tenantId, pagoId, cobradorId,
             prefijoRecibo, correlativo, numeroCompleto, now, _uuid.v4(),
-            ocurridoEn,
+            ocurridoEn, labels.periodo, labels.plan,
           ],
         );
 
@@ -714,13 +811,20 @@ class PagosRepo {
     await _dbWOrGlobal.writeTransaction((tx) async {
       // Snapshot del monto antes de marcar anulado, para ajustar cuota local.
       final pagoRows = await tx.getAll(
-        'SELECT cuota_id, monto_cordobas, tenant_id FROM pagos WHERE id = ? AND anulado = 0',
+        'SELECT cuota_id, monto_cordobas, tenant_id, en_revision FROM pagos WHERE id = ? AND anulado = 0',
         [pagoId],
       );
       if (pagoRows.isEmpty) return;
       final cuotaId = pagoRows.first['cuota_id'] as String;
       final monto = (pagoRows.first['monto_cordobas'] as num).toDouble();
       final tenantId = pagoRows.first['tenant_id'] as String;
+      // F6 (audit 2026-08-19): un pago EN REVISIÓN nunca sumó a monto_pagado
+      // (la cuarentena lo excluye) → al anularlo el espejo NO debe restar.
+      // Sin esto la cuota local quedaba en 0/pendiente hasta el próximo sync
+      // y el op_log guardaba saldos falsos PARA SIEMPRE (append-only).
+      final enRevision =
+          ((pagoRows.first['en_revision'] as num?)?.toInt() ?? 0) == 1;
+      final montoEspejo = enRevision ? 0.0 : monto;
 
       await tx.execute(
         '''
@@ -772,7 +876,8 @@ class PagosRepo {
         final estadoActual = cuotaRows.first['estado'] as String;
         final cargosNetoViejo =
             (cuotaRows.first['cargos_neto'] as num? ?? 0).toDouble();
-        final pagadoNuevo = (pagadoViejo - monto).clamp(0.0, double.infinity);
+        final pagadoNuevo =
+            (pagadoViejo - montoEspejo).clamp(0.0, double.infinity);
         final delta = await _deltaCargosExtra(tx, cuotaId);
         final nuevoEstado = calcularEstadoCuota(
           estadoActual: estadoActual,
@@ -887,6 +992,29 @@ class PagosRepo {
             {'campo': 'en_revision', 'antes': true, 'despues': false},
           ],
           'resumen': {'motivo': 'Confirmado como el cobro verdadero'},
+        },
+        actor: actor,
+        ocurridoEn: DateTime.parse(ocurridoEn),
+      );
+      // La fila de arriba vive bajo entidad 'pagos', que NINGUNA pantalla
+      // consulta (audit de logs 2026-08-18): la resolución quedaba invisible.
+      // Esta segunda fila la hace visible donde se mira el dinero: la cuota.
+      await OpLog.escribir(
+        tx,
+        tenantId: tenantId,
+        opId: opId,
+        tipoOp: 'revision_resuelta',
+        entidad: 'cuotas',
+        entidadId: cuotaId,
+        accion: 'update',
+        diff: {
+          'campos': [
+            {'campo': 'en_revision', 'antes': true, 'despues': false},
+          ],
+          'resumen': {
+            'motivo': 'Cuarentena resuelta: se eligió el cobro verdadero y '
+                'los duplicados quedaron anulados',
+          },
         },
         actor: actor,
         ocurridoEn: DateTime.parse(ocurridoEn),
@@ -1319,30 +1447,44 @@ class PagosRepo {
           id, tenant_id, cuota_id, cobrador_id,
           monto_cordobas, vuelto_cordobas, moneda, monto_original, tasa_conversion,
           metodo, referencia, foto_comprobante_path,
-          lat, lng, notas, fecha_pago, anulado, client_local_id, ocurrido_en
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+          lat, lng, notas, fecha_pago, fecha_cobro, anulado, client_local_id,
+          ocurrido_en
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
         ''',
         [
           pagoId, tenantId, hostCuotaId, cobradorId,
           aplicado, vuelto, moneda.value, montoOriginal, tasaConversion,
           metodo.value, referencia, fotoComprobantePath,
-          lat, lng, notas, now, clientLocalIdPago, ocurridoEn,
+          lat, lng, notas, now, _diaDe(now), clientLocalIdPago, ocurridoEn,
         ],
       );
 
       // 3d. Recibo del puente.
+      //
+      // 0262: va SIN `periodo_label` a propósito. Este recibo es "puente-solo"
+      // y los tres renderers OMITEN la fila Período en ese caso
+      // (`_esPuenteSolo`), así que no hay rótulo que congelar. Si alguna vez
+      // dejara de ser puente-solo, el NULL hace que se calcule — el mismo
+      // comportamiento que tenía antes de esta migración.
+      //
+      // 0268: el PLAN sí se congela, aunque el período no. `_esPuenteSolo`
+      // omite la fila Período, pero la fila **Servicio se imprime igual** — y
+      // sin congelarla, un cambio de plan posterior reescribiría el plan que
+      // dice este papel, exactamente como en cualquier otro recibo.
+      final planLabel = (await _labelsCongelados(tx, hostCuotaId)).plan;
       await tx.execute(
         '''
         INSERT INTO recibos (
           id, tenant_id, pago_id, cobrador_id,
           prefijo, correlativo, numero_completo,
-          reimpresiones, anulado, created_at, client_local_id, ocurrido_en
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+          reimpresiones, anulado, created_at, client_local_id, ocurrido_en,
+          plan_label
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
         ''',
         [
           reciboId, tenantId, pagoId, cobradorId,
           prefijoRecibo, correlativo, numeroCompleto,
-          now, clientLocalIdRecibo, ocurridoEn,
+          now, clientLocalIdRecibo, ocurridoEn, planLabel,
         ],
       );
 

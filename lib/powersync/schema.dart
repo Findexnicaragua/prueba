@@ -490,6 +490,12 @@ const schema = Schema([
     Column.real('lng'),
     Column.text('notas'),
     Column.text('fecha_pago'),
+    // EL DIA del cobro, derivado de `fecha_pago` en el server (0273). Existe
+    // para que el dashboard filtre el ciclo SIN envolver la columna en
+    // `date()`, que anula el indice y obliga a recorrer las 34.010 filas.
+    // NO se muestra en ninguna pantalla: el recibo y el arqueo siguen usando
+    // `fecha_pago` con su hora.
+    Column.text('fecha_cobro'),
     Column.integer('anulado'),
     Column.text('anulado_en'),
     Column.text('anulado_por'),
@@ -505,6 +511,9 @@ const schema = Schema([
   ], indexes: [
     Index('by_cuota', [IndexedColumn('cuota_id')]),
     Index('by_fecha', [IndexedColumn('fecha_pago')]),
+    // El indice que el dashboard vino a poder usar. Con `date(fecha_pago)` la
+    // consulta preguntaba por un valor CALCULADO y SQLite recorria todo.
+    Index('by_fecha_cobro', [IndexedColumn('fecha_cobro')]),
     Index('by_cobrador_fecha', [
       IndexedColumn('cobrador_id'),
       IndexedColumn('fecha_pago'),
@@ -528,6 +537,14 @@ const schema = Schema([
     Column.text('created_at'),
     Column.text('client_local_id'),
     Column.text('ocurrido_en'),
+    // Mes de servicio CONGELADO al emitir (0262). NULL = recibo viejo o sin
+    // período impreso → los renderers lo calculan, como siempre.
+    Column.text('periodo_label'),
+    // Plan CONGELADO al emitir (0268), por el mismo motivo: el JOIN resuelve el
+    // plan VIVO del contrato, así que un cambio de plan reescribía el plan que
+    // decían todos los recibos anteriores. NULL = recibo viejo o cobro puntual
+    // → los renderers caen al JOIN, como siempre.
+    Column.text('plan_label'),
   ], indexes: [
     Index('by_correlativo', [
       IndexedColumn('cobrador_id'),
@@ -550,9 +567,16 @@ const schema = Schema([
     Column.text('ocurrido_en'),
     // 0115 (Sprint 2): origen del cargo ('cobro'|'ajuste'|'promo'|
     // 'liquidacion'), grupo de promoción y pago que lo insertó (reversión M3).
+    // 0119 sumó 'puente' (cambio de fecha), 0127 'credito' (saldo a favor) y
+    // 0267 'cambio_plan' (la diferencia prorrateada del cambio de plan).
     Column.text('origen'),
     Column.text('grupo_promo'),
     Column.text('pago_id'),
+    // 0267: JSON con el contexto para que la línea se explique sola en el
+    // recibo (plan viejo y nuevo con sus precios, rango de días y tramos por
+    // mes). Tiene que estar ACÁ o el ticket, que se imprime OFFLINE desde el
+    // SQLite del celular, no podría maquetar el bloque de transición.
+    Column.text('detalle'),
   ], indexes: [
     Index('by_cuota', [IndexedColumn('cuota_id')]),
   ]),
@@ -723,6 +747,10 @@ const schema = Schema([
     Column.text('creado_por'),
     Column.text('ocurrido_en'),
     Column.text('created_at'),
+    // 0267: espejo de cargos_extra.detalle. La BAJA de plan acredita acá y no
+    // deja rastro en la cuota, así que sin esto el recibo no puede avisarle al
+    // cliente que le quedó plata a favor.
+    Column.text('detalle'),
   ], indexes: [
     Index('by_cliente', [
       IndexedColumn('tenant_id'),

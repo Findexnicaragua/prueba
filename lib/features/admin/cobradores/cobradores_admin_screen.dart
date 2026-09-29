@@ -29,16 +29,29 @@ const _kRolesQueCobran = {'cobrador', 'admin', 'admin_cobranza'};
 
 /// True si [prefijo] (no vacío) ya lo usa OTRO cobrador del tenant (fix F0:
 /// unicidad validada en cliente → error claro en vez de rechazo silencioso del
-/// sync). La tabla local ya está scopeada al tenant por el sync, así que no
-/// filtra tenant_id. Prefijo es [A-Z0-9-] (ASCII) → upper() es seguro (la
-/// regla #1d de ñ/acentos no aplica). El backstop DURO sigue siendo el UNIQUE
-/// server (esto solo evita la divergencia local silenciosa y da mejor UX).
-Future<bool> _prefijoEnUso(String prefijo, {String? excluirId}) async {
+/// sync). Prefijo es [A-Z0-9-] (ASCII) → upper() es seguro (la regla #1d de
+/// ñ/acentos no aplica). El backstop DURO sigue siendo el UNIQUE server (esto
+/// solo evita la divergencia local silenciosa y da mejor UX).
+///
+/// FILTRA POR TENANT (2026-08-20): el supuesto viejo era "la tabla local ya
+/// está scopeada al tenant por el sync". Es cierto para un usuario del ISP,
+/// NO para el super_admin: su device baja también su propia fila (tenant
+/// System, bucket super_admin_self) y, al cambiar de empresa impersonada,
+/// puede quedar el residuo de la anterior hasta que cierra el sync. Sin el
+/// filtro, un prefijo libre en ESTA empresa se rechazaba por estar usado en
+/// otra.
+Future<bool> _prefijoEnUso(String prefijo, String? tenantId,
+    {String? excluirId}) async {
   if (prefijo.isEmpty) return false;
   final rows = await ps.db.getAll(
-    "SELECT id FROM cobradores WHERE upper(COALESCE(prefijo_recibo,'')) = ?"
+    "SELECT id FROM cobradores WHERE upper(COALESCE(prefijo_recibo,'')) = ? "
+    'AND tenant_id = ?'
     "${excluirId != null ? ' AND id <> ?' : ''}",
-    [prefijo.toUpperCase(), if (excluirId != null) excluirId],
+    [
+      prefijo.toUpperCase(),
+      tenantId,
+      if (excluirId != null) excluirId,
+    ],
   );
   return rows.isNotEmpty;
 }
@@ -82,11 +95,20 @@ class CobradoresAdminScreen extends ConsumerStatefulWidget {
 
 class _CobradoresAdminScreenState
     extends ConsumerState<CobradoresAdminScreen> {
-  late final Stream<List<Map<String, dynamic>>> _cobradoresStream;
+  late Stream<List<Map<String, dynamic>>> _cobradoresStream;
+  String? _tenantDelStream;
 
   @override
   void initState() {
     super.initState();
+    _rehacerStream();
+  }
+
+  /// El tenant llega por stream: en el primer frame puede ser null (la lista
+  /// saldría VACÍA) y cambia al entrar/salir de una empresa impersonada. Por
+  /// eso el stream se rehace cuando cambia, en vez de congelarse en initState.
+  void _rehacerStream() {
+    _tenantDelStream = ref.read(tenantIdProvider);
     // Subqueries en SELECT evitan el producto cartesiano que tendrían
     // dos LEFT JOINs (clientes × pagos) sobre el mismo cobrador.
     _cobradoresStream = ps.db.watch(
@@ -103,8 +125,13 @@ class _CobradoresAdminScreenState
                  AND date(fecha_pago) >= date('now', '-6 hours', 'start of month')
              ) AS cobrado_mes
         FROM cobradores co
+       WHERE co.tenant_id = ?
        ORDER BY co.activo DESC, co.rol, co.nombre
       ''',
+      // Sin el filtro, el super_admin impersonando se veía a SÍ MISMO en la
+      // lista de personal del ISP (su fila del tenant System viaja en el
+      // bucket super_admin_self) con el botón de desactivar activo.
+      parameters: [_tenantDelStream],
     );
   }
 
@@ -117,6 +144,8 @@ class _CobradoresAdminScreenState
 
   @override
   Widget build(BuildContext context) {
+    final tenantId = ref.watch(tenantIdProvider);
+    if (tenantId != _tenantDelStream) _rehacerStream();
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _cobradoresStream,
       initialData: const [],
@@ -235,7 +264,8 @@ class _InvitarDialogState extends ConsumerState<_InvitarDialog> {
 
     // Unicidad de prefijo (fix F0): error claro en vez del rechazo silencioso
     // del sync (23505). El UNIQUE server sigue siendo el backstop duro.
-    if (prefijoFinal.isNotEmpty && await _prefijoEnUso(prefijoFinal)) {
+    if (prefijoFinal.isNotEmpty &&
+        await _prefijoEnUso(prefijoFinal, ref.read(tenantIdProvider))) {
       if (!mounted) return;
       setState(() => _error =
           'El prefijo "$prefijoFinal" ya está en uso por otro miembro.');
@@ -1067,7 +1097,7 @@ class _EditarCobradorDialogState extends ConsumerState<_EditarCobradorDialog> {
       // Unicidad de prefijo (fix F0): sin esto una edición con prefijo duplicado
       // mostraba éxito y el sync la rechazaba en silencio (divergencia local).
       if (prefijoFinal != null &&
-          await _prefijoEnUso(prefijoFinal,
+          await _prefijoEnUso(prefijoFinal, ref.read(tenantIdProvider),
               excluirId: widget.row['id'] as String)) {
         if (mounted) {
           setState(() {

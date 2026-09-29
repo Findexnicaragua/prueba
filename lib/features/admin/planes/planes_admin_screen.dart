@@ -6,6 +6,7 @@ import '../../../data/providers/cobrador_provider.dart';
 import '../../../data/utils/formatters.dart';
 import '../../../data/utils/montos.dart';
 import '../../../data/utils/op_log.dart';
+import '../../../data/utils/plan_tipo.dart';
 import '../../../powersync/db.dart' as ps;
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/historial_op_log.dart';
@@ -180,7 +181,7 @@ class _PlanCard extends StatelessWidget {
           backgroundColor: activo
               ? scheme.primaryContainer
               : scheme.surfaceContainerHighest,
-          child: Icon(_icon(tipo),
+          child: Icon(_iconoTipo(tipo),
               color: activo ? scheme.primary : scheme.outline),
         ),
         title: Text(row['nombre'] as String,
@@ -188,7 +189,9 @@ class _PlanCard extends StatelessWidget {
               decoration: activo ? null : TextDecoration.lineThrough,
             )),
         subtitle: Text(
-          '$tipo · $contratos contrato(s) activo(s)',
+          // El LABEL, no el valor crudo: la tarjeta decía "tv · 2113
+          // contrato(s)". Mismo helper que agrupa el filtro por plan.
+          '${planTipoLabel(tipo)} · $contratos contrato(s) activo(s)',
           style: TextStyle(color: scheme.outline, fontSize: 12),
         ),
         trailing: Row(
@@ -214,13 +217,17 @@ class _PlanCard extends StatelessWidget {
     );
   }
 
-  IconData _icon(String tipo) => switch (tipo) {
-        'internet' => Icons.wifi,
-        'tv' => Icons.tv,
-        'combo' => Icons.tv_outlined,
-        _ => Icons.subscriptions,
-      };
 }
+
+/// El ícono del tipo. Vive acá —y no en `plan_tipo.dart`— porque ese archivo
+/// no depende de Flutter: lo importa la capa de queries, que no puede arrastrar
+/// `material.dart`.
+IconData _iconoTipo(String? tipo) => switch (tipo) {
+      'internet' => Icons.wifi,
+      'tv' => Icons.tv,
+      'combo' => Icons.tv_outlined,
+      _ => Icons.subscriptions,
+    };
 
 class _PlanFormDialog extends ConsumerStatefulWidget {
   const _PlanFormDialog({this.plan});
@@ -233,10 +240,33 @@ class _PlanFormDialog extends ConsumerStatefulWidget {
 class _PlanFormDialogState extends ConsumerState<_PlanFormDialog> {
   late TextEditingController _nombre;
   late TextEditingController _precio;
-  late String _tipo;
+
+  /// El tipo de servicio. **Nullable y sin default a propósito** (2026-09-03).
+  ///
+  /// Antes arrancaba en `'internet'`. Como el campo es obligatorio en la base
+  /// (NOT NULL + CHECK) el formulario nunca fallaba, así que un combo creado sin
+  /// tocar el desplegable se guardaba como internet **en silencio** — y desde
+  /// que el filtro por plan agrupa por este campo, ese plan queda en el grupo
+  /// equivocado y sus clientes no aparecen donde deberían.
+  ///
+  /// Al EDITAR llega con el valor que ya tiene, así que ahí no cambia nada.
+  String? _tipo;
   late bool _activo;
   bool _guardando = false;
   String? _error;
+
+  /// El nombre original, para saber si lo están RENOMBRANDO.
+  String? _nombreOriginal;
+
+  /// Cuántos recibos YA EMITIDOS resuelven el nombre de este plan por JOIN vivo
+  /// (los que no lo tienen congelado en `recibos.plan_label`, migración 0268).
+  ///
+  /// Renombrar el plan reescribe lo que dicen esos papeles — es la regla 18 del
+  /// AGENTS, el caso del recibo HL-00230. Al 2026-09-03 son 33.949 de 33.951 en
+  /// producción, porque el congelado recién entró. No se bloquea (a veces hay
+  /// que corregir un tipeo — `INTERNT+CATV (Hotel)` existe de verdad en
+  /// Mairena) pero el número se muestra ANTES de guardar.
+  int _recibosExpuestos = 0;
 
   @override
   void initState() {
@@ -245,8 +275,43 @@ class _PlanFormDialogState extends ConsumerState<_PlanFormDialog> {
     _precio = TextEditingController(
       text: (widget.plan?['precio_mensual'] as num?)?.toString() ?? '',
     );
-    _tipo = widget.plan?['tipo'] as String? ?? 'internet';
+    _tipo = widget.plan?['tipo'] as String?;
     _activo = (widget.plan?['activo'] as int? ?? 1) == 1;
+    _nombreOriginal = widget.plan?['nombre'] as String?;
+    // Redibuja el aviso mientras se tipea el nombre nuevo.
+    _nombre.addListener(() {
+      if (mounted) setState(() {});
+    });
+    if (widget.plan != null) _contarRecibosExpuestos();
+  }
+
+  /// Están cambiando el nombre de un plan que ya existe (no creando uno).
+  bool get _renombrando =>
+      _nombreOriginal != null &&
+      _nombre.text.trim().isNotEmpty &&
+      _nombre.text.trim() != _nombreOriginal!.trim();
+
+  Future<void> _contarRecibosExpuestos() async {
+    final planId = widget.plan?['id'] as String?;
+    if (planId == null) return;
+    try {
+      final r = await ps.db.getOptional(
+        '''
+        SELECT COUNT(*) AS n
+          FROM recibos r
+          JOIN pagos     p  ON p.id  = r.pago_id
+          JOIN cuotas    cu ON cu.id = p.cuota_id
+          JOIN contratos ct ON ct.id = cu.contrato_id
+         WHERE ct.plan_id = ? AND r.plan_label IS NULL AND r.anulado = 0
+        ''',
+        [planId],
+      );
+      if (!mounted) return;
+      setState(() => _recibosExpuestos = ((r?['n'] as num?) ?? 0).toInt());
+    } catch (_) {
+      // Es sólo un aviso: si la cuenta falla, no se muestra. Nunca puede
+      // impedir editar un plan.
+    }
   }
 
   @override
@@ -259,6 +324,12 @@ class _PlanFormDialogState extends ConsumerState<_PlanFormDialog> {
   Future<void> _guardar() async {
     if (_nombre.text.trim().isEmpty) {
       setState(() => _error = 'Nombre requerido');
+      return;
+    }
+    // El tipo se elige a propósito. Mismo patrón que el nombre y el precio:
+    // se avisa y no se guarda, en vez de completar por default (ver `_tipo`).
+    if (_tipo == null) {
+      setState(() => _error = 'Elegí el tipo de servicio');
       return;
     }
     final precio = parseMonto(_precio.text); // acepta coma decimal (M8)
@@ -373,10 +444,28 @@ class _PlanFormDialogState extends ConsumerState<_PlanFormDialog> {
               ),
               textInputAction: TextInputAction.next,
             ),
+            // Renombrar reescribe lo que dicen los recibos ya entregados que no
+            // tienen el nombre congelado. No se bloquea —hay tipeos reales que
+            // corregir— pero se dice el número exacto antes de guardar.
+            if (_renombrando && _recibosExpuestos > 0) ...[
+              const SizedBox(height: 8),
+              _Aviso(
+                icono: Icons.warning_amber_rounded,
+                color: Theme.of(context).colorScheme.error,
+                texto: '$_recibosExpuestos ${_recibosExpuestos == 1 ? "recibo ya "
+                        "entregado dice" : "recibos ya entregados dicen"} '
+                    '"$_nombreOriginal". Si lo renombrás, al reimprimirlos van a '
+                    'decir el nombre nuevo y no van a coincidir con el papel que '
+                    'tiene el cliente.',
+              ),
+            ],
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _tipo,
-              decoration: const InputDecoration(labelText: 'Tipo'),
+              decoration: const InputDecoration(
+                labelText: 'Tipo de servicio *',
+                hintText: 'Elegí una opción',
+              ),
               items: const [
                 DropdownMenuItem(value: 'internet', child: Text('Internet')),
                 DropdownMenuItem(value: 'tv', child: Text('TV')),
@@ -393,6 +482,21 @@ class _PlanFormDialogState extends ConsumerState<_PlanFormDialog> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [montoInputFormatter],
             ),
+            // Lo contrario del aviso de arriba: acá se aclara que NO pasa nada
+            // con lo ya cobrado. Es la duda que frena a la hora de subir una
+            // tarifa, y el 95% de los contratos son indefinidos —sus cuotas
+            // futuras se generan leyendo este precio—, así que subirlo es
+            // exactamente el mecanismo del aumento.
+            if (widget.plan != null) ...[
+              const SizedBox(height: 8),
+              _Aviso(
+                icono: Icons.info_outline,
+                color: Theme.of(context).colorScheme.outline,
+                texto: 'Las cuotas ya generadas no cambian: cada una guarda su '
+                    'propio monto. El precio nuevo se aplica a las cuotas que se '
+                    'generen de acá en adelante.',
+              ),
+            ],
             const SizedBox(height: 12),
             SwitchListTile(
               value: _activo,
@@ -424,6 +528,38 @@ class _PlanFormDialogState extends ConsumerState<_PlanFormDialog> {
         FilledButton(
           onPressed: _guardando ? null : _guardar,
           child: Text(_guardando ? 'Guardando...' : 'Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Un renglón de aviso dentro del formulario de plan.
+///
+/// Existe para los dos casos opuestos de editar un plan (2026-09-03): el
+/// nombre, que reescribe recibos ya entregados, y el precio, que NO toca las
+/// cuotas ya generadas. Los dos se explican en el mismo lugar y con la misma
+/// forma para que se lean como lo que son — información antes de firmar, no un
+/// error.
+class _Aviso extends StatelessWidget {
+  const _Aviso({required this.icono, required this.color, required this.texto});
+
+  final IconData icono;
+  final Color color;
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icono, size: 16, color: color),
+        const SizedBox(width: 8),
+        // Un solo Expanded y a la izquierda del texto no hay otro flex
+        // (regla #15): el renglón ocupa el ancho y envuelve sin huecos.
+        Expanded(
+          child: Text(texto,
+              style: TextStyle(fontSize: 12, height: 1.35, color: color)),
         ),
       ],
     );

@@ -109,6 +109,100 @@ en producción: si volvés a ver INV11 sobre un suspendido-y-reactivado, ahora S
 > Plantilla: **qué hacer → qué deberías ver → si falla**. Rubén: corregí/ampliá
 > estos pasos con tu flujo real cuando algo no coincida.
 
+**0.3.-3 — Cambio de plan: el prorrateo explicado, el recibo y el aprobador
+(0267/0268, 2026-09-02).**
+
+> **Build esperado: v0.39.0** (`CRM TEST`, identidad `com.sitecsa.crm.test`).
+> Correr el GATE de build fresco de §0.0 y confirmar la versión en el sidebar
+> ANTES de mirar nada: el build anterior decía 0.38.8 y si no se bumpeó se
+> testea la app vieja creyendo que es la nueva.
+> **🔴 Las migraciones `0267` y `0268` TIENEN que estar corridas antes de abrir
+> la app.** Sin ellas el primer cobro traba la cola de subida: `schema.dart` ya
+> declara tres columnas que Postgres no tendría.
+> **Rol:** el `admin` del Test Tenant con su identidad REAL — **no impersonando**,
+> que es un gate de la feature y el botón se oculta. Para el camino de solicitud,
+> un `admin_cobranza` o `admin_usuarios`.
+> **Contrato de prueba: `dia_pago` ≠ 1** (regla 1c: con día 1 los bugs de anclaje
+> son invisibles).
+
+| Qué hacer | Qué deberías ver | Si falla |
+|---|---|---|
+| Abrir un contrato y tocar **Cambiar plan** | El diálogo, con el plan actual y el selector del nuevo | Si el botón no está: revisar el setting, que el contrato esté activo y que NO estés impersonando |
+| Elegir un plan más caro, modo **Próximo ciclo** | "Ciclo en curso: sigue a *(el plan actual, por su nombre)*, sin cambio" y las cuotas futuras al precio nuevo. **No** debe aparecer ninguna tabla de prorrateo | — |
+| Cambiar a modo **Hoy con prorrateo** | Aparece **LA CUOTA DE *(mes)* · SERVICIO DEL x AL y** con: el mes completo al plan viejo, la diferencia hasta el plan nuevo, **un renglón por cada mes** con su precio diario, y el total al que queda la cuota | Si dice "+C$X por los N días que faltan" sin nombrar planes, no llegó el build |
+| **Rehacer la cuenta a mano** con la calculadora | Los subtotales de los tramos suman el ajuste, y el ajuste + el mes = el total. **Los precios diarios de dos meses distintos NO son iguales** (cada día se divide por los días de SU mes) | Si dan iguales, se perdió el desglose por tramo |
+| Si el cliente tiene una cuota vencida impaga | Aviso rojo arriba: **"Este cliente debe C$X"**, y un renglón explicando que esa cuota no se toca | — |
+| Confirmar y abrir el **detalle de la cuota** | El cargo se llama **"Cambio de plan"**, no el genérico "Cargo" | — |
+| Cobrar esa cuota e **imprimir el recibo** | Bloque **CAMBIO DE PLAN**: de qué plan a cuál con sus precios, el mes al plan anterior, la diferencia con sus días y su rango, el total, y la cuota desde el próximo mes | Si no sale, revisar que el bloque esté visible en el editor del recibo |
+| Mirar dónde cayó el bloque en el recibo | En los tenants que ya tenían layout guardado aparece **al final**, después de la mora. **Esto es esperado, no es bug**: los bloques que un layout no conoce se completan al final. Se arrastra a su lugar desde el editor | — |
+| Confirmar que el recibo **NO** trae el desglose día por día | Correcto: eso vive solo en la pantalla del que autoriza | Si lo trae, no llegó el build |
+| **El recibo congelado (lo más importante):** emitir un recibo → cambiar el plan del contrato → **reimprimir ESE recibo viejo** | Sigue diciendo **el plan que tenía cuando se emitió** | Si dice el plan nuevo, `plan_label` no se está escribiendo o la 0268 no corrió. Es el bug que esta migración arregla |
+| Hacer una **BAJADA** de plan en modo Hoy | Crédito a favor del cliente; la cuota **no baja**. En el recibo impreso desde la PC sale el bloque avisando el crédito | **En el ticket que imprime el cobrador ese bloque NO sale** — el bucket `por_cobrador` no sincroniza `saldos_favor`. **Es diseño, no falla** |
+| Con `admin_cobranza`: tocar el botón | Dice **"Solicitar cambio de plan"** y pide motivo + notas | — |
+| Con el `admin`: abrir **/admin/solicitudes** | La tarjeta muestra **el monto**: "Se le cobra + C$X" o "Le queda a favor C$X", con los días y el rango | Si no muestra monto, se estaría firmando a ciegas — es el hueco que este sprint cierra |
+| Aprobar y abrir el **historial del contrato** | El motivo del cambio es el que se escribió al pedir, **no** el texto fijo "Cambio de plan" | — |
+
+> **El borde raro, si querés probarlo:** hacer el cambio **el día exacto del
+> vencimiento**, en modo Hoy. La cuota que arranca recibe el prorrateo del ciclo
+> entero, y eso **no** da exactamente la diferencia mensual: en un ciclo de enero
+> a febrero queda en C$815,55 en vez de C$800. Es el modelo, no un error — está
+> explicado en `docs/reglas/cambio-plan.md`.
+
+**0.3.-2 — Rework del Resumen: mora, Estado actual, tipografía y Excel
+(2026-09-01).**
+
+> **Build esperado: v0.38.8** (`CRM TEST`, identidad `com.sitecsa.crm.test` —
+> paquete APARTE del de Mairena, con su propia sesión y su propia base local).
+> **NO hay release**: se instala local. Correr el GATE de §0.0 y confirmar la
+> versión en login/sidebar antes de mirar nada.
+> **Rol:** admin del Test Tenant, con su identidad REAL (no impersonando).
+> **La migración `0266` NO está corrida** — el Test Tenant se encendió a mano.
+
+| Qué hacer | Qué deberías ver | Si falla |
+|---|---|---|
+| Abrir el Resumen | Siete tarjetas, cada una con borde de 1px y 28px entre una y otra | Si se ven pegadas o el borde no se distingue, es la separación (`_bordeTarjetaResumen`) |
+| Mirar los números y rótulos | Letra más grande que antes en TODAS las tarjetas; nada por debajo de 11px | Si una tarjeta quedó chica, su `fontSize` no salió de `TxtResumen` |
+| **Estado actual** | `Por cobrar` y sus tres partes; **las cifras terminan todas en la misma vertical**, pegadas al borde derecho | Si alguna queda flotando en el medio, volvió el `Flexible`+`Expanded` (checklist 15) |
+| Achicar la ventana a ~360px | Las filas APILAN la cifra en su propia línea; nada cortado ni desbordado | — |
+| **Cobertura**: abrir *Recuperado* → abrir *en el ciclo* | Aparece `venían de mora` en rojo, con cuotas y monto | Si no aparece en NINGÚN momento, ese ciclo no tuvo cobros en mora: retroceder un ciclo con `‹` |
+| Abrir *Por recuperar* | `en mora` cuelga de cada una de sus dos líneas, sin segundo clic | — |
+| Pasar el mouse por un día con atraso | Globo con tres renglones que SUMAN: `a tiempo` + `venían de mora` = `cobradas`, en columnas alineadas | Si las columnas se corren, se perdió la `Table` (checklist 15) |
+| Pasar por el primer y el último día del ciclo | El globo NO se sale del gráfico | — |
+| **Ciclo de septiembre**, pasar por el **16 de agosto** | *"Sin cobros de este ciclo"* + `de otros ciclos · 2 · C$1.000` | Si dice "sin cobros este día" a secas, no llegó el build |
+| Bajar el Excel de **Cobertura** (ciclo de agosto) | Columnas `Recibo`, `Fecha de cobro` y `Ciclo del cobro`; filtrando esta última por *"Septiembre 2026"* salen las cobradas fuera de su ciclo | Si `Recibo` sale vacío, ese pago no tiene recibo en la copia LOCAL aunque sí en el server |
+| Bajar **Quién cobró** | `Cobró` (no "Cobrador"), más `Recibo`, `Vence` y `Ciclo de la cuota` | — |
+| Bajar **Mora por zona** y **Proyección** | `Cobrador asignado` (no "Cobrador"), más `Ciclo de la cuota` y `Estado` | — |
+| En cualquier Excel: mirar la fila TOTAL | El total cae bajo su columna de monto, no corrido | Lo verifica `LibroExcel.desparejas()` en debug (checklist 17) |
+| **Ajustes → Avanzado → Tarjetas del Resumen**: reordenar y guardar | El Resumen respeta el orden nuevo | Hasta v0.38.x esta pantalla guardaba y NO se aplicaba (doble codificación del JSON) |
+
+> **Lo que NO cambió y conviene confirmar:** ningún número del dashboard se
+> movió con este rework. Es todo presentación, contexto y columnas nuevas. Si
+> una cifra difiere de la que veías antes, **eso sí es un bug**.
+
+**0.3.-1 — Bandeja de rechazos + talonario + banner de cola (0236/0237, 2026-08-17).**
+
+> **Build esperado: v0.34.0** (`CRM PRUEBA`, instalada local — NO hay release).
+> Correr el GATE de §0.0. **Rol:** super_admin IMPERSONANDO Test Tenant para la
+> bandeja (o Ruby Admin real); el banner de cola es de cualquier rol que cobre.
+
+1. **Sembrar un rechazo de prueba** (lo hace el AI por SQL en TT si se lo pedís)
+   → Admin → Cobranza → **Cobros a revisar** → aparece la sección roja
+   "Rechazados al sincronizar · 1" con cliente, monto y motivo. El badge de la
+   card Cobranza suma ese 1. *Si falla:* ¿hay internet? La sección es ONLINE y
+   sin red se oculta (es a propósito).
+2. **Tocar Registrar** → confirmar → snackbar "Registrado: el cobro cuenta
+   (recibo X)" → la fila desaparece, y el pago aparece en el historial del
+   cliente CON el número de recibo original. *Si falla:* el snackbar dice el
+   motivo exacto del server (FK, permiso…) y la fila NO se pierde.
+3. **Sobrepago:** registrar un rechazo sobre una cuota YA pagada → snackbar
+   "EN CUARENTENA" → la cuota aparece en la sección de sobrepagos de siempre
+   (elegir el verdadero / anular). El dinero NUNCA se decide solo.
+4. **Talonario:** con huecos reales (Telenet los tiene: COL 20-24, 26-27, 29)
+   la sección lista el rango, el cobrador y las fechas. Sin huecos, no aparece.
+5. **Banner de cola atascada** (difícil de simular a mano): dejar el equipo con
+   cambios sin subir >30 min CON conexión → banner rojo arriba "Tenés N cambios
+   sin subir…". En uso normal no debería verse nunca.
+
 **0.3.0-bis — Paquete tickets/inventario del nuevo dueño (Fases 1-4, 2026-07-26).**
 
 > **Build esperado: v0.29.8** (o superior). CORREGIDO 2026-07-29: la rama
@@ -378,9 +472,12 @@ la derecha. Esto lo mide en un solo tiro.
   - *Header "Pendiente" cobrable:* en un fijo suspendido, el "Pendiente" del header = lo cobrable
     real (suma de cuotas vivas), **IDÉNTICO** a la lista de cobros y a los reportes (no el nominal
     precio×meses). *Si difiere → bug.*
-  - *Dashboard "Distribución de cuotas":* las 4 filas de vigencia (Al día/En gracia/Vencidas/Pagadas)
-    suman el total de cuotas; **"Con pago parcial"** aparece como overlay debajo (solo si pago parcial
-    está ON o ya hay parciales) y NO duplica conteos (una parcial vencida no se cuenta 2 veces).
+  - *Dashboard "Estado actual"* (se comió a "Distribución de cuotas" el 2026-09-01): las 3 partes
+    —Al día / En gracia / En mora— **reparten el titular "Por cobrar"**, en CUOTAS y en CÓRDOBAS.
+    Si al día + en gracia + en mora no da exactamente el titular en las dos columnas, es bug.
+    **"de eso, con abono que no alcanzó"** y **"de eso, de contratos suspendidos"** son atravesados:
+    van sangrados, NO se suman (una parcial vencida ya está contada en "En mora").
+    La tarjeta vieja sigue disponible apagada en el ajuste de tarjetas, con los conteos solos.
   - *"X/N pagadas":* un contrato suspendido-reactivado llega a **N/N** (no cuenta los meses anulados)
     y el ratio coincide con el badge "Completado ✓".
   - **⭐ Anclaje al día_pago (CRÍTICO — fix 2026-06-16, la regla de oro):** el prorrateo del mes en curso
@@ -528,12 +625,15 @@ la derecha. Esto lo mide en un solo tiro.
 - **Mapa (Rotación y Navegación Offline — 2026-06-12):**
   1. *Rotación táctil y brújula:* Rotá el mapa con dos dedos sobre la pantalla (en Windows podés mantener presionada la tecla Shift y arrastrar con el botón izquierdo del mouse para simular el gesto de dos dedos).
      *Ver:* El mapa rota libremente y aparece el botón flotante de la brújula en la esquina superior derecha (debajo de las capas). La brújula apunta siempre al norte geográfico independientemente de la orientación de la pantalla. Presioná el botón de la brújula: el mapa debe reorientarse suavemente de vuelta al norte (rotación 0.0) y la brújula debe desaparecer.
-  2. *Trazado de Ruta Offline:* Tocá el pin de un cliente para abrir su bottom sheet y presioná el botón **"Ruta"**.
-     *Ver:* El bottom sheet se cierra al instante y se dibuja una línea azul con curvas sobre las carreteras reales de Nicaragua que conecta tu ubicación GPS actual (o la posición simulada en caso de no tener GPS) con el pin del cliente.
+  2. *Trazado de Ruta Híbrido (Online OSRM / Offline A*):* Tocá el pin de un cliente para abrir su bottom sheet y presioná el botón **"Ruta"**.
+     *Ver:* El bottom sheet se cierra al instante y se dibuja una línea azul siguiendo exactamente las esquinas y calles reales de la ciudad/barrio. En el panel inferior aparece la distancia real, el tiempo estimado y el chip de estado:
+     - **"En línea"**: ruta precisa calle por calle provista por OSRM/OpenStreetMap (<200 ms).
+     - **"Vial offline"**: resuelta por la base local `rutas_nicaragua.db` cuando no hay señal celular.
+     - **"Aprox. offline"**: si la vivienda está en un predio interno sin calle registrada, la ruta vial llega por la calle hasta la acera/punto más próximo y solo conecta el tramo peatonal final, nunca una línea recta que corte el pueblo en diagonal.
   3. *Panel de Información de Ruta:* Al trazarse la ruta, aparece un panel de información en la parte inferior izquierda del mapa.
      *Ver:* Muestra el nombre del cliente destino, la distancia real en kilómetros/metros siguiendo las calles y el tiempo de viaje estimado (a 40 km/h promedio). El botón "Cerrar" (X) del panel borra la ruta del mapa.
   4. *Fallback Externo:* Presioná el botón **"Abrir en Google Maps"** en el panel inferior.
-     *Ver:* Lanza de forma externa la aplicación de Google Maps con la ruta pre-configurada hacia el cliente (útil si se requiere navegación por voz).
+     *Ver:* Lanza de forma externa la aplicación de Google Maps con la ruta pre-configurada hacia el cliente (útil si se requiere navegación por voz en moto/vehículo).
   5. *Prueba 100% Offline:* Activá el modo avión en tu dispositivo móvil o desconectá la red en la PC. Tocá un cliente y presioná "Ruta".
      *Ver:* La ruta azul debe trazarse al instante en el mapa localmente gracias al motor A* ejecutado sobre la base de datos de carreteras local (`rutas_nicaragua.db`), sin dar ningún error por falta de internet.
 - **Búsqueda en Mapa:** buscar por nombre, cédula, teléfono (con/sin guiones), código de cliente y de contrato → centra el pin correcto. Probar offline (tiles cacheados).

@@ -98,13 +98,18 @@ class ContratoHeaderCard extends StatelessWidget {
                 if (esAdmin &&
                     onEstadoChanged != null &&
                     !esTerminal &&
-                    estado != 'suspendido' &&
                     !enImpersonacion)
                   PopupMenuButton<String>(
                     tooltip: 'Cambiar estado',
                     onSelected: onEstadoChanged,
                     itemBuilder: (_) => [
-                      if (estado != 'activo')
+                      // Un contrato SUSPENDIDO se reactiva desde su propia
+                      // tarjeta (que muestra el motivo y la deuda del corte),
+                      // no desde acá: dejar "Activo" en el menú daría dos
+                      // caminos distintos para lo mismo. Desde el suspendido la
+                      // única salida de este menú es cancelar — antes no había
+                      // ninguna y el contrato quedaba trabado en suspendido.
+                      if (estado != 'activo' && estado != 'suspendido')
                         const PopupMenuItem(
                             value: 'activo', child: Text('Activo')),
                       // Única salida desde acá: cancelar. 'Completado' se quitó
@@ -320,9 +325,11 @@ class _ContratoResumen extends ConsumerWidget {
         false;
     final totalContrato = _calcularTotalContrato();
     final esIndefinido = totalContrato == null;
-    // Indefinido → solo "Total recaudado" (no hay total nominal). Un CANCELADO
-    // (0123) ahora deja deuda viva cobrable → se trata como activo y muestra
-    // Total/Recaudado/Pendiente (consistencia cross-pantalla #10).
+    // Indefinido → solo "Total recaudado" (no hay total nominal). El CANCELADO
+    // se trata como activo y muestra Total/Recaudado/Pendiente (consistencia
+    // cross-pantalla #10). Desde 2026-08-24 su "Pendiente" da 0 por
+    // construcción —cancelar deja todas las cuotas en cero—; no hace falta un
+    // caso especial acá porque el número sale de las cuotas reales.
     final soloRecaudado = esIndefinido;
     return ref.watch(contratoRecaudadoProvider(contratoId)).when(
       loading: () => const SizedBox.shrink(),
