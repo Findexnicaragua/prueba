@@ -643,30 +643,46 @@ List<int> _bloqueSingle(
       });
     case 'servicio':
       final periodoCuota = DateTime.parse(r['periodo'] as String);
-      final esManual = r['plan_nombre'] == null;
+      final esPrestamo = r['monto_prestado'] != null;
+      final esManual = !esPrestamo && r['plan_nombre'] == null;
       final diaPago = (r['dia_pago'] as num?)?.toInt();
-      // 0262: el mes congelado manda sobre el calculado (ver recibo_ticket).
       final periodoLabel = (r['periodo_label'] as String?) ??
           (esManual || diaPago == null
               ? Fmt.mes(periodoCuota)
               : Fmt.periodoRecibo(diaPago, periodoCuota));
-      // 0268: el plan congelado manda sobre el del JOIN (ver recibo_ticket).
       final planLabel =
           (r['plan_label'] as String?) ?? (r['plan_nombre'] as String?);
+
+      final String conceptoServicio;
+      if (esPrestamo) {
+        final cod = r['contrato_codigo'] as String?;
+        final desc = r['cuota_descripcion'] as String?;
+        conceptoServicio = cod != null
+            ? 'Préstamo $cod${desc != null ? ' · $desc' : ''}'
+            : (desc ?? 'Préstamo');
+      } else if (esManual) {
+        conceptoServicio = r['cuota_descripcion'] as String? ?? 'Cuota manual';
+      } else {
+        conceptoServicio = planLabel ?? '';
+      }
+
       return _emitirCamposEscpos(b, {
-        'servicio.servicio': _fila(
-            gen,
-            'Servicio',
-            esManual
-                ? (r['cuota_descripcion'] as String? ?? 'Cuota manual')
-                : (planLabel ?? '')),
+        'servicio.servicio': _fila(gen, 'Servicio', conceptoServicio),
         'servicio.ticket': r['ticket_correlativo'] != null
             ? _fila(gen, 'Ticket', '#${r['ticket_correlativo']}')
             : null,
-        'servicio.periodo': (!_esPuenteSolo(r, cargosRows) && !esManual)
+        'servicio.periodo': (!_esPuenteSolo(r, cargosRows) && !esManual && !esPrestamo)
             ? _fila(gen, 'Período',
                 periodoLabel[0].toUpperCase() + periodoLabel.substring(1))
-            : null,
+            : (esPrestamo && r['cuota_descripcion'] != null)
+                ? _fila(gen, 'Cuota', r['cuota_descripcion'] as String)
+                : null,
+        if (esPrestamo && r['capital'] != null)
+          'servicio.capital': _fila(gen, 'Abono capital', Fmt.cordobas((r['capital'] as num).toDouble())),
+        if (esPrestamo && r['interes'] != null)
+          'servicio.interes': _fila(gen, 'Interés ordinario', Fmt.cordobas((r['interes'] as num).toDouble())),
+        if (esPrestamo && r['saldo_restante'] != null)
+          'servicio.saldo_restante': _fila(gen, 'Saldo restante', Fmt.cordobas((r['saldo_restante'] as num).toDouble())),
       });
     case 'cuota':
       final saldoCuota = ((r['cuota_monto'] as num).toDouble() +

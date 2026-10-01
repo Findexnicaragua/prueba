@@ -252,6 +252,7 @@ const kSinCobradorFiltro = '__sin_cobrador__';
              COALESCE(cu.monto_pagado, 0) AS monto_pagado,
              cu.tipo_cargo_manual AS tipo_cargo_manual,
              cu.descripcion AS descripcion,
+             cu.capital AS capital, cu.interes AS interes, cu.saldo_restante AS saldo_restante,
              max(0.0, cu.monto + COALESCE(cu.cargos_neto, 0)
                       - COALESCE(cu.monto_pagado, 0)) AS saldo,
              ROW_NUMBER() OVER (
@@ -279,6 +280,10 @@ const kSinCobradorFiltro = '__sin_cobrador__';
            l.monto_pagado AS monto_pagado,
            l.tipo_cargo_manual AS tipo_cargo_manual,
            l.descripcion AS descripcion, l.saldo AS saldo,
+           l.capital AS capital, l.interes AS interes, l.saldo_restante AS saldo_restante,
+           ct.codigo AS contrato_codigo, ct.monto_prestado AS monto_prestado,
+           ct.tasa_interes AS tasa_interes, ct.frecuencia AS frecuencia,
+           ct.moneda AS contrato_moneda, ct.monto_cuota AS monto_cuota,
            g.grupo_count AS grupo_count, g.grupo_saldo AS grupo_saldo,
            c.codigo AS cliente_codigo, c.nombre AS cliente_nombre,
            c.cedula AS cliente_cedula, c.telefono AS cliente_telefono,
@@ -340,6 +345,7 @@ const kSinCobradorFiltro = '__sin_cobrador__';
              COALESCE(cu.monto_pagado, 0) AS monto_pagado,
              cu.tipo_cargo_manual AS tipo_cargo_manual,
              cu.descripcion AS descripcion,
+             cu.capital AS capital, cu.interes AS interes, cu.saldo_restante AS saldo_restante,
              ct.estado AS estado_contrato,
              max(0.0, cu.monto + COALESCE(cu.cargos_neto, 0)
                       - COALESCE(cu.monto_pagado, 0)) AS saldo,
@@ -366,6 +372,10 @@ const kSinCobradorFiltro = '__sin_cobrador__';
            l.monto_pagado AS monto_pagado,
            l.tipo_cargo_manual AS tipo_cargo_manual,
            l.descripcion AS descripcion, l.saldo AS saldo,
+           l.capital AS capital, l.interes AS interes, l.saldo_restante AS saldo_restante,
+           ct.codigo AS contrato_codigo, ct.monto_prestado AS monto_prestado,
+           ct.tasa_interes AS tasa_interes, ct.frecuencia AS frecuencia,
+           ct.moneda AS contrato_moneda, ct.monto_cuota AS monto_cuota,
            l.estado_contrato AS estado_contrato,
            g.grupo_count AS grupo_count, g.grupo_saldo AS grupo_saldo,
            c.codigo AS cliente_codigo, c.nombre AS cliente_nombre,
@@ -410,8 +420,11 @@ const kSinCobradorFiltro = '__sin_cobrador__';
     SELECT cu.id, cu.monto, cu.monto_pagado, cu.fecha_vencimiento,
            cu.periodo, cu.estado, cu.contrato_id,
            cu.descripcion, cu.tipo_cargo_manual,
+           cu.capital, cu.interes, cu.saldo_restante,
            COALESCE(cu.cargos_neto, 0) AS cargos_neto,
            c.id AS cliente_id, c.nombre AS cliente_nombre,
+           ct.codigo AS contrato_codigo, ct.monto_prestado, ct.tasa_interes,
+           ct.frecuencia, ct.moneda AS contrato_moneda, ct.monto_cuota,
            p.nombre AS plan_nombre, p.precio_mensual, ct.dia_pago
       FROM cuotas cu
       JOIN clientes c ON c.id = cu.cliente_id

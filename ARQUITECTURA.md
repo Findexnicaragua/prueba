@@ -36,6 +36,8 @@
 | Cobrar una multa / otro cargo que decide el admin, con recibo | **Cobro puntual** del cliente (§Cuotas; cuota manual standalone → R11) |
 | Cambiar fecha de pago de un cliente (puente) | **Receta R13** |
 | Cambiar el plan de un contrato (mid-contrato, re-valúa futuras + prorrateo) | **Receta R22** |
+| Crear préstamo / contrato (calculadora, amortización atómica) | **§3 Contratos / Préstamos (Fases 1 y 2 Rework)** |
+| Consultar préstamo, desglose amortización y progreso | **§3 Contratos / Préstamos** |
 | Suspender / reactivar un contrato | **Receta R14** |
 | Cancelar un contrato (permanente, **CONDONA la deuda**) | **Receta R16** |
 | Desactivar un cliente (**EXIGE cero contratos vivos**; ya no condona en cascada) | **§3 Clientes → "Desactivar es el último paso"** (migración `0265`; sigue pidiendo aprobación) |
@@ -670,7 +672,13 @@ op_log per-objeto — ver §3 Audit/Change log; reemplazó al agregador
 `visitas_service` también lo bloquea server-side). La galería de fotos cachea las URLs
 firmadas → no recarga al cambiar de pestaña.
 
-### Contratos — `lib/features/contratos/` · `lib/features/admin/contratos/`
+### Contratos y Préstamos (Microfinanzas) — `lib/features/contratos/` · `lib/features/admin/contratos/`
+**[Microfinanzas Fases 1 y 2]**:
+- **Creación (`contrato_form_screen.dart`):** Rework integral que integra la calculadora financiera completa (capital, tasa mensual/total, frecuencia diaria/semanal/quincenal/mensual/bimensual, plazo en cuotas, método interés fijo flat o amortización francesa nivelada). Generación atómica local (`ps.dbW.writeTransaction`) de todas las $N$ cuotas en `cuotas` con desglose de `capital`, `interes` y `saldo_restante`, y auditoría en `op_log`.
+- **Desacoplamiento de Planes:** `plan_id` pasa a ser opcional (migración `0274_prestamos_microfinanzas.sql`); las consultas usan `LEFT JOIN planes`.
+- **Lista Admin (`contratos_admin_screen.dart`):** Buscador reactivo, filtro de activos, tarjetas enriquecidas con métricas de microfinanzas (préstamo, cuota con frecuencia, barra gráfica de progreso de cuotas y saldo pendiente).
+- **Ficha y Detalle (`contrato_detail_header.dart`, `contrato_detail_cuotas.dart`):** Header financiero con desglose de desembolso, cuota, tasa e interés, porcentaje amortizado y cronograma de cuotas con desglose de capital/interés y saldo deudor.
+- **Retrocompatibilidad:** Soporte continuo para contratos ISP heredados (plan, precio mensual, día de pago).
 **[H]** El vínculo cliente↔plan que GENERA las cuotas (las crea un trigger
 server, nunca el cliente). El detalle es el centro de control: cuotas,
 pagos, estado, documento. **Cancelar un contrato CONDONA toda su deuda**
@@ -4001,3 +4009,31 @@ El mapa (`mapa_screen.dart`) ofrece cálculo de ruta vial hacia el cliente selec
 4. **Erradicación de la Línea Recta:** Se eliminó el antiguo fallback euclidiano `[start, end]`. En su lugar, el motor conecta la ruta por todas las calles navegables hasta el nodo vial más próximo al cliente, trazando un tramo final continuo y honesto etiquetado como "Aprox. offline" en la UI.
 5. **Navegación Externa:** El panel inferior mantiene el botón "Abrir en Google Maps" para lanzamiento externo de navegación guiada por voz en moto o vehículo.
 
+
+
+---
+
+### Módulo de Préstamos y Microfinanzas (Rework Findex v0.45.1)
+
+A partir de v0.45.1, la entidad `contratos` evoluciona para modelar **Préstamos y Créditos Financieros** de forma nativa sin romper la sincronización offline-first de PowerSync ni las reglas de cobranza en campo:
+
+1. **Campos en `contratos`:**
+   - `monto_prestado` (numeric): Capital original desembolsado.
+   - `tasa_interes` (numeric): Porcentaje de interés pactado.
+   - `frecuencia` (text): Frecuencia de cobro (`diario`, `semanal`, `quincenal`, `mensual`, `bimensual`).
+   - `plazo_cuotas` (int): Número de cuotas totales del crédito.
+   - `metodo_calculo` (text): Sistema de amortización (`interes_fijo` o `cuota_nivelada`).
+   - `monto_cuota` (numeric): Cuota recurrente que debe amortizar el prestatario.
+   - `total_interes` (numeric): Intereses proyectados totales.
+   - `total_pagar` (numeric): Monto total del crédito (Capital + Intereses).
+   - `moneda` (text): `NIO` (Córdobas C$) o `USD` (Dólares US$).
+   - `plan_id` (nullable): Desacoplado; los préstamos ya no requieren planes de ISP.
+
+2. **Generación Atómica de Cronograma en `cuotas`:**
+   Al crear el préstamo en `contrato_form_screen.dart`, se calculan y generan las N cuotas directamente en SQLite local dentro de una sola transacción `ps.dbW.writeTransaction`. Cada cuota almacena su `fecha_vencimiento`, `monto`, `capital`, `interes` y `saldo_restante`, y se emiten los registros correspondientes en `op_log` para replicarse de inmediato a los cobradores.
+
+3. **Flujo de Cobranza y Recibos en Terreno (Fase 3):**
+   - **Cobro (`cobro_screen.dart`):** En cuotas asociadas a préstamos (`cuota.esPrestamo`), la tarjeta expone explícitamente el desglose de `capital` e `interes`, indicando el `saldo_restante` deudor.
+   - **Motores de Recibo (`recibo_ticket.dart`, `recibo_pdf.dart`, `recibo_texto_escpos.dart`):** Unifican la estructura del bloque de servicio: cuando la fila tiene `monto_prestado`, la glosa se formatea como `Préstamo [código] · Cuota [N]`, complementada con líneas detalladas para 'Abono capital', 'Interés ordinario' y 'Saldo restante'.
+   - **Compartir WhatsApp (`recibo_screen.dart`):** Permite a los cobradores emitir recibos electrónicos directos al celular del cliente sin requerir papel térmico.
+   - **Ruta y Cuotas (`cobros_query.dart`, `cuotas_list_screen.dart`):** Las consultas de cartera seleccionan campos de amortización y las tarjetas renderizan chips informativos del préstamo, deshabilitando acciones de cambio de ciclo recurrente incompatibles con amortizaciones fijas.

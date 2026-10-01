@@ -1,6 +1,6 @@
 {
-  "version": "0.45.1",
-  "release_notes": "v0.45.1 - Findex Actualización Oficial\n\n- Nueva Calculadora de Préstamos en el Menú General: cálculo de cuotas periódicas (diario, semanal, quincenal, mensual, bimensual), intereses totales y cronograma de amortización.\n- Soporte multimoneda (Córdobas C$ y Dólares US$).\n- Botón para copiar cotizaciones al portapapeles y compartir por WhatsApp.\n- Actualizaciones directas in-app habilitadas desde Findexnicaragua/prueba.",
+  "version": "0.45.3",
+  "release_notes": "v0.45.3 - Findex Microfinanzas y Préstamos (Fases 1, 2 y 3)\n\n- Rework integral de Contratos a Préstamos con calculadora financiera integrada (flat y francés) y generación atómica de amortización.\n- Ficha de Préstamo con métricas financieras, barra de amortización y cronograma con desglose capital/interés/saldo.\n- Cobro en terreno con visualización de abono capital e interés.\n- Recibos térmicos Bluetooth (58mm/80mm), PDF y ESC/POS con datos de crédito.\n- Envío de comprobantes estructurados por WhatsApp.\n- Lista de cartera y cuotas en ruta con soporte de préstamos.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"

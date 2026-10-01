@@ -298,38 +298,46 @@ class ReciboTicket extends StatelessWidget {
         // En multi la lista de cuotas (bloque `cuota`) ya cubre el servicio.
         if (_esMulti) return const [];
         final periodoCuota = DateTime.parse(r['periodo'] as String);
-        final esManual = r['plan_nombre'] == null;
+        final esPrestamo = r['monto_prestado'] != null;
+        final esManual = !esPrestamo && r['plan_nombre'] == null;
         final diaPago = (r['dia_pago'] as num?)?.toInt();
-        // 0262: si el recibo CONGELÓ su mes al emitirse, se imprime ESE y no
-        // se recalcula — así una reimpresión no contradice el papel que el
-        // cliente tiene. NULL = recibo anterior al congelamiento (o sin período
-        // impreso): se calcula, exactamente como antes.
         final periodoLabel = (r['periodo_label'] as String?) ??
             (esManual || diaPago == null
                 ? Fmt.mes(periodoCuota)
                 : Fmt.periodoRecibo(diaPago, periodoCuota));
-        // 0268: idem con el PLAN. El JOIN resuelve el plan VIVO del contrato,
-        // así que un cambio de plan reescribía lo que decían todos los recibos
-        // anteriores — la reimpresión de junio mostraba el plan de agosto.
         final planLabel =
             (r['plan_label'] as String?) ?? (r['plan_nombre'] as String?);
+
+        final String conceptoServicio;
+        if (esPrestamo) {
+          final cod = r['contrato_codigo'] as String?;
+          final desc = r['cuota_descripcion'] as String?;
+          conceptoServicio = cod != null
+              ? 'Préstamo $cod${desc != null ? ' · $desc' : ''}'
+              : (desc ?? 'Préstamo');
+        } else if (esManual) {
+          conceptoServicio = r['cuota_descripcion'] as String? ?? 'Cuota manual';
+        } else {
+          conceptoServicio = planLabel ?? '';
+        }
+
         return _emitirCampos(b, {
-          'servicio.servicio': _ticketRow(
-              'Servicio',
-              esManual
-                  ? (r['cuota_descripcion'] as String? ?? 'Cuota manual')
-                  : (planLabel ?? ''),
-              k),
-          // Cobro originado en un ticket (0173): referencia el N° de ticket.
+          'servicio.servicio': _ticketRow('Servicio', conceptoServicio, k),
           'servicio.ticket': r['ticket_correlativo'] != null
               ? _ticketRow('Ticket', '#${r['ticket_correlativo']}', k)
               : null,
-          // Período: solo cuotas del CONTRATO (mensual). Manual o puente-solo → se
-          // omite (audit 0173).
-          'servicio.periodo': (!_esPuenteSolo && !esManual)
+          'servicio.periodo': (!_esPuenteSolo && !esManual && !esPrestamo)
               ? _ticketRow('Período',
                   periodoLabel[0].toUpperCase() + periodoLabel.substring(1), k)
-              : null,
+              : (esPrestamo && r['cuota_descripcion'] != null)
+                  ? _ticketRow('Cuota', r['cuota_descripcion'] as String, k)
+                  : null,
+          if (esPrestamo && r['capital'] != null)
+            'servicio.capital': _ticketRow('Abono capital', Fmt.cordobas((r['capital'] as num).toDouble()), k),
+          if (esPrestamo && r['interes'] != null)
+            'servicio.interes': _ticketRow('Interés ordinario', Fmt.cordobas((r['interes'] as num).toDouble()), k),
+          if (esPrestamo && r['saldo_restante'] != null)
+            'servicio.saldo_restante': _ticketRow('Saldo restante', Fmt.cordobas((r['saldo_restante'] as num).toDouble()), k),
         });
       case 'cuota':
         if (_esMulti) {

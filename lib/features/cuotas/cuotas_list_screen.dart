@@ -885,8 +885,10 @@ class _CobroFilaCard extends ConsumerWidget {
     final esCobradorPuro = yo?.esCobrador ?? false;
     final cuotaEsMia = (row['cobrador_id'] as String?) == yo?.id;
     final soloLectura = ref.watch(soloLecturaProvider);
+    final esPrestamo = row['monto_prestado'] != null;
     final mostrarCambioFecha = ref.watch(puedeCambiarFechaPagoProvider) &&
         !esManual &&
+        !esPrestamo &&
         // Fuera de ruta (cancelado/suspendido): NO se re-fecha una cuota de un
         // contrato que ya salió del ciclo activo (el server la congela).
         !esFueraDeRuta &&
@@ -908,16 +910,28 @@ class _CobroFilaCard extends ConsumerWidget {
       _ => '${-diasFromVence}d',
     };
 
-    final mesLabel = Fmt.mesServicioLabel(
-      periodo,
-      (esManual || row['tipo_cargo_manual'] != null) ? null : diaPago,
-    );
-
     final tipoManual = row['tipo_cargo_manual'] as String?;
     final planNombre = row['plan_nombre'] as String?;
-    final plan = esManual
-        ? (tipoManual != null ? _tipoLabel(tipoManual) : 'Cargo manual')
-        : (planNombre ?? 'Contrato');
+    final String plan;
+    if (esPrestamo) {
+      final cod = row['contrato_codigo'] as String?;
+      plan = cod != null ? 'Préstamo $cod' : 'Préstamo';
+    } else if (esManual) {
+      plan = tipoManual != null ? _tipoLabel(tipoManual) : 'Cargo manual';
+    } else {
+      plan = planNombre ?? 'Contrato';
+    }
+
+    final String mesLabel;
+    if (esPrestamo) {
+      final desc = row['descripcion'] as String?;
+      mesLabel = desc ?? 'Cuota';
+    } else {
+      mesLabel = Fmt.mesServicioLabel(
+        periodo,
+        (esManual || row['tipo_cargo_manual'] != null) ? null : diaPago,
+      );
+    }
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1075,6 +1089,17 @@ class _CobroFilaCard extends ConsumerWidget {
                                   ),
                                 ),
                               ),
+                            if (esPrestamo && row['saldo_restante'] != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 3),
+                                child: Text(
+                                  'Saldo rest.: ${Fmt.monto((row['saldo_restante'] as num).toDouble(), (row['contrato_moneda'] as String?) ?? 'NIO')}${row['capital'] != null ? ' · Abono cap.: ${Fmt.monto((row['capital'] as num).toDouble(), (row['contrato_moneda'] as String?) ?? 'NIO')}' : ''}',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                      color: scheme.primary),
+                                ),
+                              ),
                             if (etiquetaChips.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 5),
@@ -1093,7 +1118,7 @@ class _CobroFilaCard extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(Fmt.cordobas(saldo),
+                          Text(Fmt.monto(saldo, (row['contrato_moneda'] as String?) ?? 'NIO'),
                               style: const TextStyle(
                                   fontWeight: FontWeight.w600, fontSize: 16)),
                           const SizedBox(height: 6),

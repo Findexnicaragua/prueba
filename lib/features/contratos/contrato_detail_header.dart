@@ -1,10 +1,6 @@
-// Tarjeta-resumen del contrato (header reutilizable): plan + estado, datos,
-// rango de cuotas y panel Total/Recaudado/Pendiente. Se usa en el detalle del
-// contrato y como vista previa en el detalle del cliente (sin la lista de
-// cuotas). Antes era `ContratoHeaderCard` (part of contrato_detail_screen).
-//
-// Los números de plata salen de `contratoRecaudadoProvider` con las fórmulas
-// canónicas — invariante #10. NO recalcular a mano acá.
+// Tarjeta-resumen del contrato (header reutilizable): plan o préstamo + estado,
+// datos financieros, rango de cuotas y panel Total/Recaudado/Pendiente.
+// Soporta tanto Préstamos Microfinancieros (Fase 1/2) como Contratos ISP legacy.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,8 +19,26 @@ String _duracionLabelHelper(DateTime inicio, DateTime? fin) {
   return '$meses meses';
 }
 
+String _frecuenciaLabel(String? f) {
+  switch (f) {
+    case 'diario':
+      return 'Diario';
+    case 'semanal':
+      return 'Semanal';
+    case 'quincenal':
+      return 'Quincenal';
+    case 'mensual':
+      return 'Mensual';
+    case 'bimensual':
+      return 'Bimensual';
+    default:
+      return f ?? 'Mensual';
+  }
+}
+
 class ContratoHeaderCard extends StatelessWidget {
-  const ContratoHeaderCard({super.key, 
+  const ContratoHeaderCard({
+    super.key,
     required this.contrato,
     required this.esAdmin,
     required this.contratoId,
@@ -33,36 +47,44 @@ class ContratoHeaderCard extends StatelessWidget {
     this.onEstadoChanged,
     this.footer,
   });
+
   final Map<String, dynamic> contrato;
   final bool esAdmin;
   final bool esAdminCobranza;
   final String contratoId;
   final bool enImpersonacion;
   final ValueChanged<String>? onEstadoChanged;
-  // Contenido extra opcional al pie de la tarjeta (ej. "Pagadas X/Y" en el
-  // preview del detalle del cliente). En el detalle de contrato va null.
   final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final estado = contrato['estado'] as String? ?? 'activo';
-    final planNombre = contrato['plan_nombre'] as String? ?? '—';
-    final precio = (contrato['precio_mensual'] as num?)?.toDouble() ?? 0;
+    final codigo = contrato['codigo'] as String?;
+    final clienteNombre = contrato['cliente_nombre'] as String? ?? '—';
     final fechaInicio = DateTime.parse(contrato['fecha_inicio'] as String);
     final fechaFin = contrato['fecha_fin'] != null
         ? DateTime.parse(contrato['fecha_fin'] as String)
         : null;
     final diaPago = contrato['dia_pago'] as int? ?? 1;
-    final clienteNombre = contrato['cliente_nombre'] as String? ?? '—';
-    final costoInstalacion =
-        (contrato['costo_instalacion'] as num?)?.toDouble();
-    final codigo = contrato['codigo'] as String?;
 
-    // 'completado' se eliminó como estado: era lo mismo que 'cancelado' (el
-    // contrato terminó) y si quedó saldado o no es un dato DERIVADO de las
-    // cuotas, no un estado guardado. Se mapea junto a 'cancelado' para que las
-    // filas viejas que todavía no migraron no muestren el valor crudo.
+    // Préstamo Microfinanciero vs Plan Legacy
+    final esPrestamo = contrato['monto_prestado'] != null;
+    final moneda = contrato['moneda'] as String? ?? 'NIO';
+    final montoPrestado = (contrato['monto_prestado'] as num?)?.toDouble() ?? 0.0;
+    final tasaInteres = (contrato['tasa_interes'] as num?)?.toDouble() ?? 0.0;
+    final frecuencia = contrato['frecuencia'] as String?;
+    final plazoCuotas = (contrato['plazo_cuotas'] as num?)?.toInt() ?? 0;
+    final metodoCalculo = contrato['metodo_calculo'] as String?;
+    final montoCuota = (contrato['monto_cuota'] as num?)?.toDouble() ?? 0.0;
+    final totalInteres = (contrato['total_interes'] as num?)?.toDouble() ?? 0.0;
+    final totalPagar = (contrato['total_pagar'] as num?)?.toDouble() ?? 0.0;
+
+    // Campos Legacy
+    final planNombre = contrato['plan_nombre'] as String? ?? '—';
+    final precio = (contrato['precio_mensual'] as num?)?.toDouble() ?? 0;
+    final costoInstalacion = (contrato['costo_instalacion'] as num?)?.toDouble();
+
     final (Color badgeColor, String badgeLabel) = switch (estado) {
       'activo' => (scheme.primary, 'Activo'),
       'suspendido' => (Colors.orange.shade800, 'Suspendido'),
@@ -77,24 +99,24 @@ class ContratoHeaderCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Fila: plan + badge estado
+            // Fila superior: Título (Préstamo o Plan) + Badge Estado
             Row(
               children: [
-                Icon(Icons.assignment, color: scheme.primary),
+                Icon(
+                  esPrestamo ? Icons.account_balance_wallet : Icons.assignment,
+                  color: scheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    planNombre,
+                    esPrestamo
+                        ? 'Préstamo · ${Fmt.monto(montoPrestado, moneda)}'
+                        : planNombre,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                   ),
                 ),
-                // B2: 'cancelado' es TERMINAL — un contrato cancelado no se
-                // reactiva (servicio terminado; para reanudar se crea uno
-                // nuevo). Por eso si ya está cancelado no se muestra el menú.
-                // Y al impersonar se oculta TODO el dropdown (ningún cambio de
-                // estado del tenant debe atribuirse al super_admin).
                 if (esAdmin &&
                     onEstadoChanged != null &&
                     !esTerminal &&
@@ -103,24 +125,12 @@ class ContratoHeaderCard extends StatelessWidget {
                     tooltip: 'Cambiar estado',
                     onSelected: onEstadoChanged,
                     itemBuilder: (_) => [
-                      // Un contrato SUSPENDIDO se reactiva desde su propia
-                      // tarjeta (que muestra el motivo y la deuda del corte),
-                      // no desde acá: dejar "Activo" en el menú daría dos
-                      // caminos distintos para lo mismo. Desde el suspendido la
-                      // única salida de este menú es cancelar — antes no había
-                      // ninguna y el contrato quedaba trabado en suspendido.
                       if (estado != 'activo' && estado != 'suspendido')
-                        const PopupMenuItem(
-                            value: 'activo', child: Text('Activo')),
-                      // Única salida desde acá: cancelar. 'Completado' se quitó
-                      // (era un alias de cancelado que además NO aplicaba a los
-                      // contratos indefinidos, que nunca "se completan").
-                      const PopupMenuItem(
-                          value: 'cancelado', child: Text('Cancelado')),
+                        const PopupMenuItem(value: 'activo', child: Text('Activo')),
+                      const PopupMenuItem(value: 'cancelado', child: Text('Cancelado')),
                     ],
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: badgeColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
@@ -135,16 +145,14 @@ class ContratoHeaderCard extends StatelessWidget {
                                 fontSize: 13,
                               )),
                           const SizedBox(width: 4),
-                          Icon(Icons.arrow_drop_down,
-                              size: 18, color: badgeColor),
+                          Icon(Icons.arrow_drop_down, size: 18, color: badgeColor),
                         ],
                       ),
                     ),
                   )
                 else
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: badgeColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
@@ -158,6 +166,8 @@ class ContratoHeaderCard extends StatelessWidget {
                   ),
               ],
             ),
+
+            // Código del contrato/préstamo
             if (codigo != null && codigo.isNotEmpty) ...[
               const SizedBox(height: 6),
               Row(
@@ -166,67 +176,139 @@ class ContratoHeaderCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(codigo,
                       style: TextStyle(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600)),
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w700)),
                 ],
               ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+
             // Cliente
             Row(
               children: [
                 Icon(Icons.person, size: 16, color: scheme.outline),
                 const SizedBox(width: 6),
-                Text(clienteNombre,
-                    style: TextStyle(color: scheme.onSurfaceVariant)),
+                Text(
+                  clienteNombre,
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Precio
-            Row(
-              children: [
-                Icon(Icons.monetization_on, size: 16, color: scheme.outline),
-                const SizedBox(width: 6),
-                Text('${Fmt.cordobas(precio)} / mes',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurfaceVariant,
-                    )),
-              ],
-            ),
-            // Duración (legible: 1 año / 2 años / N meses / Indefinido)
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.timelapse, size: 16, color: scheme.outline),
-                const SizedBox(width: 6),
-                Text('Duración: ${_duracionLabelHelper(fechaInicio, fechaFin)}',
-                    style: TextStyle(color: scheme.onSurfaceVariant)),
-              ],
-            ),
-            // Fecha de instalación (referencia; = fecha_inicio del contrato). NO
-            // cambia al reactivar / cambiar fecha — es histórica.
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.build_circle_outlined, size: 16, color: scheme.outline),
-                const SizedBox(width: 6),
-                Text('Instalación: ${Fmt.fechaCorta(fechaInicio)}',
-                    style: TextStyle(color: scheme.onSurfaceVariant)),
-              ],
-            ),
+            const SizedBox(height: 12),
+
+            // CUERPO: MODO PRÉSTAMO
+            if (esPrestamo) ...[
+              // Grid de métricas financieras del préstamo
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // responsive width check
+                  final _ = constraints.maxWidth;
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _LoanInfoTile(
+                              label: 'Monto prestado',
+                              value: Fmt.monto(montoPrestado, moneda),
+                              icon: Icons.payments_outlined,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _LoanInfoTile(
+                              label: 'Cuota programada',
+                              value: '${Fmt.monto(montoCuota, moneda)} (${_frecuenciaLabel(frecuencia)})',
+                              icon: Icons.event_repeat,
+                              highlight: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _LoanInfoTile(
+                              label: 'Tasa e interés',
+                              value: '$tasaInteres% (${Fmt.monto(totalInteres, moneda)}) · ${metodoCalculo == 'cuota_nivelada' ? 'Nivelada' : 'Fijo'}',
+                              icon: Icons.percent,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _LoanInfoTile(
+                              label: 'Plazo / Total a pagar',
+                              value: '$plazoCuotas cuotas · ${Fmt.monto(totalPagar, moneda)}',
+                              icon: Icons.calendar_month,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today_outlined, size: 15, color: scheme.outline),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Desembolso: ${Fmt.fechaCorta(fechaInicio)}'
+                    '${fechaFin != null ? ' · Vence: ${Fmt.fechaCorta(fechaFin)}' : ''}',
+                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ] else ...[
+              // CUERPO: MODO LEGACY ISP
+              Row(
+                children: [
+                  Icon(Icons.monetization_on, size: 16, color: scheme.outline),
+                  const SizedBox(width: 6),
+                  Text('${Fmt.cordobas(precio)} / mes',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurfaceVariant,
+                      )),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.timelapse, size: 16, color: scheme.outline),
+                  const SizedBox(width: 6),
+                  Text('Duración: ${_duracionLabelHelper(fechaInicio, fechaFin)}',
+                      style: TextStyle(color: scheme.onSurfaceVariant)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.build_circle_outlined, size: 16, color: scheme.outline),
+                  const SizedBox(width: 6),
+                  Text('Instalación: ${Fmt.fechaCorta(fechaInicio)}',
+                      style: TextStyle(color: scheme.onSurfaceVariant)),
+                ],
+              ),
+            ],
+
             const Divider(height: 20),
-            // Detalle inferior — fila 1: rango REAL de cuotas + día de pago.
-            // Primera/Última = venc de la 1ª y última cuota no anulada → refleja
-            // el rango facturable vigente (cambia al reactivar / cambiar fecha).
+
+            // Rango de fechas de cuotas + día de pago
             _ContratoFechasChips(
               contratoId: contratoId,
               diaPago: diaPago,
               indefinido: fechaFin == null,
+              frecuencia: frecuencia,
             ),
-            // Costo de instalación (si se registró). Dato informativo —
-            // no genera un cobro automático.
-            if (costoInstalacion != null) ...[
+
+            if (costoInstalacion != null && !esPrestamo) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -237,26 +319,22 @@ class ContratoHeaderCard extends StatelessWidget {
                 ],
               ),
             ],
-            // La nota del contrato SE MUDÓ a `_NotaContratoCard` (más abajo en
-            // el detalle), que además la deja editar. Acá se sacó para no
-            // pintarla dos veces en la misma pantalla con dos estilos
-            // distintos, que se leía como si fueran dos notas y una estuviera
-            // desactualizada.
+
             const SizedBox(height: 12),
-            // Resumen financiero del contrato.
-            // Total contrato MOSTRADO = Σ cuotas vivas (= recaudado + pendiente),
-            // NO precio×meses (#5 redefinido por R22 — robusto al cambio de plan).
-            // Recaudado = SUM(pagos no anulados) del contrato.
-            // Pendiente = deuda cobrable = SUM(saldos de cuotas vivas) — igual que
-            // los reportes; tras una suspensión refleja lo que queda por cobrar (#10).
+
+            // Resumen financiero (Total / Recaudado / Saldo Pendiente)
             _ContratoResumen(
               contratoId: contratoId,
-              precioMensual: precio,
+              precioMensual: esPrestamo ? montoCuota : precio,
               fechaInicio: fechaInicio,
               fechaFin: fechaFin,
-              duracionMeses: (contrato['duracion_meses'] as num?)?.toInt(),
+              duracionMeses: esPrestamo ? plazoCuotas : (contrato['duracion_meses'] as num?)?.toInt(),
               esAdminCobranza: esAdminCobranza,
+              moneda: moneda,
+              esPrestamo: esPrestamo,
+              totalNominalPrestamo: esPrestamo ? totalPagar : null,
             ),
+
             if (footer != null) ...[
               const SizedBox(height: 12),
               footer!,
@@ -268,8 +346,66 @@ class ContratoHeaderCard extends StatelessWidget {
   }
 }
 
+class _LoanInfoTile extends StatelessWidget {
+  const _LoanInfoTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.highlight = false,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: highlight
+            ? scheme.primaryContainer.withValues(alpha: 0.35)
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: highlight ? scheme.primary : scheme.outline),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 10, color: scheme.outline),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: highlight ? scheme.primary : scheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Resumen financiero del contrato
+// Resumen financiero del contrato / préstamo
 // ---------------------------------------------------------------------------
 
 class _ContratoResumen extends ConsumerWidget {
@@ -280,22 +416,25 @@ class _ContratoResumen extends ConsumerWidget {
     required this.fechaFin,
     required this.duracionMeses,
     this.esAdminCobranza = false,
+    this.moneda = 'NIO',
+    this.esPrestamo = false,
+    this.totalNominalPrestamo,
   });
+
   final String contratoId;
   final double precioMensual;
   final DateTime fechaInicio;
   final DateTime? fechaFin;
   final int? duracionMeses;
   final bool esAdminCobranza;
+  final String moneda;
+  final bool esPrestamo;
+  final double? totalNominalPrestamo;
 
-  /// Nominal precio_mensual × meses — se usa SOLO como discriminador
-  /// fijo-vs-indefinido (null = indefinido), NO como el Total mostrado (que es
-  /// Σ cuotas vivas = recaudado + pendiente, invariante #5 redefinido por R22).
-  /// Para contratos indefinidos retorna null.
   double? _calcularTotalContrato() {
-    // Fuente de verdad: duracion_meses guardada al crear (invariante #5).
-    // Fallback a derivar de fechas solo para contratos viejos sin la columna
-    // backfilleada (no debería pasar tras la migración 0072).
+    if (esPrestamo && totalNominalPrestamo != null && totalNominalPrestamo! > 0) {
+      return totalNominalPrestamo;
+    }
     final meses = duracionMeses ??
         (fechaFin != null
             ? (fechaFin!.year - fechaInicio.year) * 12 +
@@ -308,16 +447,6 @@ class _ContratoResumen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    // El rol se lee ACÁ ADENTRO, no por parámetro: así quedan cubiertos los DOS
-    // lugares que dibujan este panel (el detalle del contrato y el preview del
-    // detalle del cliente), que mostraban el mismo número falso.
-    //
-    // `admin_usuarios` NO sincroniza `pagos` (bucket todo_tenant_admin_usuarios),
-    // así que "Recaudado" le daba 0 — y como Total = recaudado + pendiente, el
-    // 0 arrastraba al Total. En un contrato real: veía 8.240,00 C$ donde iban
-    // 19.776,00 C$, un 58% menos, presentado como el total del contrato. No es
-    // un dato faltante, es un número inventado. Se le muestra el avance en
-    // CONTEO de cuotas, que sale de `cuotas` (tabla que sí baja) y es exacto.
     final esAdminUsuarios = ref
             .watch(cobradorActualProvider)
             .valueOrNull
@@ -325,12 +454,8 @@ class _ContratoResumen extends ConsumerWidget {
         false;
     final totalContrato = _calcularTotalContrato();
     final esIndefinido = totalContrato == null;
-    // Indefinido → solo "Total recaudado" (no hay total nominal). El CANCELADO
-    // se trata como activo y muestra Total/Recaudado/Pendiente (consistencia
-    // cross-pantalla #10). Desde 2026-08-24 su "Pendiente" da 0 por
-    // construcción —cancelar deja todas las cuotas en cero—; no hace falta un
-    // caso especial acá porque el número sale de las cuotas reales.
     final soloRecaudado = esIndefinido;
+
     return ref.watch(contratoRecaudadoProvider(contratoId)).when(
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),
@@ -338,28 +463,15 @@ class _ContratoResumen extends ConsumerWidget {
         final recaudado = rows.isEmpty
             ? 0.0
             : ((rows.first['recaudado'] as num?) ?? 0).toDouble();
-        // Pendiente = deuda COBRABLE real (suma de saldos de cuotas vivas), la
-        // misma fórmula canónica que usan todos los reportes → consistente tras
-        // una suspensión (los meses anulados no se cobran) y con cargos extra
-        // (invariante #10). "Total contrato" = Σ cuotas vivas (= `real`, abajo),
-        // NO el nominal precio×meses (#5 redefinido — robusto al cambio de plan).
-        final cobrable = rows.isEmpty
+        final pendiente = rows.isEmpty
             ? 0.0
             : ((rows.first['cobrable'] as num?) ?? 0).toDouble();
-        final pendiente = (soloRecaudado && !esAdminCobranza) ? 0.0 : cobrable;
-        // "Total contrato" muestra el REAL facturable = recaudado + pendiente
-        // (cobrable) = Σ de las cuotas vivas (incluye cargos). Tras un cambio de
-        // plan refleja el precio nuevo en las futuras (las cuotas son snapshots).
         final real = recaudado + pendiente;
-        // "Ajustado (meses anulados)": un fijo con MENOS cuotas vivas que su
-        // duración pasó por una suspensión/cancelación. Señal por CONTEO de
-        // cuotas, NO por precio×meses → robusta a un cambio de plan (el nominal
-        // ya no aplica y haría misfire el hint). #5 redefinido: Total = Σ cuotas
-        // vivas (= `real`), no el nominal precio×meses.
-        final vivas =
-            rows.isEmpty ? null : (rows.first['vivas'] as num?)?.toInt();
+        final vivas = rows.isEmpty ? null : (rows.first['vivas'] as num?)?.toInt();
+        final pagadas = rows.isEmpty ? 0 : (rows.first['pagadas'] as num?)?.toInt() ?? 0;
         final dm = duracionMeses;
         final ajustado = dm != null && vivas != null && vivas < dm;
+        final progreso = real > 0 ? (recaudado / real).clamp(0.0, 1.0) : 0.0;
 
         return Container(
           padding: const EdgeInsets.all(12),
@@ -367,78 +479,106 @@ class _ContratoResumen extends ConsumerWidget {
             color: scheme.primaryContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Row(
+          child: Column(
             children: [
-              if (esAdminUsuarios) ...[
-                Expanded(
-                  child: _ResumenItem(
-                    label: 'Cuotas pagadas',
-                    value: vivas == null
-                        ? '${(rows.isEmpty ? 0 : (rows.first['pagadas'] as num?)?.toInt() ?? 0)}'
-                        : '${(rows.first['pagadas'] as num?)?.toInt() ?? 0}/$vivas',
-                    color: Colors.green.shade700,
-                  ),
-                ),
-                Container(
-                    width: 1, height: 36, color: scheme.outline.withValues(alpha: 0.3)),
-                Expanded(
-                  child: _ResumenItem(
-                    label: 'Cuotas pendientes',
-                    value: '${(vivas ?? 0) - ((rows.isEmpty ? 0 : (rows.first['pagadas'] as num?)?.toInt() ?? 0))}',
-                    color: scheme.onSurface,
-                  ),
-                ),
-              ] else if (soloRecaudado) ...[
-                if (!esAdminCobranza)
-                  Expanded(
-                    child: _ResumenItem(
-                      label: 'Total recaudado',
-                      value: Fmt.cordobas(recaudado),
-                      color: Colors.green.shade700,
+              Row(
+                children: [
+                  if (esAdminUsuarios) ...[
+                    Expanded(
+                      child: _ResumenItem(
+                        label: 'Cuotas pagadas',
+                        value: vivas == null ? '$pagadas' : '$pagadas/$vivas',
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                    Container(width: 1, height: 36, color: scheme.outline.withValues(alpha: 0.3)),
+                    Expanded(
+                      child: _ResumenItem(
+                        label: 'Cuotas pendientes',
+                        value: '${(vivas ?? 0) - pagadas}',
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ] else if (soloRecaudado) ...[
+                    if (!esAdminCobranza)
+                      Expanded(
+                        child: _ResumenItem(
+                          label: esPrestamo ? 'Total amortizado' : 'Total recaudado',
+                          value: Fmt.monto(recaudado, moneda),
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    if (esAdminCobranza)
+                      Expanded(
+                        child: _ResumenItem(
+                          label: 'Total pendiente',
+                          value: Fmt.monto(pendiente, moneda),
+                          color: pendiente > 0 ? scheme.error : scheme.outline,
+                        ),
+                      ),
+                  ] else if (esAdminCobranza) ...[
+                    Expanded(
+                      child: _ResumenItem(
+                        label: 'Total pendiente',
+                        value: Fmt.monto(pendiente, moneda),
+                        color: pendiente > 0 ? scheme.error : scheme.outline,
+                      ),
+                    ),
+                  ] else ...[
+                    Expanded(
+                      child: _ResumenItem(
+                        label: esPrestamo ? 'Total a pagar' : 'Total contrato',
+                        value: Fmt.monto(real, moneda),
+                        color: scheme.onSurface,
+                        hint: ajustado ? 'ajustado' : null,
+                      ),
+                    ),
+                    Container(width: 1, height: 36, color: scheme.outline.withValues(alpha: 0.3)),
+                    Expanded(
+                      child: _ResumenItem(
+                        label: esPrestamo ? 'Amortizado' : 'Recaudado',
+                        value: Fmt.monto(recaudado, moneda),
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                    Container(width: 1, height: 36, color: scheme.outline.withValues(alpha: 0.3)),
+                    Expanded(
+                      child: _ResumenItem(
+                        label: 'Saldo pendiente',
+                        value: Fmt.monto(pendiente, moneda),
+                        color: pendiente > 0 ? scheme.error : scheme.outline,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (esPrestamo && !esAdminUsuarios && real > 0) ...[
+                const SizedBox(height: 10),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progreso,
+                    minHeight: 6,
+                    backgroundColor: scheme.surfaceContainerHighest,
+                    valueColor: AlwaysStoppedAnimation(
+                      progreso >= 1.0 ? Colors.green.shade600 : scheme.primary,
                     ),
                   ),
-                if (esAdminCobranza)
-                  Expanded(
-                    child: _ResumenItem(
-                      label: 'Total pendiente',
-                      value: Fmt.cordobas(pendiente),
-                      color: pendiente > 0 ? scheme.error : scheme.outline,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Avance: ${(progreso * 100).toStringAsFixed(1)}%',
+                      style: TextStyle(fontSize: 10, color: scheme.outline),
                     ),
-                  ),
-              ] else if (esAdminCobranza) ...[
-                Expanded(
-                  child: _ResumenItem(
-                    label: 'Total pendiente',
-                    value: Fmt.cordobas(pendiente),
-                    color: pendiente > 0 ? scheme.error : scheme.outline,
-                  ),
-                ),
-              ] else ...[
-                Expanded(
-                  child: _ResumenItem(
-                    label: 'Total contrato',
-                    value: Fmt.cordobas(real),
-                    color: scheme.onSurface,
-                    hint: ajustado ? 'ajustado (meses anulados)' : null,
-                  ),
-                ),
-                Container(
-                    width: 1, height: 36, color: scheme.outline.withValues(alpha: 0.3)),
-                Expanded(
-                  child: _ResumenItem(
-                    label: 'Recaudado',
-                    value: Fmt.cordobas(recaudado),
-                    color: Colors.green.shade700,
-                  ),
-                ),
-                Container(
-                    width: 1, height: 36, color: scheme.outline.withValues(alpha: 0.3)),
-                Expanded(
-                  child: _ResumenItem(
-                    label: 'Pendiente',
-                    value: Fmt.cordobas(pendiente),
-                    color: pendiente > 0 ? scheme.error : scheme.outline,
-                  ),
+                    if (vivas != null)
+                      Text(
+                        '$pagadas de $vivas cuotas',
+                        style: TextStyle(fontSize: 10, color: scheme.outline),
+                      ),
+                  ],
                 ),
               ],
             ],
@@ -456,6 +596,7 @@ class _ResumenItem extends StatelessWidget {
     required this.color,
     this.hint,
   });
+
   final String label;
   final String value;
   final Color color;
@@ -487,18 +628,19 @@ class _ResumenItem extends StatelessWidget {
   }
 }
 
-// Chips de fechas: Primera cuota / Última cuota (venc min/max de cuotas NO
-// anuladas) + Día de pago. Lee las cuotas del provider para reflejar el rango
-// facturable VIGENTE (tras reactivar / cambiar fecha cambia; la instalación no).
+// Chips de fechas: Primera cuota / Última cuota + Día de pago / Frecuencia
 class _ContratoFechasChips extends ConsumerWidget {
   const _ContratoFechasChips({
     required this.contratoId,
     required this.diaPago,
     required this.indefinido,
+    this.frecuencia,
   });
+
   final String contratoId;
   final int diaPago;
   final bool indefinido;
+  final String? frecuencia;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -533,8 +675,8 @@ class _ContratoFechasChips extends ConsumerWidget {
         const SizedBox(width: 16),
         _DetailChip(
           icon: Icons.today,
-          label: 'Día de pago',
-          value: '$diaPago',
+          label: frecuencia != null ? 'Frecuencia' : 'Día de pago',
+          value: frecuencia != null ? _frecuenciaLabel(frecuencia) : '$diaPago',
         ),
       ],
     );
@@ -547,6 +689,7 @@ class _DetailChip extends StatelessWidget {
     required this.label,
     required this.value,
   });
+
   final IconData icon;
   final String label;
   final String value;
@@ -578,8 +721,3 @@ class _DetailChip extends StatelessWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Seccion de cuotas
-// ---------------------------------------------------------------------------
-

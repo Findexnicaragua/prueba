@@ -1639,15 +1639,27 @@ class _HistorialPagosSection extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final first = pagos.first;
     final esManual = key == '__manual__';
-    final titulo = esManual
-        ? 'Cargos manuales'
-        : (first['plan_nombre'] as String? ?? 'Contrato');
+    final esPrestamo = first['monto_prestado'] != null;
+    final String titulo;
+    if (esManual) {
+      titulo = 'Cargos manuales';
+    } else if (esPrestamo) {
+      titulo = 'Préstamo';
+    } else {
+      titulo = first['plan_nombre'] as String? ?? 'Contrato';
+    }
     final codigo = first['contrato_codigo'] as String?;
     final n = pagos.length;
     return Row(
       children: [
-        Icon(esManual ? Icons.receipt_long : Icons.wifi,
-            size: 15, color: scheme.outline),
+        Icon(
+            esManual
+                ? Icons.receipt_long
+                : (esPrestamo
+                    ? Icons.account_balance_wallet_outlined
+                    : Icons.wifi),
+            size: 15,
+            color: scheme.outline),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
@@ -1676,13 +1688,20 @@ class _PagoFilaReadOnly extends StatelessWidget {
     final periodo = row['periodo'] != null
         ? DateTime.parse(row['periodo'] as String)
         : null;
-    final mes = periodo != null
-        ? Fmt.mesServicioLabel(
-            periodo,
-            row['tipo_cargo_manual'] != null
-                ? null
-                : (row['dia_pago'] as num?)?.toInt())
-        : '—';
+    final esPrestamo = row['monto_prestado'] != null;
+    final String mes;
+    if (esPrestamo) {
+      final desc = row['cuota_descripcion'] as String?;
+      mes = desc ?? 'Cuota';
+    } else {
+      mes = periodo != null
+          ? Fmt.mesServicioLabel(
+              periodo,
+              row['tipo_cargo_manual'] != null
+                  ? null
+                  : (row['dia_pago'] as num?)?.toInt())
+          : '—';
+    }
     final montoLabel = pago.moneda == Moneda.nio
         ? Fmt.cordobas(pago.montoCordobas)
         : '${Fmt.dolares(pago.montoOriginal)} (${Fmt.cordobas(pago.montoCordobas)})';
@@ -1705,7 +1724,8 @@ class _PagoFilaReadOnly extends StatelessWidget {
                       decoration:
                           pago.anulado ? TextDecoration.lineThrough : null,
                     )),
-                Text('${Fmt.fechaCorta(pago.fechaPago)} · ${pago.metodo.label}',
+                Text(
+                    '${Fmt.fechaCorta(pago.fechaPago)} · ${pago.metodo.label}${esPrestamo && row['capital'] != null ? ' · Cap: ${Fmt.cordobas((row['capital'] as num).toDouble())}' : ''}',
                     style: TextStyle(fontSize: 11, color: scheme.outline)),
               ],
             ),
@@ -2049,9 +2069,15 @@ class _ContratoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final plan = contrato['plan_nombre'] as String? ?? 'Sin plan';
+    final esPrestamo = contrato['monto_prestado'] != null;
+    final plan = esPrestamo
+        ? 'Préstamo'
+        : (contrato['plan_nombre'] as String? ?? 'Sin plan');
     final codigo = contrato['codigo'] as String?;
+    final moneda = (contrato['moneda'] as String?) ?? 'NIO';
     final precio = (contrato['precio_mensual'] as num?)?.toDouble() ?? 0;
+    final montoCuota = (contrato['monto_cuota'] as num?)?.toDouble();
+    final montoPrestado = (contrato['monto_prestado'] as num?)?.toDouble();
     final totalCuotas = (contrato['total_cuotas'] as num?)?.toInt() ?? 0;
     final pagadas = (contrato['cuotas_pagadas'] as num?)?.toInt() ?? 0;
     final vencidas = (contrato['cuotas_vencidas'] as num?)?.toInt() ?? 0;
@@ -2080,22 +2106,33 @@ class _ContratoCard extends StatelessWidget {
                 ),
               Row(
                 children: [
-                  Icon(Icons.description,
+                  Icon(
+                      esPrestamo
+                          ? Icons.account_balance_wallet_outlined
+                          : Icons.description,
                       color: cancelado ? scheme.outline : scheme.primary,
                       size: 20),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(plan,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          decoration: cancelado ? TextDecoration.lineThrough : null,
-                        )),
-                  ),
-                  Text('${Fmt.cordobas(precio)}/mes',
+                    child: Text(
+                      esPrestamo && montoPrestado != null
+                          ? 'Préstamo · ${Fmt.monto(montoPrestado, moneda)}'
+                          : plan,
                       style: TextStyle(
-                        color: scheme.outline,
-                        fontSize: 12,
-                      )),
+                        fontWeight: FontWeight.w600,
+                        decoration: cancelado ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    esPrestamo && montoCuota != null
+                        ? '${Fmt.monto(montoCuota, moneda)}/cuota'
+                        : '${Fmt.cordobas(precio)}/mes',
+                    style: TextStyle(
+                      color: scheme.outline,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),

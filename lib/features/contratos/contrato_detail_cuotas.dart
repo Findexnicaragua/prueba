@@ -599,14 +599,21 @@ class _CuotaRow extends ConsumerWidget {
       color = scheme.outline;
     }
 
-    // Mes de servicio (mes con más días del período): se deriva del día de
-    // pago. Cargos manuales no tienen período de servicio → mes del periodo.
+    // Mes de servicio o descripción de cuota de préstamo
     final mesLabel = Fmt.mesServicioLabel(
       periodo,
       row['tipo_cargo_manual'] != null
           ? null
           : (row['dia_pago'] as num?)?.toInt(),
     );
+    final descripcion = row['descripcion'] as String?;
+    final cuotaTitulo = (descripcion != null && descripcion.trim().isNotEmpty)
+        ? descripcion
+        : mesLabel;
+    final moneda = row['moneda'] as String? ?? 'NIO';
+    final capital = (row['capital'] as num?)?.toDouble();
+    final interes = (row['interes'] as num?)?.toDouble();
+    final saldoRestante = (row['saldo_restante'] as num?)?.toDouble();
     final esPagadaOAnulada = estado == 'pagada' || estado == 'anulada';
 
     return InkWell(
@@ -641,21 +648,46 @@ class _CuotaRow extends ConsumerWidget {
                 ),
               ),
             const SizedBox(width: 8),
-            // Mes + fechas (vencimiento y cobro)
-            SizedBox(
-              width: 105,
+            // Título de cuota + badge + desglose
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(mesLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: esPagadaOAnulada ? scheme.outline : null,
-                      )),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(cuotaTitulo,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: esPagadaOAnulada ? scheme.outline : null,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(width: 6),
+                      // Estado badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(label,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            )),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
                   Text(
-                    'Vence ${_ddMM(vence)}',
+                    'Vence ${_ddMM(vence)}${capital != null && interes != null ? ' · Cap: ${Fmt.monto(capital, moneda)} / Int: ${Fmt.monto(interes, moneda)}' : ''}',
                     style: TextStyle(fontSize: 10, color: scheme.outline),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   if (estado == 'pagada' && fechaCobro != null)
                     Text(
@@ -668,29 +700,15 @@ class _CuotaRow extends ConsumerWidget {
                 ],
               ),
             ),
-            // Estado badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  )),
-            ),
-            const Spacer(),
-            // Monto
+            const SizedBox(width: 8),
+            // Monto y saldo
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  Fmt.cordobas(esPagadaOAnulada ? monto : saldo),
+                  Fmt.monto(esPagadaOAnulada ? monto : saldo, moneda),
                   style: TextStyle(
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     fontSize: 13,
                     color: esPagadaOAnulada ? scheme.outline : null,
                     decoration:
@@ -699,10 +717,18 @@ class _CuotaRow extends ConsumerWidget {
                 ),
                 if (montoPagado > 0 && estado == 'parcial')
                   Text(
-                    'pagado ${Fmt.cordobas(montoPagado)}',
+                    'pagado ${Fmt.monto(montoPagado, moneda)}',
                     style: TextStyle(
                       fontSize: 10,
                       color: Colors.green.shade700,
+                    ),
+                  )
+                else if (saldoRestante != null && estado != 'anulada')
+                  Text(
+                    'saldo ${Fmt.monto(saldoRestante, moneda)}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: scheme.outline,
                     ),
                   ),
               ],

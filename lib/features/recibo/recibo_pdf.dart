@@ -248,33 +248,46 @@ List<pw.Widget> _pdfBloqueSingle(
       });
     case 'servicio':
       final periodoCuota = DateTime.parse(row['periodo'] as String);
-      final esManual = row['plan_nombre'] == null;
+      final esPrestamo = row['monto_prestado'] != null;
+      final esManual = !esPrestamo && row['plan_nombre'] == null;
       final diaPago = (row['dia_pago'] as num?)?.toInt();
-      // 0262: el mes congelado manda sobre el calculado (ver recibo_ticket).
       final periodoLabel = (row['periodo_label'] as String?) ??
           (esManual || diaPago == null
               ? Fmt.mes(periodoCuota)
               : Fmt.periodoRecibo(diaPago, periodoCuota));
-      // 0268: el plan congelado manda sobre el del JOIN, igual que el mes.
-      // Sin esto, un cambio de plan reescribía el plan de TODOS los recibos
-      // viejos del contrato: la reimpresión de junio decía el plan de agosto.
       final planLabel =
           (row['plan_label'] as String?) ?? (row['plan_nombre'] as String?);
+
+      final String conceptoServicio;
+      if (esPrestamo) {
+        final cod = row['contrato_codigo'] as String?;
+        final desc = row['cuota_descripcion'] as String?;
+        conceptoServicio = cod != null
+            ? 'Préstamo $cod${desc != null ? ' · $desc' : ''}'
+            : (desc ?? 'Préstamo');
+      } else if (esManual) {
+        conceptoServicio = row['cuota_descripcion'] as String? ?? 'Cuota manual';
+      } else {
+        conceptoServicio = planLabel ?? '';
+      }
+
       return _pdfEmitirCampos(b, {
-        'servicio.servicio': _pdfRow(
-            'Servicio',
-            esManual
-                ? (row['cuota_descripcion'] as String? ?? 'Cuota manual')
-                : (planLabel ?? ''),
-            k),
+        'servicio.servicio': _pdfRow('Servicio', conceptoServicio, k),
         'servicio.ticket': row['ticket_correlativo'] != null
             ? _pdfRow('Ticket', '#${row['ticket_correlativo']}', k)
             : null,
-        // Período: solo cuotas del CONTRATO (mensual); manual/puente-solo → se omite.
-        'servicio.periodo': (!_esPuenteSoloPdf(row, cargosRows) && !esManual)
+        'servicio.periodo': (!_esPuenteSoloPdf(row, cargosRows) && !esManual && !esPrestamo)
             ? _pdfRow('Período',
                 periodoLabel[0].toUpperCase() + periodoLabel.substring(1), k)
-            : null,
+            : (esPrestamo && row['cuota_descripcion'] != null)
+                ? _pdfRow('Cuota', row['cuota_descripcion'] as String, k)
+                : null,
+        if (esPrestamo && row['capital'] != null)
+          'servicio.capital': _pdfRow('Abono capital', Fmt.cordobas((row['capital'] as num).toDouble()), k),
+        if (esPrestamo && row['interes'] != null)
+          'servicio.interes': _pdfRow('Interés ordinario', Fmt.cordobas((row['interes'] as num).toDouble()), k),
+        if (esPrestamo && row['saldo_restante'] != null)
+          'servicio.saldo_restante': _pdfRow('Saldo restante', Fmt.cordobas((row['saldo_restante'] as num).toDouble()), k),
       });
     case 'cuota':
       // Saldo de la cuota tras este pago (sub-toggle `mostrar_adeudado`).

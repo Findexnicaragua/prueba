@@ -135,12 +135,14 @@ Pestaña Visitas = gate por tenant (`cobranza.registrar_visitas`, super-only).
 
 ---
 
-### Contratos
+### Contratos / Préstamos (Microfinanzas)
 
-**Para qué sirve:** El acuerdo de servicio entre el ISP y el cliente: define el
-plan/precio mensual, el `dia_pago` y la duración (fijo de N meses o indefinido).
-Al crearse, un trigger server genera automáticamente las cuotas del período. Es
-el contenedor del que cuelga toda la plata.
+**Para qué sirve:** El acuerdo crediticio o de servicio entre la empresa y el prestatario/cliente.
+En el nuevo flujo de microfinanzas (Fases 1 y 2), define el monto prestado, tasa de interés,
+frecuencia (diario, semanal, quincenal, mensual, bimensual), plazo en cuotas, método de cálculo
+(Interés Fijo Flat o Cuota Nivelada Francés), fechas de desembolso y primer vencimiento, y
+el cronograma atómico de cuotas con desglose de capital, interés y saldo restante. Conserva
+además compatibilidad total con contratos ISP heredados basados en planes de internet.
 
 **Features:**
 - Alta de contrato: plan, precio mensual, `dia_pago`, fijo (N meses) o indefinido; al insertar, el trigger `contratos_generar_cuotas_iniciales` genera las cuotas.
@@ -1488,3 +1490,20 @@ vertebral; **Mora/Suspensión** y **Saldo a favor** son las ramas cuando no se
 paga; **Inventario/Tickets/Incidentes/Avisos** cuelgan del cliente solo si el
 tenant los tiene prendidos; y **Auth, Settings, op_log, Reportes y Super-admin**
 son transversales a todo.
+
+---
+
+## 4. Módulo de Préstamos / Créditos (Microfinanzas)
+- **Ruta principal:** `/admin/contratos` y `/admin/contratos/nuevo`
+- **Propósito:** Gestión integral del ciclo de vida de los préstamos: simulación, cotización, desembolso, cronograma de amortización y seguimiento de cuotas.
+- **Calculadora Financiera Integrada:**
+  - Cálculo de cuotas en tiempo real por frecuencia: Diaria, Semanal, Quincenal, Mensual y Bimensual.
+  - Métodos de amortización soportados: Interés Fijo (Flat Microfinanzas) y Cuota Nivelada (Francés).
+  - Cronograma proyectado detallado con desglose de capital, interés y saldo insoluto.
+  - Cédula, notas, aval y adjuntos de documentos (PDF o foto de pagaré firmado).
+- **Cobro en Terreno y Recibos:**
+  - Pantalla de cobro (`/cobro/:cuotaId`) con visualización de abono a capital, interés ordinario y saldo insoluto restante proyectado.
+  - Generación de comprobantes para impresoras térmicas Bluetooth (58mm/80mm), documentos PDF y modo ESC/POS texto.
+  - Compartición digital instantánea por WhatsApp vía `https://wa.me/[tel]?text=...`.
+  - Integración en la lista de cobros y ruta del cobrador (`cuotas_list_screen.dart`).
+  - Historial de amortizaciones en la ficha de cliente (`cliente_detail_screen.dart`).

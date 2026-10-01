@@ -1067,8 +1067,23 @@ class _ClienteCuotaCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            linea(planBase == null ? 'Mensualidad' : 'Mensualidad $planBase',
-                null, cuota.monto),
+            if (cuota.esPrestamo) ...[
+              linea(cuota.descripcion ?? 'Cuota de préstamo', null, cuota.monto),
+              if (cuota.capital != null && cuota.interes != null) ...[
+                linea('  • Abono a capital', null, cuota.capital!),
+                linea('  • Interés ordinario', null, cuota.interes!),
+              ],
+              if (cuota.saldoRestante != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 4),
+                  child: Text(
+                    'Saldo proyectado restante: ${Fmt.cordobas(cuota.saldoRestante!)}',
+                    style: TextStyle(fontSize: 11.5, color: scheme.primary, fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ] else
+              linea(planBase == null ? 'Mensualidad' : 'Mensualidad $planBase',
+                  null, cuota.monto),
             for (final c in cargos)
               linea(
                   cargoEtiquetaRecibo(c, conMotivo: true),
@@ -1110,14 +1125,22 @@ class _ClienteCuotaCard extends StatelessWidget {
                 // Cuota MANUAL (cobro puntual): ícono de caja + el concepto
                 // (descripción) en vez de "Cobro de <mes>", que no aplica a un
                 // cargo de una vez (audit 0173).
-                Icon(cuota.esManual ? Icons.point_of_sale : Icons.calendar_today,
-                    size: 26),
+                Icon(
+                    cuota.esPrestamo
+                        ? Icons.payments_outlined
+                        : cuota.esManual
+                            ? Icons.point_of_sale
+                            : Icons.calendar_today,
+                    size: 26,
+                    color: cuota.esPrestamo ? scheme.primary : null),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    cuota.esManual
-                        ? (cuota.descripcion ?? 'Cobro puntual')
-                        : 'Cobro de ${Fmt.mesServicioLabel(cuota.periodo, diaPago)}',
+                    cuota.esPrestamo
+                        ? (cuota.descripcion ?? 'Cuota de préstamo')
+                        : cuota.esManual
+                            ? (cuota.descripcion ?? 'Cobro puntual')
+                            : 'Cobro de ${Fmt.mesServicioLabel(cuota.periodo, diaPago)}',
                     style: const TextStyle(
                         fontSize: 22, fontWeight: FontWeight.w600),
                   ),
@@ -1156,9 +1179,9 @@ class _ClienteCuotaCard extends StatelessWidget {
                   style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 15),
                 ),
               ),
-            // EL DESGLOSE. Sólo cuando el total difiere de la base: en una
-            // cuota sin ajustes seria repetir el mismo numero dos veces.
-            if (totalACobrar != cuota.monto)
+            // EL DESGLOSE. En préstamos siempre para ver capital/interés,
+            // o cuando el total difiere de la base en mensualidades.
+            if (cuota.esPrestamo || totalACobrar != cuota.monto)
               _desgloseCuota(scheme),
             if (cuota.montoPagado > 0) ...[
               const SizedBox(height: 4),
@@ -1232,7 +1255,9 @@ class _MultiCuotaCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Cobro ${Fmt.mesServicioLabel(cuotas[i].periodo, diasPago[i])}',
+                            cuotas[i].esPrestamo
+                                ? (cuotas[i].descripcion ?? 'Cuota ${i + 1}')
+                                : 'Cobro ${Fmt.mesServicioLabel(cuotas[i].periodo, diasPago[i])}',
                             style: const TextStyle(
                                 fontSize: 17, fontWeight: FontWeight.w600),
                           ),

@@ -30,10 +30,12 @@ final contratoDetalleProvider = StreamProvider.autoDispose
            ct.documento_path, ct.duracion_meses,
            ct.costo_instalacion, ct.notas,
            ct.cancelado_en, ct.motivo_cancelacion, ct.cancelacion_deuda_snapshot,
+           ct.monto_prestado, ct.tasa_interes, ct.frecuencia, ct.plazo_cuotas,
+           ct.metodo_calculo, ct.monto_cuota, ct.total_interes, ct.total_pagar, ct.moneda,
            p.nombre AS plan_nombre, p.precio_mensual,
            c.nombre AS cliente_nombre
       FROM contratos ct
-      JOIN planes  p ON p.id = ct.plan_id
+ LEFT JOIN planes  p ON p.id = ct.plan_id
       JOIN clientes c ON c.id = ct.cliente_id
      WHERE ct.id = ?
      LIMIT 1
@@ -50,6 +52,8 @@ final contratoCuotasProvider = StreamProvider.autoDispose
            cu.fecha_vencimiento,
            cu.periodo, cu.estado, cu.contrato_id,
            cu.descripcion, cu.tipo_cargo_manual, ct.dia_pago,
+           cu.capital, cu.interes, cu.saldo_restante,
+           ct.moneda,
            (SELECT COUNT(*) FROM cargos_extra ce
              WHERE ce.cuota_id = cu.id
            ) AS cargos_count,
@@ -62,7 +66,7 @@ final contratoCuotasProvider = StreamProvider.autoDispose
       FROM cuotas cu
       LEFT JOIN contratos ct ON ct.id = cu.contrato_id
      WHERE cu.contrato_id = ?
-     ORDER BY cu.periodo ASC
+     ORDER BY date(cu.fecha_vencimiento) ASC, cu.periodo ASC
     ''',
     parameters: [contratoId],
   );
@@ -128,7 +132,10 @@ final clientePagosProvider = StreamProvider.autoDispose
            pa.anulado, pa.anulado_en, pa.anulado_por,
            pa.motivo_anulacion, pa.grupo_cobro, pa.client_local_id,
            cu.periodo, cu.tipo_cargo_manual, cu.contrato_id,
-           ct.dia_pago, ct.codigo AS contrato_codigo, p.nombre AS plan_nombre
+           cu.capital, cu.interes, cu.saldo_restante, cu.descripcion AS cuota_descripcion,
+           ct.dia_pago, ct.codigo AS contrato_codigo, ct.monto_prestado,
+           ct.tasa_interes, ct.frecuencia, ct.moneda AS contrato_moneda,
+           p.nombre AS plan_nombre
       FROM pagos pa
       INNER JOIN cuotas cu ON cu.id = pa.cuota_id
       LEFT JOIN contratos ct ON ct.id = cu.contrato_id

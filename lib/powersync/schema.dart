@@ -410,6 +410,16 @@ const schema = Schema([
     Column.text('cancelado_por'),
     Column.text('motivo_cancelacion'),
     Column.text('cancelacion_deuda_snapshot'),
+    // Microfinanzas / Préstamos (Fase 1 rework):
+    Column.real('monto_prestado'),
+    Column.real('tasa_interes'),
+    Column.text('frecuencia'),
+    Column.integer('plazo_cuotas'),
+    Column.text('metodo_calculo'),
+    Column.real('monto_cuota'),
+    Column.real('total_interes'),
+    Column.real('total_pagar'),
+    Column.text('moneda'),
   ], indexes: [
     Index('by_cliente', [IndexedColumn('cliente_id')]),
   ]),
@@ -456,6 +466,10 @@ const schema = Schema([
     Column.text('ticket_id'),
     Column.text('created_at'),
     Column.text('ocurrido_en'),
+    // Microfinanzas desglose opcional:
+    Column.real('capital'),
+    Column.real('interes'),
+    Column.real('saldo_restante'),
   ], indexes: [
     Index('by_cobrador_estado', [
       IndexedColumn('cobrador_id'),

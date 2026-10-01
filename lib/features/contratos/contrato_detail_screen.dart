@@ -219,6 +219,7 @@ class _AccionesContrato extends ConsumerWidget {
     this.codigo,
     this.planNombre,
     this.cobradorIdContrato,
+    this.esPrestamo = false,
   });
 
   final String contratoId;
@@ -232,6 +233,7 @@ class _AccionesContrato extends ConsumerWidget {
   // cobrador_id del contrato (denormalizado) — para el owner-scope del cobrador
   // en "Cambiar fecha".
   final String? cobradorIdContrato;
+  final bool esPrestamo;
 
   /// Pide autorización para SUSPENDER o CANCELAR, con la deuda a la vista.
   ///
@@ -460,11 +462,13 @@ class _AccionesContrato extends ConsumerWidget {
     // PIDE: antes `puedeCambiarPlanProvider` exigía admin, así que el
     // admin_cobranza ni siquiera lo veía — y terminaba cancelando y recreando
     // el contrato, que es como se hacen hoy 3 de cada 4 "cancelaciones".
-    final mostrarCambiarPlan = ref.watch(puedeVerCambiarPlanProvider) &&
+    final mostrarCambiarPlan = !esPrestamo &&
+        ref.watch(puedeVerCambiarPlanProvider) &&
         !ref.watch(estaImpersonandoProvider) &&
         estado == 'activo' &&
         diaPago != null &&
-        precioMensual != null;
+        precioMensual != null &&
+        planActualId != null;
     final mostrarSuspender = ref.watch(puedeSuspenderProvider) &&
         !ref.watch(estaImpersonandoProvider) &&
         estado == 'activo' &&
@@ -1119,13 +1123,13 @@ class _ContratoDetailScreenState extends ConsumerState<ContratoDetailScreen> {
     var precioCancelacion = 0.0;
     if (nuevoEstado == 'cancelado') {
       final pRows = await ps.db.getAll(
-        'SELECT p.precio_mensual, ct.dia_pago FROM contratos ct '
-        'JOIN planes p ON p.id = ct.plan_id WHERE ct.id = ?',
+        'SELECT p.precio_mensual, ct.monto_cuota, ct.dia_pago FROM contratos ct '
+        'LEFT JOIN planes p ON p.id = ct.plan_id WHERE ct.id = ?',
         [widget.contratoId],
       );
       precioCancelacion = pRows.isEmpty
           ? 0.0
-          : ((pRows.first['precio_mensual'] as num?)?.toDouble() ?? 0);
+          : (((pRows.first['precio_mensual'] ?? pRows.first['monto_cuota']) as num?)?.toDouble() ?? 0.0);
       final diaPagoCancelacion =
           pRows.isEmpty ? null : (pRows.first['dia_pago'] as num?)?.toInt();
       final creditoOn = ref.read(appSettingsProvider).creditoExcedenteHabilitado;
@@ -1311,12 +1315,14 @@ class _ContratoDetailScreenState extends ConsumerState<ContratoDetailScreen> {
                     estado: contrato['estado'] as String? ?? 'activo',
                     diaPago: (contrato['dia_pago'] as num?)?.toInt(),
                     precioMensual:
-                        (contrato['precio_mensual'] as num?)?.toDouble(),
+                        (contrato['precio_mensual'] as num?)?.toDouble() ??
+                        (contrato['monto_cuota'] as num?)?.toDouble(),
                     planActualId: contrato['plan_id'] as String?,
                     clienteNombre: contrato['cliente_nombre'] as String?,
                     codigo: contrato['codigo'] as String?,
                     planNombre: contrato['plan_nombre'] as String?,
                     cobradorIdContrato: contrato['cobrador_id'] as String?,
+                    esPrestamo: contrato['monto_prestado'] != null,
                   ),
                   if ((contrato['estado'] as String?) == 'suspendido') ...[
                     const SizedBox(height: 12),

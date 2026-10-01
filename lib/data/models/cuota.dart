@@ -35,6 +35,9 @@ class Cuota {
     required this.estado,
     this.descripcion,
     this.tipoCargoManual,
+    this.capital,
+    this.interes,
+    this.saldoRestante,
   });
 
   final String id;
@@ -50,9 +53,15 @@ class Cuota {
   final CuotaEstado estado;
   final String? descripcion;
   final String? tipoCargoManual;
+  final double? capital;
+  final double? interes;
+  final double? saldoRestante;
 
   /// Indica si la cuota es manual (no generada desde contrato).
   bool get esManual => contratoId == null;
+
+  /// Indica si la cuota proviene de un préstamo con desglose de amortización.
+  bool get esPrestamo => capital != null || interes != null;
 
   /// Total real a cobrar (monto + cargos netos).
   double get totalACobrar => (monto + cargosNeto).clamp(0, double.infinity);
@@ -76,7 +85,10 @@ class Cuota {
           other.cargosNeto == cargosNeto &&
           other.estado == estado &&
           other.descripcion == descripcion &&
-          other.tipoCargoManual == tipoCargoManual;
+          other.tipoCargoManual == tipoCargoManual &&
+          other.capital == capital &&
+          other.interes == interes &&
+          other.saldoRestante == saldoRestante;
 
   @override
   int get hashCode => Object.hash(
@@ -93,6 +105,9 @@ class Cuota {
         estado,
         descripcion,
         tipoCargoManual,
+        capital,
+        interes,
+        saldoRestante,
       );
 
   factory Cuota.fromRow(Map<String, dynamic> row) => Cuota(
@@ -109,5 +124,8 @@ class Cuota {
         estado: CuotaEstado.fromString(row['estado'] as String),
         descripcion: row['descripcion'] as String?,
         tipoCargoManual: row['tipo_cargo_manual'] as String?,
+        capital: (row['capital'] as num?)?.toDouble(),
+        interes: (row['interes'] as num?)?.toDouble(),
+        saldoRestante: (row['saldo_restante'] as num?)?.toDouble(),
       );
 }
