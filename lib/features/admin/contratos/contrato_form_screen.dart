@@ -11,19 +11,20 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../data/models/solicitud_accion.dart';
 import '../../../data/providers/aprobaciones_provider.dart';
 import '../../../data/providers/cobrador_provider.dart';
 import '../../../data/providers/conexion_real_provider.dart';
 import '../../../data/providers/form_dirty_provider.dart';
 import '../../../data/services/imagen_compresion.dart';
 import '../../../data/services/prestamos_calculo_service.dart';
-import '../../../data/models/solicitud_accion.dart';
 import '../../../data/utils/errores.dart';
+import '../../../data/utils/formatters.dart';
 import '../../../data/utils/op_log.dart';
 import '../../../powersync/db.dart' as ps;
-import '../../shared/widgets/solicitud_accion_helper.dart';
 import '../../shared/widgets/confirm_discard_dialog.dart';
 import '../../shared/widgets/selector_buscable.dart';
+import '../../shared/widgets/solicitud_accion_helper.dart';
 
 /// Resultado de verificar el código de contrato/préstamo contra Supabase.
 enum _ResultadoChequeo {
@@ -62,6 +63,8 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
   static const _docBucket = 'contratos-documentos';
+  static const _tealColor = Color(0xFF0F766E);
+  static const _tealDark = Color(0xFF115E59);
 
   // Controladores principales
   final _codigoCtrl = TextEditingController();
@@ -77,10 +80,11 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
   bool _tasaEsMensual = true;
   DateTime _fechaInicio = DateTime.now();
   late DateTime _fechaPrimerCobro;
+  bool _mostrarCronograma = false;
 
   // Sugerencia de código
   String? _ultimoCodigo;
-    String? _codigoSugerido;
+  String? _codigoSugerido;
   final bool _codigoYaAsignado = false;
   String? _codigoDupMensaje;
 
@@ -98,7 +102,8 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
   void initState() {
     super.initState();
     _clienteId = widget.clienteId;
-    _fechaPrimerCobro = PrestamosCalculoService.sugerirPrimerPago(_fechaInicio, _frecuencia);
+    _fechaPrimerCobro =
+        PrestamosCalculoService.sugerirPrimerPago(_fechaInicio, _frecuencia);
     _codigoCtrl.addListener(_onCodigoCambiado);
     _montoCtrl.addListener(_marcarDirty);
     _interesCtrl.addListener(_marcarDirty);
@@ -168,7 +173,9 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
     );
   }
 
-  String get _simboloMoneda => _moneda == 'USD' ? 'US\$' : 'C\$';
+  String _formatearMonto(num valor) {
+    return Fmt.monto(valor, _moneda);
+  }
 
   Future<String?> _verificarCodigoDuplicadoTexto(String codigo) async {
     final tenantId = ref.read(tenantIdProvider);
@@ -292,7 +299,8 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
         final maxNum = maxPorPrefijo[mejor]!;
         final ancho = anchoPorPrefijo[mejor]!;
         _ultimoCodigo = '$mejor${maxNum.toString().padLeft(ancho, '0')}';
-        _codigoSugerido = '$mejor${(maxNum + 1).toString().padLeft(ancho, '0')}';
+        _codigoSugerido =
+            '$mejor${(maxNum + 1).toString().padLeft(ancho, '0')}';
       }
     } catch (_) {}
   }
@@ -351,129 +359,6 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
     } catch (_) {}
   }
 
-  void _mostrarDialogoCronograma() {
-    final calculo = _calculoActual;
-    final fMoneda = NumberFormat('#,##0.00');
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (_, scrollCtrl) => Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Cronograma de Amortización',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${calculo.plazoCuotas} cuotas de $_simboloMoneda ${fMoneda.format(calculo.montoCuota)} (${calculo.frecuencia.etiqueta}) · Método: ${calculo.metodo.titulo}',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.outline,
-                  fontSize: 13,
-                ),
-              ),
-              const Divider(height: 24),
-              Expanded(
-                child: ListView.separated(
-                  controller: scrollCtrl,
-                  itemCount: calculo.cronograma.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, idx) {
-                    final c = calculo.cronograma[idx];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primaryContainer,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              '${c.numero}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  DateFormat('dd/MM/yyyy').format(c.fechaVencimiento),
-                                  style: const TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                                Text(
-                                  'Capital: $_simboloMoneda ${fMoneda.format(c.capital)}  |  Interés: $_simboloMoneda ${fMoneda.format(c.interes)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Theme.of(context).colorScheme.outline,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '$_simboloMoneda ${fMoneda.format(c.cuota)}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              Text(
-                                'Saldo: $_simboloMoneda ${fMoneda.format(c.saldoRestante)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.outline,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
     if (_clienteId == null) {
@@ -515,11 +400,13 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
         if (!mounted) return;
         setState(() {
           _guardando = false;
-          _error = '${_codigoDupMensaje ?? 'Ese código ya está en uso'}. Usá otro número.';
+          _error =
+              '${_codigoDupMensaje ?? 'Ese código ya está en uso'}. Usá otro número.';
         });
         return;
       }
-      final chequeo = await _verificarCodigoEnServidor(tenantId, _codigoCtrl.text.trim());
+      final chequeo =
+          await _verificarCodigoEnServidor(tenantId, _codigoCtrl.text.trim());
       if (!mounted) return;
       if (!chequeo.libre) {
         setState(() {
@@ -552,9 +439,12 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
           'monto_cuota': calculo.montoCuota,
           'total_interes': calculo.totalInteres,
           'total_pagar': calculo.totalPagar,
-          'fecha_inicio': calculo.fechaInicio.toIso8601String().substring(0, 10),
-          'fecha_primer_cobro': calculo.fechaPrimerPago.toIso8601String().substring(0, 10),
-          'notas': _notasCtrl.text.trim().isEmpty ? null : _notasCtrl.text.trim(),
+          'fecha_inicio':
+              calculo.fechaInicio.toIso8601String().substring(0, 10),
+          'fecha_primer_cobro':
+              calculo.fechaPrimerPago.toIso8601String().substring(0, 10),
+          'notas':
+              _notasCtrl.text.trim().isEmpty ? null : _notasCtrl.text.trim(),
         };
 
         final ok = await solicitarAccion(
@@ -564,8 +454,8 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
           entidadId: _clienteId!,
           datos: datos,
           descripcionExtra:
-              'Préstamo: $_simboloMoneda ${calculo.montoPrestado.toStringAsFixed(2)} '
-              '(${calculo.plazoCuotas} cuotas de $_simboloMoneda ${calculo.montoCuota.toStringAsFixed(2)})\n'
+              'Préstamo: ${_formatearMonto(calculo.montoPrestado)} '
+              '(${calculo.plazoCuotas} cuotas de ${_formatearMonto(calculo.montoCuota)})\n'
               'Cliente: ${clienteRow?['nombre'] ?? '?'}',
         );
         if (ok && mounted) {
@@ -663,8 +553,10 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
         // 2. Generar cronograma completo de cuotas
         for (final c in calculo.cronograma) {
           final cuotaId = const Uuid().v4();
-          final fechaStr = c.fechaVencimiento.toIso8601String().substring(0, 10);
-          final descripcion = 'Cuota ${c.numero} de ${calculo.plazoCuotas} (${calculo.frecuencia.etiqueta})';
+          final fechaStr =
+              c.fechaVencimiento.toIso8601String().substring(0, 10);
+          final descripcion =
+              'Cuota ${c.numero} de ${calculo.plazoCuotas} (${calculo.frecuencia.etiqueta})';
 
           await tx.execute(
             '''
@@ -729,7 +621,7 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
               'Préstamo ${_codigoCtrl.text.trim().toUpperCase()} creado con éxito '
               '(${calculo.plazoCuotas} cuotas generadas).',
             ),
-            backgroundColor: Colors.green.shade800,
+            backgroundColor: _tealColor,
           ),
         );
         _dirty = false;
@@ -763,11 +655,9 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final esSuper = ref.watch(cobradorActualProvider).valueOrNull?.esSuperAdmin ?? false;
-    final codigoBloqueado = _codigoYaAsignado && !esSuper;
     final sinConexion = ref.watch(conexionRealProvider).valueOrNull == false;
-    final calculo = _calculoActual;
-    final fMoneda = NumberFormat('#,##0.00');
+    final size = MediaQuery.of(context).size;
+    final esPantallaAncha = size.width >= 920;
 
     return PopScope(
       canPop: !_dirty,
@@ -782,6 +672,7 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
         }
       },
       child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: const Text('Nuevo Préstamo'),
           actions: [
@@ -790,7 +681,8 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
                 padding: const EdgeInsets.only(right: 12),
                 child: Row(
                   children: [
-                    Icon(Icons.wifi_off, size: 16, color: Theme.of(context).colorScheme.error),
+                    Icon(Icons.wifi_off,
+                        size: 16, color: Theme.of(context).colorScheme.error),
                     const SizedBox(width: 4),
                     Text(
                       'Sin red',
@@ -806,564 +698,1177 @@ class _ContratoFormScreenState extends ConsumerState<ContratoFormScreen> {
         ),
         body: Form(
           key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (_error != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline,
-                          color: Theme.of(context).colorScheme.onErrorContainer),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onErrorContainer,
-                          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1140),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_error != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.errorContainer,
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // ── 1. DATOS DEL CRÉDITO Y PRESTATARIO ──────────────────────────
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.badge_outlined, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 8),
-                          Text('Datos del Préstamo', style: Theme.of(context).textTheme.titleMedium),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _codigoCtrl,
-                        readOnly: codigoBloqueado,
-                        textCapitalization: TextCapitalization.characters,
-                        decoration: InputDecoration(
-                          labelText: 'Código de Préstamo / Pagaré *',
-                          hintText: 'Ej. PREST-001',
-                          prefixIcon: const Icon(Icons.numbers),
-                          errorText: _codigoDupMensaje,
-                          helperText: codigoBloqueado
-                              ? 'Asignado previamente'
-                              : 'Identificador único del crédito.',
-                        ),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'El código es obligatorio';
-                          if (_codigoDupMensaje != null) return _codigoDupMensaje;
-                          return null;
-                        },
-                      ),
-                      if (_ultimoCodigo != null && !codigoBloqueado)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Wrap(
-                            spacing: 8,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Text(
-                                'Último usado: $_ultimoCodigo',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(context).colorScheme.outline,
-                                ),
-                              ),
-                              if (_codigoSugerido != null &&
-                                  _codigoCtrl.text.trim() != _codigoSugerido)
-                                ActionChip(
-                                  avatar: const Icon(Icons.auto_awesome, size: 14),
-                                  label: Text('Usar $_codigoSugerido'),
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: _guardando ? null : _usarCodigoSugerido,
-                                ),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-                      _ClienteSelector(
-                        clienteId: _clienteId,
-                        enabled: true,
-                        onChanged: (id) => setState(() {
-                          _clienteId = id;
-                          _dirty = true;
-                        }),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Text('Moneda:', style: Theme.of(context).textTheme.bodyMedium),
-                          const SizedBox(width: 16),
-                          ChoiceChip(
-                            label: const Text('Córdobas (C\$)'),
-                            selected: _moneda == 'NIO',
-                            onSelected: (s) {
-                              if (s) setState(() => _moneda = 'NIO');
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          ChoiceChip(
-                            label: const Text('Dólares (US\$)'),
-                            selected: _moneda == 'USD',
-                            onSelected: (s) {
-                              if (s) setState(() => _moneda = 'USD');
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ── 2. CONDICIONES FINANCIERAS (CALCULADORA) ───────────────────
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.calculate_outlined, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 8),
-                          Text('Condiciones del Préstamo', style: Theme.of(context).textTheme.titleMedium),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Monto y Tasa
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextFormField(
-                              controller: _montoCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: InputDecoration(
-                                labelText: 'Monto a prestar (Capital) *',
-                                prefixText: '$_simboloMoneda ',
-                                prefixIcon: const Icon(Icons.attach_money),
-                              ),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Requerido';
-                                final n = double.tryParse(v.replaceAll(',', ''));
-                                if (n == null || n <= 0) return 'Monto inválido';
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              controller: _interesCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'Tasa de Interés *',
-                                suffixText: '%',
-                                prefixIcon: Icon(Icons.percent),
-                              ),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Requerido';
-                                final n = double.tryParse(v.replaceAll(',', ''));
-                                if (n == null || n < 0) return 'Tasa inválida';
-                                return null;
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Spacer(),
-                          ChoiceChip(
-                            label: const Text('Tasa Mensual'),
-                            selected: _tasaEsMensual,
-                            visualDensity: VisualDensity.compact,
-                            onSelected: (s) => setState(() => _tasaEsMensual = true),
-                          ),
-                          const SizedBox(width: 8),
-                          ChoiceChip(
-                            label: const Text('Tasa Total Crédito'),
-                            selected: !_tasaEsMensual,
-                            visualDensity: VisualDensity.compact,
-                            onSelected: (s) => setState(() => _tasaEsMensual = false),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Frecuencia de cobro
-                      Text('Frecuencia de Cobro', style: Theme.of(context).textTheme.labelLarge),
-                      const SizedBox(height: 8),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            for (final f in FrecuenciaPago.values) ...[
-                              ChoiceChip(
-                                label: Text(f.etiqueta),
-                                selected: _frecuencia == f,
-                                onSelected: (s) {
-                                  if (s) {
-                                    setState(() {
-                                      _frecuencia = f;
-                                      _fechaPrimerCobro =
-                                          PrestamosCalculoService.sugerirPrimerPago(_fechaInicio, f);
-                                    });
-                                  }
-                                },
+                            Icon(Icons.error_outline,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onErrorContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _error!,
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onErrorContainer,
+                                ),
                               ),
-                              const SizedBox(width: 8),
-                            ],
+                            ),
                           ],
                         ),
                       ),
+                    ],
 
-                      const SizedBox(height: 16),
-
-                      // Cuotas y Método
+                    if (esPantallaAncha)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Columna Izquierda: Identificación, Variables exactas y Garantía
                           Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              controller: _cuotasCtrl,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Número de Cuotas *',
-                                prefixIcon: Icon(Icons.repeat),
-                              ),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Requerido';
-                                final n = int.tryParse(v);
-                                if (n == null || n <= 0) return 'Mínimo 1 cuota';
-                                return null;
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 3,
-                            child: DropdownButtonFormField<MetodoCalculo>(
-                              initialValue: _metodo,
-                              decoration: const InputDecoration(
-                                labelText: 'Método de Amortización',
-                                prefixIcon: Icon(Icons.account_balance),
-                              ),
-                              items: MetodoCalculo.values.map((m) {
-                                return DropdownMenuItem(
-                                  value: m,
-                                  child: Text(
-                                    m == MetodoCalculo.interesFijo
-                                        ? 'Interés Fijo (Microfinanzas)'
-                                        : 'Cuota Nivelada (Francés)',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (m) {
-                                if (m != null) setState(() => _metodo = m);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Fechas
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _SelectorFecha(
-                              label: 'Fecha de Desembolso',
-                              fecha: _fechaInicio,
-                              onChanged: (d) {
-                                setState(() {
-                                  _fechaInicio = d;
-                                  _fechaPrimerCobro =
-                                      PrestamosCalculoService.sugerirPrimerPago(d, _frecuencia);
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _SelectorFecha(
-                              label: 'Fecha Primer Cobro',
-                              fecha: _fechaPrimerCobro,
-                              onChanged: (d) => setState(() => _fechaPrimerCobro = d),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ── 3. TARJETA DE RESUMEN EN TIEMPO REAL ────────────────────────
-              Card(
-                elevation: 1,
-                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                shape: RoundedRectangleBorder(
-                  side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Resumen de la Cotización',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                          ),
-                          OutlinedButton.icon(
-                            icon: const Icon(Icons.table_chart, size: 16),
-                            label: const Text('Ver Cronograma'),
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            onPressed: calculo.cronograma.isNotEmpty
-                                ? _mostrarDialogoCronograma
-                                : null,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _ResumenItem(
-                              titulo: 'Cuota Periódica',
-                              valor: '$_simboloMoneda ${fMoneda.format(calculo.montoCuota)}',
-                              destacado: true,
-                            ),
-                          ),
-                          Expanded(
-                            child: _ResumenItem(
-                              titulo: 'Interés Total',
-                              valor: '$_simboloMoneda ${fMoneda.format(calculo.totalInteres)}',
-                            ),
-                          ),
-                          Expanded(
-                            child: _ResumenItem(
-                              titulo: 'Total a Pagar',
-                              valor: '$_simboloMoneda ${fMoneda.format(calculo.totalPagar)}',
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Cronograma: ${calculo.plazoCuotas} cuotas ${calculo.frecuencia.etiqueta.toLowerCase()}s. '
-                        'Vence del ${DateFormat('dd/MM/yyyy').format(calculo.fechaPrimerPago)} '
-                        'al ${DateFormat('dd/MM/yyyy').format(calculo.fechaUltimaCuota)}.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ── 4. NOTAS Y DOCUMENTOS ADJUNTOS ──────────────────────────────
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.description_outlined, color: Theme.of(context).colorScheme.primary),
-                          const SizedBox(width: 8),
-                          Text('Garantía y Documentos', style: Theme.of(context).textTheme.titleMedium),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _notasCtrl,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: 'Notas del préstamo / Garantías (opcional)',
-                          hintText: 'Detalles de prenda, aval fiduciario o destino del crédito...',
-                          alignLabelWithHint: true,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
+                            flex: 5,
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Pagaré o Contrato firmado (opcional)',
-                                  style: Theme.of(context).textTheme.labelLarge,
-                                ),
-                                Text(
-                                  _docNombre != null
-                                      ? 'Archivo adjunto: $_docNombre'
-                                      : 'Podés adjuntar PDF, Word o foto del pagaré.',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _docNombre != null
-                                        ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context).colorScheme.outline,
-                                  ),
-                                ),
+                                _buildPrestatarioCodigoCard(),
+                                const SizedBox(height: 16),
+                                _buildDatosPrestamoCard(),
+                                const SizedBox(height: 16),
+                                _buildGarantiaDocumentosCard(),
                               ],
                             ),
                           ),
-                          if (_docBytes != null)
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
-                              tooltip: 'Quitar archivo',
-                              onPressed: () => setState(() {
-                                _docBytes = null;
-                                _docNombre = null;
-                                _docMime = null;
-                              }),
+                          const SizedBox(width: 20),
+                          // Columna Derecha: Tarjeta Teal, Cronograma y Botones
+                          Expanded(
+                            flex: 6,
+                            child: Column(
+                              children: [
+                                _buildResultadosCard(),
+                                const SizedBox(height: 16),
+                                _buildCronogramaSection(),
+                                const SizedBox(height: 20),
+                                _buildBotonesAccion(),
+                              ],
                             ),
-                          OutlinedButton.icon(
-                            icon: const Icon(Icons.attach_file),
-                            label: Text(_docBytes == null ? 'Adjuntar' : 'Cambiar'),
-                            onPressed: _guardando ? null : _adjuntarDoc,
                           ),
                         ],
+                      )
+                    else
+                      Column(
+                        children: [
+                          _buildPrestatarioCodigoCard(),
+                          const SizedBox(height: 16),
+                          _buildDatosPrestamoCard(),
+                          const SizedBox(height: 16),
+                          _buildResultadosCard(),
+                          const SizedBox(height: 16),
+                          _buildCronogramaSection(),
+                          const SizedBox(height: 16),
+                          _buildGarantiaDocumentosCard(),
+                          const SizedBox(height: 24),
+                          _buildBotonesAccion(),
+                        ],
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
-
-              const SizedBox(height: 24),
-
-              // ── 5. BOTONES DE ACCIÓN ────────────────────────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _guardando ? null : () => Navigator.of(context).maybePop(),
-                      child: const Text('Cancelar'),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton.icon(
-                      icon: _guardando
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.check_circle_outline),
-                      label: Text(
-                        _guardando
-                            ? 'Guardando...'
-                            : (ref.watch(cobradorActualProvider).valueOrNull?.esAdminUsuarios ?? false)
-                                ? 'Solicitar Aprobación'
-                                : 'Crear Préstamo',
-                      ),
-                      onPressed: _guardando ? null : _guardar,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
-}
 
-class _ResumenItem extends StatelessWidget {
-  const _ResumenItem({
-    required this.titulo,
-    required this.valor,
-    this.destacado = false,
-  });
+  // ── 1. PRESTATARIO Y CÓDIGO (OBLIGATORIO) ───────────────────────────────────
+  Widget _buildPrestatarioCodigoCard() {
+    final esSuper =
+        ref.watch(cobradorActualProvider).valueOrNull?.esSuperAdmin ?? false;
+    final codigoBloqueado = _codigoYaAsignado && !esSuper;
 
-  final String titulo;
-  final String valor;
-  final bool destacado;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.badge_outlined, color: _tealColor, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Identificación del Préstamo',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _ClienteSelector(
+            clienteId: _clienteId,
+            enabled: true,
+            onChanged: (id) => setState(() {
+              _clienteId = id;
+              _dirty = true;
+            }),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Código de Préstamo / Pagaré *',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _codigoCtrl,
+            readOnly: codigoBloqueado,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.numbers, size: 20),
+              hintText: 'Ej. PREST-001',
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              errorText: _codigoDupMensaje,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) {
+                return 'El código de préstamo es obligatorio';
+              }
+              if (_codigoDupMensaje != null) return _codigoDupMensaje;
+              return null;
+            },
+          ),
+          if (_ultimoCodigo != null && !codigoBloqueado)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Último usado: $_ultimoCodigo',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  if (_codigoSugerido != null &&
+                      _codigoCtrl.text.trim() != _codigoSugerido)
+                    ActionChip(
+                      avatar: const Icon(Icons.auto_awesome,
+                          size: 14, color: _tealColor),
+                      label: Text('Usar $_codigoSugerido'),
+                      labelStyle: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _tealColor),
+                      backgroundColor: const Color(0xFFE6FFFA),
+                      side: const BorderSide(color: Color(0xFF99F6E4)),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _guardando ? null : _usarCodigoSugerido,
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  // ── 2. DATOS DEL PRÉSTAMO (UI EXACTA DE LA CALCULADORA) ────────────────────
+  Widget _buildDatosPrestamoCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.tune, color: _tealColor, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Variables del Préstamo',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+
+          // Moneda
+          const Text(
+            'Moneda',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 6),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'NIO',
+                label: Text('Córdobas (C\$)'),
+                icon: Icon(Icons.monetization_on_outlined, size: 16),
+              ),
+              ButtonSegment(
+                value: 'USD',
+                label: Text('Dólares (US\$)'),
+                icon: Icon(Icons.attach_money, size: 16),
+              ),
+            ],
+            selected: {_moneda},
+            onSelectionChanged: (val) {
+              setState(() {
+                _moneda = val.first;
+                _marcarDirty();
+              });
+            },
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // Cantidad a Prestar
+          Text(
+            'Cantidad a Prestar (${_moneda == "NIO" ? "C\$" : "US\$"})',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _montoCtrl,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.payments_outlined, size: 20),
+              hintText: 'Ej. 10000',
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Monto requerido';
+              final n = double.tryParse(v.replaceAll(',', ''));
+              if (n == null || n <= 0) return 'Monto inválido';
+              return null;
+            },
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [2000, 5000, 10000, 20000, 50000].map((val) {
+              return ActionChip(
+                label: Text(
+                  _moneda == 'NIO' ? 'C\$ $val' : '\$ $val',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _montoCtrl.text = val.toString();
+                    _marcarDirty();
+                  });
+                },
+                backgroundColor: const Color(0xFFF1F5F9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 18),
+
+          // Tasa de Interés (%)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Tasa de Interés (%)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF475569),
+                ),
+              ),
+              Row(
+                children: [
+                  InkWell(
+                    onTap: () => setState(() {
+                      _tasaEsMensual = true;
+                      _marcarDirty();
+                    }),
+                    child: Text(
+                      'Por período',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            _tasaEsMensual ? FontWeight.bold : FontWeight.normal,
+                        color: _tasaEsMensual ? _tealColor : Colors.grey,
+                      ),
+                    ),
+                  ),
+                  const Text(' | ', style: TextStyle(color: Colors.grey)),
+                  InkWell(
+                    onTap: () => setState(() {
+                      _tasaEsMensual = false;
+                      _marcarDirty();
+                    }),
+                    child: Text(
+                      'Total del crédito',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            !_tasaEsMensual ? FontWeight.bold : FontWeight.normal,
+                        color: !_tasaEsMensual ? _tealColor : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _interesCtrl,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.percent, size: 18),
+              hintText: 'Ej. 10',
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Tasa requerida';
+              final n = double.tryParse(v.replaceAll(',', ''));
+              if (n == null || n < 0) return 'Tasa inválida';
+              return null;
+            },
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            children: [5, 8, 10, 12, 15, 20].map((t) {
+              return ActionChip(
+                label: Text('$t%', style: const TextStyle(fontSize: 11)),
+                onPressed: () {
+                  setState(() {
+                    _interesCtrl.text = t.toString();
+                    _marcarDirty();
+                  });
+                },
+                backgroundColor: const Color(0xFFF1F5F9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 18),
+
+          // Frecuencia de Pago
+          const Text(
+            'Frecuencia de Pago',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<FrecuenciaPago>(
+            initialValue: _frecuencia,
+            decoration: InputDecoration(
+              prefixIcon:
+                  const Icon(Icons.calendar_today_outlined, size: 18),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+            items: FrecuenciaPago.values.map((f) {
+              return DropdownMenuItem(
+                value: f,
+                child: Text(
+                  '${f.etiqueta} (cada ${f.periodo})',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              );
+            }).toList(),
+            onChanged: (val) {
+              if (val != null) {
+                setState(() {
+                  _frecuencia = val;
+                  _fechaPrimerCobro =
+                      PrestamosCalculoService.sugerirPrimerPago(
+                          _fechaInicio, val);
+                  _marcarDirty();
+                });
+              }
+            },
+          ),
+          const SizedBox(height: 18),
+
+          // Cantidad de Cuotas
+          const Text(
+            'Cantidad de Cuotas',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _cuotasCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    prefixIcon:
+                        const Icon(Icons.format_list_numbered, size: 20),
+                    hintText: 'Ej. 12',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Cuotas requeridas';
+                    }
+                    final n = int.tryParse(v);
+                    if (n == null || n <= 0) return 'Mínimo 1 cuota';
+                    return null;
+                  },
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                icon: const Icon(Icons.remove, size: 18),
+                onPressed: () {
+                  final cur = int.tryParse(_cuotasCtrl.text) ?? 1;
+                  final c = (cur - 1).clamp(1, 360);
+                  setState(() {
+                    _cuotasCtrl.text = c.toString();
+                    _marcarDirty();
+                  });
+                },
+              ),
+              IconButton.filledTonal(
+                icon: const Icon(Icons.add, size: 18),
+                onPressed: () {
+                  final cur = int.tryParse(_cuotasCtrl.text) ?? 1;
+                  final c = cur + 1;
+                  setState(() {
+                    _cuotasCtrl.text = c.toString();
+                    _marcarDirty();
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [4, 6, 8, 12, 16, 24, 30].map((n) {
+              return ActionChip(
+                label: Text('$n cuotas', style: const TextStyle(fontSize: 11)),
+                onPressed: () {
+                  setState(() {
+                    _cuotasCtrl.text = n.toString();
+                    _marcarDirty();
+                  });
+                },
+                backgroundColor: const Color(0xFFF1F5F9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 18),
+
+          // Método de Amortización
+          const Text(
+            'Método de Amortización',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 6),
+          ...MetodoCalculo.values.map((metodo) {
+            final seleccionado = _metodo == metodo;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                onTap: () => setState(() {
+                  _metodo = metodo;
+                  _marcarDirty();
+                }),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: seleccionado
+                        ? const Color(0xFFF0FDFA)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: seleccionado
+                          ? _tealColor
+                          : const Color(0xFFE2E8F0),
+                      width: seleccionado ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        seleccionado
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        size: 18,
+                        color: seleccionado ? _tealColor : Colors.grey,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              metodo.titulo,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: seleccionado
+                                    ? _tealColor
+                                    : const Color(0xFF334155),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              metodo.descripcion,
+                              style: const TextStyle(
+                                  fontSize: 11, color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 14),
+
+          // Fechas
+          Row(
+            children: [
+              Expanded(
+                child: _SelectorFechaBoton(
+                  label: 'Fecha Desembolso',
+                  fecha: _fechaInicio,
+                  onChanged: (d) {
+                    setState(() {
+                      _fechaInicio = d;
+                      _fechaPrimerCobro =
+                          PrestamosCalculoService.sugerirPrimerPago(
+                              d, _frecuencia);
+                      _marcarDirty();
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _SelectorFechaBoton(
+                  label: 'Fecha Primer Cobro',
+                  fecha: _fechaPrimerCobro,
+                  onChanged: (d) => setState(() {
+                    _fechaPrimerCobro = d;
+                    _marcarDirty();
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 3. TARJETA TEAL DE RESULTADOS (DISEÑO EXACTO CALCULADORA) ──────────────
+  Widget _buildResultadosCard() {
+    final calculo = _calculoActual;
+    final cuotasNum = calculo.plazoCuotas;
+
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [_tealColor, _tealDark],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1F0F766E),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'VALOR DE LA CUOTA',
+                style: TextStyle(
+                  color: Color(0xFFCCFBF1),
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(40),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$cuotasNum pagos ${_frecuencia.etiqueta.toLowerCase()}s',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _formatearMonto(calculo.montoCuota),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Cada ${_frecuencia.periodo} hasta cancelar',
+            style: const TextStyle(color: Color(0xFF99F6E4), fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+          const Divider(color: Color(0x33FFFFFF), height: 1),
+          const SizedBox(height: 18),
+
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricTile(
+                  titulo: 'Total a Pagar',
+                  subtitulo: 'Capital + Intereses',
+                  valor: _formatearMonto(calculo.totalPagar),
+                  icono: Icons.account_balance_wallet_outlined,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricTile(
+                  titulo: 'Solo Intereses',
+                  subtitulo: 'Ganancia por crédito',
+                  valor: _formatearMonto(calculo.totalInteres),
+                  icono: Icons.trending_up,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricTile(
+                  titulo: 'Capital Prestado',
+                  subtitulo: 'Monto base',
+                  valor: _formatearMonto(calculo.montoPrestado),
+                  icono: Icons.attach_money,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricTile(
+                  titulo: 'Tasa Efectiva',
+                  subtitulo:
+                      _tasaEsMensual ? 'Por período' : 'Total del crédito',
+                  valor: '${calculo.tasaInteres} %',
+                  icono: Icons.percent,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricTile({
+    required String titulo,
+    required String subtitulo,
+    required String valor,
+    required IconData icono,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(30),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icono, color: const Color(0xFFCCFBF1), size: 14),
+              const SizedBox(width: 6),
+              Text(
+                titulo,
+                style: const TextStyle(
+                  color: Color(0xFFCCFBF1),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            valor,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            subtitulo,
+            style: const TextStyle(
+              color: Color(0xAAFFFFFF),
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 4. CRONOGRAMA DE PAGOS (DESPLEGABLE / EXPANDIBLE) ──────────────────────
+  Widget _buildCronogramaSection() {
+    final calculo = _calculoActual;
+    final cronograma = calculo.cronograma;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.calendar_month_outlined,
+                        color: _tealColor, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Cronograma de Pagos',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() => _mostrarCronograma = !_mostrarCronograma);
+                  },
+                  icon: Icon(
+                    _mostrarCronograma
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 16,
+                  ),
+                  label: Text(_mostrarCronograma
+                      ? 'Ocultar'
+                      : 'Ver detalle (${calculo.plazoCuotas} cuotas)'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: _tealColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_mostrarCronograma) ...[
+            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor:
+                    WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+                headingTextStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF475569),
+                ),
+                dataTextStyle: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF1E293B),
+                ),
+                columnSpacing: 22,
+                columns: const [
+                  DataColumn(label: Text('#')),
+                  DataColumn(label: Text('Fecha')),
+                  DataColumn(label: Text('Cuota')),
+                  DataColumn(label: Text('Capital')),
+                  DataColumn(label: Text('Interés')),
+                  DataColumn(label: Text('Saldo Restante')),
+                ],
+                rows: cronograma.map((c) {
+                  return DataRow(
+                    cells: [
+                      DataCell(Text(
+                        '${c.numero}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      )),
+                      DataCell(Text(
+                          DateFormat('dd/MM/yyyy').format(c.fechaVencimiento))),
+                      DataCell(Text(
+                        _formatearMonto(c.cuota),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: _tealColor,
+                        ),
+                      )),
+                      DataCell(Text(_formatearMonto(c.capital))),
+                      DataCell(Text(
+                        _formatearMonto(c.interes),
+                        style: const TextStyle(color: Color(0xFFD97706)),
+                      )),
+                      DataCell(Text(_formatearMonto(c.saldoRestante))),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── 5. GARANTÍA, DOCUMENTOS Y NOTAS (RESPETADO) ───────────────────────────
+  Widget _buildGarantiaDocumentosCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.shield_outlined, color: _tealColor, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Garantía, Documentos y Notas',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Garantía / Aval / Observaciones (opcional)',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: _notasCtrl,
+            maxLines: 2,
+            decoration: InputDecoration(
+              hintText:
+                  'Detalles de la garantía prendaria, aval solidario o acuerdos...',
+              prefixIcon: const Icon(Icons.note_alt_outlined, size: 20),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Adjuntar documento
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _docNombre != null
+                      ? Icons.description
+                      : Icons.file_present_outlined,
+                  color: _docNombre != null ? _tealColor : Colors.grey,
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Pagaré o Contrato firmado (opcional)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                      Text(
+                        _docNombre != null
+                            ? 'Archivo: $_docNombre'
+                            : 'Podés adjuntar PDF, imagen o foto del pagaré.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _docNombre != null
+                              ? _tealColor
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_docBytes != null)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline,
+                        color: Colors.red, size: 20),
+                    tooltip: 'Quitar archivo',
+                    onPressed: () => setState(() {
+                      _docBytes = null;
+                      _docNombre = null;
+                      _docMime = null;
+                      _marcarDirty();
+                    }),
+                  ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.attach_file, size: 16),
+                  label: Text(_docBytes == null ? 'Adjuntar' : 'Cambiar'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _tealColor,
+                    side: const BorderSide(color: _tealColor),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: _guardando ? null : _adjuntarDoc,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 6. BOTONES DE ACCIÓN ───────────────────────────────────────────────────
+  Widget _buildBotonesAccion() {
+    final yo = ref.watch(cobradorActualProvider).valueOrNull;
+    final esGestor = requiereAprobacionPara(yo, AccionSensible.crearContrato);
+
+    return Row(
       children: [
-        Text(
-          titulo,
-          style: TextStyle(
-            fontSize: 11,
-            color: Theme.of(context).colorScheme.outline,
+        Expanded(
+          child: OutlinedButton(
+            onPressed: _guardando
+                ? null
+                : () => Navigator.of(context).maybePop(),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Cancelar'),
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          valor,
-          style: TextStyle(
-            fontSize: destacado ? 16 : 14,
-            fontWeight: FontWeight.bold,
-            color: destacado
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.onSurface,
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 2,
+          child: FilledButton.icon(
+            icon: _guardando
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.check_circle_outline),
+            label: Text(
+              _guardando
+                  ? 'Guardando...'
+                  : esGestor
+                      ? 'Solicitar Aprobación'
+                      : 'Crear Préstamo',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: _tealColor,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: _guardando ? null : _guardar,
           ),
         ),
       ],
@@ -1451,24 +1956,46 @@ class _ClienteSelectorState extends State<_ClienteSelector> {
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: _ctrl,
-      readOnly: true,
-      enabled: widget.enabled,
-      decoration: const InputDecoration(
-        labelText: 'Prestatario / Cliente *',
-        hintText: 'Toca para buscar cliente...',
-        prefixIcon: Icon(Icons.person_outline),
-        suffixIcon: Icon(Icons.arrow_drop_down),
-      ),
-      onTap: widget.enabled ? _elegirCliente : null,
-      validator: (_) => widget.clienteId == null ? 'Seleccioná un cliente' : null,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Prestatario / Cliente *',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF475569),
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _ctrl,
+          readOnly: true,
+          enabled: widget.enabled,
+          decoration: InputDecoration(
+            hintText: 'Toca para buscar cliente...',
+            prefixIcon: const Icon(Icons.person_outline, size: 20),
+            suffixIcon: const Icon(Icons.arrow_drop_down),
+            filled: true,
+            fillColor: const Color(0xFFF8FAFC),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          ),
+          onTap: widget.enabled ? _elegirCliente : null,
+          validator: (_) =>
+              widget.clienteId == null ? 'Seleccioná un cliente' : null,
+        ),
+      ],
     );
   }
 }
 
-class _SelectorFecha extends StatelessWidget {
-  const _SelectorFecha({
+class _SelectorFechaBoton extends StatelessWidget {
+  const _SelectorFechaBoton({
     required this.label,
     required this.fecha,
     required this.onChanged,
@@ -1480,23 +2007,54 @@ class _SelectorFecha extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () async {
-        final d = await showDatePicker(
-          context: context,
-          initialDate: fecha,
-          firstDate: DateTime(2020),
-          lastDate: DateTime(2100),
-        );
-        if (d != null) onChanged(d);
-      },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: const Icon(Icons.calendar_today, size: 20),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF475569),
+          ),
         ),
-        child: Text(DateFormat('dd/MM/yyyy').format(fecha)),
-      ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: () async {
+            final d = await showDatePicker(
+              context: context,
+              initialDate: fecha,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2100),
+            );
+            if (d != null) onChanged(d);
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined,
+                    size: 16, color: Color(0xFF0F766E)),
+                const SizedBox(width: 8),
+                Text(
+                  DateFormat('dd/MM/yyyy').format(fecha),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
