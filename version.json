@@ -1,6 +1,6 @@
 {
-  "version": "0.45.3",
-  "release_notes": "v0.45.3 - Findex Microfinanzas y Préstamos (Fases 1, 2 y 3)\n\n- Rework integral de Contratos a Préstamos con calculadora financiera integrada (flat y francés) y generación atómica de amortización.\n- Ficha de Préstamo con métricas financieras, barra de amortización y cronograma con desglose capital/interés/saldo.\n- Cobro en terreno con visualización de abono capital e interés.\n- Recibos térmicos Bluetooth (58mm/80mm), PDF y ESC/POS con datos de crédito.\n- Envío de comprobantes estructurados por WhatsApp.\n- Lista de cartera y cuotas en ruta con soporte de préstamos.",
+  "version": "0.45.4",
+  "release_notes": "v0.45.4 - Rework visual de Préstamos / Contratos estilo Calculadora\n\n- Nueva interfaz interactiva para creación de préstamos basada en la Calculadora Financiera.\n- Tarjeta Teal con valor de cuota en vivo, 2x2 de indicadores y cronograma amortizado desplegable.\n- Selector por chips rápidos de montos, tasas de interés, plazos y frecuencia de pagos.\n- Preservación de validación de código único obligatorio, selector de prestatario y adjunto de pagaré/garantías.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"
