@@ -191,6 +191,7 @@ String? _tituloFor(String loc) {
   const exact = <String, String>{
     '/admin': 'Panel admin',
     '/admin/resumen': 'Resumen',
+    '/admin/calculadora-prestamos': 'Calculadora de préstamos',
     '/admin/cartera': 'Cartera & Liquidez',
     '/admin/desembolsos': 'Desembolsos',
     '/admin/indicadores': 'Indicadores',
@@ -409,6 +410,8 @@ const _adminMenu = [
       color: Color(0xFF185FA5), adminOnly: true),
   _MenuItem(Icons.groups, 'Clientes', '/admin/clientes',
       color: Color(0xFF0F6E56)),
+  _MenuItem(Icons.calculate_outlined, 'Calculadora', '/admin/calculadora-prestamos',
+      color: Color(0xFF0F766E), subtitulo: 'simulá cuotas e interés'),
   _MenuItem(Icons.approval, 'Solicitudes', '/admin/solicitudes',
       color: Color(0xFFB45309), adminOnly: true),
   _MenuItem(Icons.alt_route, 'Rutas', '/admin/rutas', color: Color(0xFF534AB7)),

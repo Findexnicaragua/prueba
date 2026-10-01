@@ -174,15 +174,15 @@ msix_config:
   # (display_name/identity_name de `branding/<slug>/config.json`) antes de cada
   # build y los restaura con `git checkout` — si acá quedara el nombre de un
   # tenant (pasó con Telenet), un build genérico saldría mal identificado.
-  display_name: CRM
-  publisher_display_name: CRM
+  display_name: Findex
+  publisher_display_name: Findex
   # Publisher (DN) EXPLÍCITO = Subject del test cert del paquete msix. Declararlo
   # fija la identidad de firma del MSIX y la independiza de futuros bumps del
   # paquete: si el cert cambiara, el build FALLA (mismatch) en vez de romper
   # silenciosamente la continuidad de updates de Windows. INVARIANTE de firma:
   # NO cambiar en un tenant ya distribuido (Windows lo vería como app nueva).
   publisher: "CN=Msix Testing, O=Msix Testing Corporation, S=Some-State, C=US"
-  identity_name: com.sitecsa.crm
+  identity_name: com.findex.app
   logo_path: assets/icon/app_icon.png
   capabilities: internetClient, location
   languages: es

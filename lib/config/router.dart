@@ -19,6 +19,7 @@ import '../features/admin/reportes/reporte_desembolsos_screen.dart';
 import '../features/admin/reportes/reporte_indicadores_screen.dart';
 import '../features/admin/reportes/reporte_resumen_mensual_screen.dart';
 import '../features/admin/operaciones/cierre_dia_screen.dart';
+import '../features/admin/prestamos/calculadora_prestamos_screen.dart';
 import '../features/admin/geografia/geografia_admin_screen.dart';
 import '../features/admin/incidentes/incidente_detail_screen.dart';
 import '../features/admin/incidentes/incidentes_screen.dart';
@@ -530,6 +531,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               pageBuilder: (_, s) => _fadePage(s, _titled('Resumen Mensual', const ReporteResumenMensualScreen()))),
           GoRoute(path: '/admin/cierre-dia',
               pageBuilder: (_, s) => _fadePage(s, _titled('Cierre de Día', const CierreDiaScreen()))),
+            GoRoute(path: '/admin/calculadora-prestamos',
+                pageBuilder: (_, s) => _fadePage(s, _titled('Calculadora de préstamos', const CalculadoraPrestamosScreen()))),
           GoRoute(path: '/admin/resumen',
               pageBuilder: (_, s) => _fadePage(s, _titled('Resumen', const DashboardPinGate()))),
           GoRoute(path: '/admin/cobranza',
