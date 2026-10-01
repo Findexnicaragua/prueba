@@ -1,0 +1,63 @@
+name: Release Windows (MSIX)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release Windows MSIX
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Create .env.json
+        shell: pwsh
+        run: |
+          if (-not (Test-Path .env.json)) {
+            @{
+              UPDATE_REPO = 'Findexnicaragua/prueba'
+              SUPABASE_URL = 'https://vowjhcekftogpuucoorl.supabase.co'
+              SUPABASE_ANON_KEY = 'sb_publishable_l8o4VaOAZoEF0fwkamxwvw_YhqUZw2_'
+              POWERSYNC_URL = 'https://6a80ff94f16f9067844280a4.powersync.journeyapps.com'
+              POWERSYNC_TOKEN_ENDPOINT = 'https://vowjhcekftogpuucoorl.supabase.co/functions/v1/powersync-auth'
+            } | ConvertTo-Json | Set-Content -Path .env.json
+          }
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows Release
+        run: flutter build windows --release --dart-define-from-file=.env.json
+
+      - name: Package MSIX Installer
+        run: dart run msix:create --build-windows false
+
+      - name: Locate and prepare MSIX file
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem -Recurse -Filter *.msix build/windows | Select-Object -First 1
+          if (-not $msix) { throw 'No se encontró el instalador MSIX generado.' }
+          Copy-Item -Path $msix.FullName -Destination 'Findex.msix'
+          Write-Host ('MSIX preparado: ' + $msix.FullName + ' -> Findex.msix')
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Findex.msix
+            version.json
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true

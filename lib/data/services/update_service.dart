@@ -59,7 +59,7 @@ class UpdateService {
   /// `UPDATE_REPO` en `.env.json` y rebuildear — no se toca este archivo.
   static const _updateRepo = String.fromEnvironment(
     'UPDATE_REPO',
-    defaultValue: 'rubenmaltez/sitecsa-updates',
+    defaultValue: 'Findexnicaragua/prueba',
   );
 
   /// URL del version.json. Hosteado como asset del último GitHub Release.
