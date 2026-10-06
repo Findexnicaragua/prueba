@@ -69,7 +69,7 @@ const kGruposEmpresa = <SettingGroup>[
 /// foto, pantallas opcionales) ya NO viven acá: se movieron a la tab Avanzado.
 const kGruposCobranza = <SettingGroup>[
   SettingGroup(
-    titulo: 'Reglas de cobro',
+    titulo: 'Reglas de cobro de préstamos',
     icono: Icons.rule,
     entradas: [
       SettingEntry('cobranza.dias_gracia'),
@@ -77,7 +77,7 @@ const kGruposCobranza = <SettingGroup>[
     ],
   ),
   SettingGroup(
-    titulo: 'Permisos',
+    titulo: 'Permisos de cobranza',
     icono: Icons.lock_open,
     entradas: [
       SettingEntry('cobranza.cobrador_edita_fecha'),
@@ -93,7 +93,7 @@ const kGruposCobranza = <SettingGroup>[
 /// Grupos de la tab Pagos.
 const kGruposPagos = <SettingGroup>[
   SettingGroup(
-    titulo: 'Métodos de pago',
+    titulo: 'Métodos de pago recibidos',
     icono: Icons.payments,
     entradas: [
       // metodo_efectivo queda fijo en ON (lo fuerza el editor del tile).
@@ -103,7 +103,7 @@ const kGruposPagos = <SettingGroup>[
     ],
   ),
   SettingGroup(
-    titulo: 'Dólares',
+    titulo: 'Moneda extranjera (Dólares)',
     icono: Icons.attach_money,
     entradas: [
       SettingEntry(
@@ -143,12 +143,12 @@ const kCategoriasAvanzado = <SettingCategoria>[
   // 1) Reglas de NEGOCIO sensibles que tocan cuánto entra/sale de caja. Las
   //    gestiona el dueño del SaaS por tenant.
   SettingCategoria(
-    titulo: 'Reglas de cobro y dinero',
+    titulo: 'Reglas de préstamo y cobro',
     icono: Icons.payments_outlined,
-    subtitulo: 'Qué plata se puede cobrar o descontar y bajo qué reglas.',
+    subtitulo: 'Condiciones de abono a capital, cuotas adelantadas y ajustes del crédito.',
     grupos: [
       SettingGroup(
-        titulo: 'Reglas de cobro avanzadas',
+        titulo: 'Abonos y pagos de cuotas',
         icono: Icons.tune,
         entradas: [
           SettingEntry('cobranza.pago_parcial'),
@@ -158,7 +158,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
       // Descuentos del admin desde el contrato (rediseño 2026-06-12: el cobrador
       // no descuenta). Topes como hijos del toggle padre.
       SettingGroup(
-        titulo: 'Ajustes de cuota (admin)',
+        titulo: 'Ajustes y bonificaciones a cuotas',
         icono: Icons.percent,
         subtitulo: 'Descuentos con motivo que el admin aplica a una cuota desde '
             'el detalle del contrato (correcciones y promos).',
@@ -184,7 +184,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
         ],
       ),
       SettingGroup(
-        titulo: 'Reconexión',
+        titulo: 'Recargo por mora / reconexión',
         icono: Icons.power,
         entradas: [
           SettingEntry(
@@ -196,7 +196,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
       // Cambio de plan del contrato (0151): regla de pricing del contrato,
       // super-only. En ON, admin/admin_cobranza ven "Cambiar plan" en el detalle.
       SettingGroup(
-        titulo: 'Cambio de plan',
+        titulo: 'Refinanciamiento / Cambio de condiciones',
         icono: Icons.swap_horiz,
         subtitulo: 'Permite a admin / admin de cobranza cambiar el plan de un '
             'contrato manteniendo su vigencia, con efecto al próximo ciclo o '
@@ -209,7 +209,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
       // cobra fuera del ciclo del contrato, desde el cliente y desde tickets.
       // Super-only; en OFF se ocultan ambas entradas.
       SettingGroup(
-        titulo: 'Cobro extra (multa / otro)',
+        titulo: 'Cargos adicionales y multas',
         icono: Icons.add_card_outlined,
         subtitulo: 'Permite crear un cobro puntual (multa u otro cargo) desde el '
             'detalle del cliente y desde un ticket. Apagado = oculto.',
@@ -219,7 +219,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
       ),
       // Crédito por excedente (R17, 0127): regla de negocio del dueño del SaaS.
       SettingGroup(
-        titulo: 'Crédito por excedente',
+        titulo: 'Saldo a favor / Excedente',
         icono: Icons.savings,
         subtitulo: 'Al suspender/cancelar, ofrece acreditar/devolver/condonar el '
             'excedente pagado por adelantado (OFF = se pierde, como antes).',
@@ -232,13 +232,13 @@ const kCategoriasAvanzado = <SettingCategoria>[
   // 2) Qué PUEDE HACER el personal de campo y qué pantallas/herramientas se le
   //    habilitan en el momento del cobro.
   SettingCategoria(
-    titulo: 'Permisos y operación del cobrador',
+    titulo: 'Permisos y operación del gestor de cobro',
     icono: Icons.badge_outlined,
     subtitulo: 'Qué puede hacer el personal de campo y qué pantallas se le '
         'habilitan.',
     grupos: [
       SettingGroup(
-        titulo: 'Permisos del cobrador',
+        titulo: 'Permisos del gestor de cobro',
         icono: Icons.lock_person,
         entradas: [
           SettingEntry('cobranza.cobrador_anula_cobros'),
@@ -248,7 +248,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
       // Cambio de fecha de pago por días (feature C, 0119): switch maestro; cada
       // usuario necesita el permiso por persona (se habilita en Personal).
       SettingGroup(
-        titulo: 'Cambio de fecha de pago',
+        titulo: 'Cambio de fecha de vencimiento',
         icono: Icons.event_repeat,
         subtitulo: 'Permite a personal habilitado cambiar la fecha de pago de un '
             'cliente AL DÍA, cobrando los días puente. Habilitá quién puede usarlo '
@@ -258,7 +258,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
         ],
       ),
       SettingGroup(
-        titulo: 'Foto de comprobante',
+        titulo: 'Foto de comprobante de pago',
         icono: Icons.photo_camera,
         entradas: [
           SettingEntry(
@@ -268,7 +268,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
         ],
       ),
       SettingGroup(
-        titulo: 'Pantallas opcionales del admin',
+        titulo: 'Pantallas opcionales de administración',
         icono: Icons.dashboard_customize,
         entradas: [
           SettingEntry('cobranza.pantalla_pagos'),
@@ -279,14 +279,14 @@ const kCategoriasAvanzado = <SettingCategoria>[
   ),
   // 3) Cómo se le avisa al cliente (manual wa.me + envío automático por API).
   SettingCategoria(
-    titulo: 'Avisos y notificaciones',
+    titulo: 'Avisos y recordatorios',
     icono: Icons.notifications_active_outlined,
-    subtitulo: 'Cómo se le avisa al cliente próximo a corte o en mora.',
+    subtitulo: 'Cómo se le avisa al cliente sobre cuotas próximas a vencer o en mora.',
     grupos: [
       // Pantalla de Avisos + notificar WhatsApp (0134/0135). Las PLANTILLAS del
       // mensaje las edita el admin → van en kGruposCobranza, no acá.
       SettingGroup(
-        titulo: 'Avisos de cobranza',
+        titulo: 'Recordatorios de cuotas y cobranza',
         icono: Icons.notifications_active_outlined,
         subtitulo: 'Habilita la pantalla "Avisos" (clientes próximos a corte y en '
             'mora) y el botón de notificar por WhatsApp, para este tenant.',
@@ -302,14 +302,14 @@ const kCategoriasAvanzado = <SettingCategoria>[
   ),
   // 4) Qué VE el admin del tenant en sus pantallas de análisis.
   SettingCategoria(
-    titulo: 'Visibilidad y reportes',
+    titulo: 'Visibilidad y reportes de cartera',
     icono: Icons.insights_outlined,
-    subtitulo: 'Qué tableros y reportes ve el admin del ISP.',
+    subtitulo: 'Qué tableros y reportes financieros ve el administrador.',
     grupos: [
       // Secciones del dashboard admin toggleables por tenant (0133). Cada clave
       // 'dashboard.*_visible' muestra/oculta un bloque del Resumen.
       SettingGroup(
-        titulo: 'Secciones del dashboard',
+        titulo: 'Secciones del resumen de cartera',
         icono: Icons.dashboard,
         subtitulo: 'Qué bloques ve el admin en el Resumen. Apagá los que no '
             'quieras mostrarle a este tenant.',
@@ -325,7 +325,7 @@ const kCategoriasAvanzado = <SettingCategoria>[
       ),
       // Reportes detallados (legacy) vs plantilla estándar (rework 0141).
       SettingGroup(
-        titulo: 'Reportes',
+        titulo: 'Reportes de cartera',
         icono: Icons.assessment_outlined,
         subtitulo: 'Por defecto el módulo usa la plantilla estándar de cobranza. '
             'Activá esto para mostrar además los reportes detallados (arqueo, '
@@ -338,15 +338,15 @@ const kCategoriasAvanzado = <SettingCategoria>[
   ),
   // 5) Cómo se ENCUENTRA y se AUDITA la información (metaconfig transversal).
   SettingCategoria(
-    titulo: 'Búsqueda e historial',
+    titulo: 'Búsqueda e historial de préstamos',
     icono: Icons.manage_search,
-    subtitulo: 'Cómo se encuentra y se audita la información.',
+    subtitulo: 'Campos habilitados para localizar clientes y auditar movimientos.',
     grupos: [
       // Campos de búsqueda de cliente (0145): el super_admin elige qué campos
       // entran al buscar. El nombre SIEMPRE entra. Apagar Teléfono evita falsos
       // positivos. Los consume busquedaClienteSql.
       SettingGroup(
-        titulo: 'Búsqueda de clientes',
+        titulo: 'Búsqueda de clientes y préstamos',
         icono: Icons.search,
         subtitulo: 'Qué campos se usan al buscar un cliente (en todas las listas). '
             'El nombre siempre busca. Apagá Teléfono si te trae falsos positivos.',

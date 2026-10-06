@@ -203,6 +203,30 @@ const kAvisoMsgGraciaDefault =
     'Hola {nombre}, le recordamos que tiene un saldo pendiente de {monto}. '
     'Para evitar la suspensión del servicio, realice su pago en los próximos '
     '{dias} días. Gracias — {empresa}';
+/// Plantilla por defecto del mensaje de WhatsApp al emitir/compartir un recibo.
+/// Variables: {empresa}, {cliente}, {numero_recibo}, {fecha}, {monto}, {concepto},
+/// {cuota}, {capital}, {interes}, {mora}, {saldo_restante}, {proximo_vencimiento}, {metodo}, {cobrador}.
+const kReciboWhatsappTemplateDefault =
+    '📄 *COMPROBANTE DE PAGO*\n'
+    '🏢 *{empresa}*\n'
+    '--------------------------------\n'
+    '*Nº Recibo:* {numero_recibo}\n'
+    '*Fecha:* {fecha}\n'
+    '*Cliente:* {cliente}\n'
+    '*Préstamo / Concepto:* {concepto}\n'
+    '*Cuota:* {cuota}\n'
+    '*Abono a Capital:* {capital}\n'
+    '*Interés:* {interes}\n'
+    '*Mora / Recargo:* {mora}\n'
+    '--------------------------------\n'
+    '*TOTAL PAGADO:* {monto}\n'
+    '*Saldo Restante:* {saldo_restante}\n'
+    '*Próximo Vencimiento:* {proximo_vencimiento}\n'
+    '*Método de Pago:* {metodo}\n'
+    '*Gestor de Cobro:* {cobrador}\n'
+    '--------------------------------\n'
+    '_¡Gracias por su puntual pago!_';
+
 const kAvisoMsgMoraDefault =
     'Hola {nombre}, su servicio fue suspendido por falta de pago (saldo '
     'vencido: {monto}, {dias} días de atraso). Para reactivarlo, acérquese a '
@@ -499,6 +523,10 @@ class AppSettings {
   int get formatoReciboMm =>
       settingValue<num>(_map, 'recibo.formato_default_mm', 80).toInt();
   String get pieRecibo => settingValue<String>(_map, 'recibo.pie_libre', '');
+
+  /// Plantilla del mensaje de WhatsApp para el recibo de pago.
+  String get reciboWhatsappTemplate => settingValue<String>(
+      _map, 'recibo.whatsapp_template', kReciboWhatsappTemplateDefault);
 
   String get empresaNombre => settingValue<String>(_map, 'empresa.nombre', '');
   String get empresaDireccion =>

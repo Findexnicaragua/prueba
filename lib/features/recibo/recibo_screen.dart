@@ -449,76 +449,80 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
   bool _descargandoPdf = false;
   bool _guardandoPdf = false;
 
-  Future<void> _compartirWhatsApp() async {
+  String _armarMensajeWhatsApp() {
     final r = widget.recibo;
+    final settings = ref.read(appSettingsProvider);
     final numero = (r['numero_completo'] as String?) ?? widget.reciboId;
     final cliente = (r['cliente_nombre'] as String?) ?? 'Cliente';
-    final telefono = (r['cliente_telefono'] as String?)?.replaceAll(RegExp(r'[^0-9]'), '');
     final fecha = r['fecha_pago'] != null
         ? Fmt.fechaHoraNi(r['fecha_pago'] as String)
         : Fmt.fechaHoraNi(r['created_at'] as String?);
-    final esPrestamo = r['monto_prestado'] != null;
     final montoStr = Fmt.monto(
       (r['monto_cordobas'] as num?)?.toDouble() ?? 0,
       (r['moneda'] as String?) ?? 'NIO',
     );
     final metodo = (r['metodo'] as String? ?? 'efectivo').toUpperCase();
     final cobrador = (r['cobrador_nombre'] as String?) ?? '';
-    final empresa = ref.read(appSettingsProvider).empresaNombre;
+    final empresa = settings.empresaNombre;
 
-    final buffer = StringBuffer();
-    buffer.writeln('🧾 *COMPROBANTE DE PAGO*');
-    if (empresa.isNotEmpty) buffer.writeln('🏢 *$empresa*');
-    buffer.writeln('--------------------------------');
-    buffer.writeln('*N° Recibo:* $numero');
-    buffer.writeln('*Fecha:* $fecha');
-    buffer.writeln('*Cliente:* $cliente');
-    buffer.writeln('--------------------------------');
+    final concepto = (r['contrato_codigo'] as String?) ??
+        (r['plan_label'] as String?) ??
+        (r['plan_nombre'] as String?) ??
+        'Préstamo';
+    final cuota = (r['cuota_descripcion'] as String?) ??
+        (r['periodo_label'] as String?) ??
+        'Cuota';
+    final cap = (r['capital'] as num?)?.toDouble();
+    final capStr = cap != null ? Fmt.cordobas(cap) : '-';
+    final inter = (r['interes'] as num?)?.toDouble();
+    final interStr = inter != null ? Fmt.cordobas(inter) : '-';
+    final saldo = (r['saldo_restante'] as num?)?.toDouble();
+    final saldoStr = saldo != null ? Fmt.cordobas(saldo) : '-';
+    final fechaVenc = r['fecha_vencimiento'] != null
+        ? Fmt.fechaNi(r['fecha_vencimiento'] as String)
+        : '-';
+    final mora = (r['cargos_neto'] as num?)?.toDouble();
+    final moraStr = (mora != null && mora > 0) ? Fmt.cordobas(mora) : '-';
+
+    var template = settings.reciboWhatsappTemplate;
+    if (template.trim().isEmpty) {
+      template = kReciboWhatsappTemplateDefault;
+    }
+
+    var texto = template
+        .replaceAll('{empresa}', empresa)
+        .replaceAll('{cliente}', cliente)
+        .replaceAll('{numero_recibo}', numero)
+        .replaceAll('{fecha}', fecha)
+        .replaceAll('{monto}', montoStr)
+        .replaceAll('{concepto}', concepto)
+        .replaceAll('{cuota}', cuota)
+        .replaceAll('{capital}', capStr)
+        .replaceAll('{interes}', interStr)
+        .replaceAll('{mora}', moraStr)
+        .replaceAll('{saldo_restante}', saldoStr)
+        .replaceAll('{proximo_vencimiento}', fechaVenc)
+        .replaceAll('{metodo}', metodo)
+        .replaceAll('{cobrador}', cobrador);
 
     if (widget.multiRows != null && widget.multiRows!.isNotEmpty) {
-      buffer.writeln('*Detalle de Cuotas Pagadas:*');
+      final bufferMulti = StringBuffer('\n*Detalle de cuotas:*');
       for (final row in widget.multiRows!) {
         final desc = row['cuota_descripcion'] as String? ?? 'Cuota';
         final subtotal = (row['monto_cordobas'] as num?)?.toDouble() ?? 0;
-        final subtotalStr = Fmt.cordobas(subtotal);
-        buffer.writeln('• $desc: $subtotalStr');
+        bufferMulti.writeln('\n• $desc: ${Fmt.cordobas(subtotal)}');
       }
-    } else if (esPrestamo) {
-      final codigo = r['contrato_codigo'] as String?;
-      final cuota = r['cuota_descripcion'] as String?;
-      final cap = (r['capital'] as num?)?.toDouble();
-      final inter = (r['interes'] as num?)?.toDouble();
-      final saldo = (r['saldo_restante'] as num?)?.toDouble();
-
-      if (codigo != null) buffer.writeln('*Préstamo:* $codigo');
-      if (cuota != null) buffer.writeln('*Cuota:* $cuota');
-      if (cap != null) {
-        final capStr = Fmt.cordobas(cap);
-        buffer.writeln('*Abono a Capital:* $capStr');
-      }
-      if (inter != null) {
-        final interStr = Fmt.cordobas(inter);
-        buffer.writeln('*Interés Ordinario:* $interStr');
-      }
-      if (saldo != null) {
-        final saldoStr = Fmt.cordobas(saldo);
-        buffer.writeln('*Saldo Restante:* $saldoStr');
-      }
-    } else {
-      final plan = (r['plan_label'] as String?) ?? (r['plan_nombre'] as String?);
-      final periodo = r['periodo_label'] as String?;
-      if (plan != null) buffer.writeln('*Servicio:* $plan');
-      if (periodo != null) buffer.writeln('*Período:* $periodo');
+      texto = '$texto\n$bufferMulti';
     }
 
-    buffer.writeln('--------------------------------');
-    buffer.writeln('*TOTAL PAGADO:* $montoStr');
-    buffer.writeln('*Método de Pago:* $metodo');
-    if (cobrador.isNotEmpty) buffer.writeln('*Cobrador:* $cobrador');
-    buffer.writeln('--------------------------------');
-    buffer.writeln('_¡Gracias por su puntual pago!_');
+    return texto;
+  }
 
-    final texto = buffer.toString();
+  Future<void> _compartirWhatsApp() async {
+    final r = widget.recibo;
+    final telefono = (r['cliente_telefono'] as String?)?.replaceAll(RegExp(r'[^0-9]'), '');
+    final texto = _armarMensajeWhatsApp();
+
     var phone = telefono ?? '';
     if (phone.length == 8) {
       phone = '505$phone';
@@ -539,10 +543,27 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
     }
   }
 
-  /// Transiciones de plan de la(s) cuota(s) de este recibo (0267), para los
-  /// TRES paths de impresion (raster termico, PDF y ESC/POS texto). Field y no
-  /// stream: el `detalle` es inmutable, se escribe una vez en la transaccion
-  /// del cambio de plan y no se edita nunca.
+  Future<void> _compartirPdfWhatsApp() async {
+    setState(() => _guardandoPdf = true);
+    try {
+      final pdf = await _generarReciboPdf();
+      final numero = (widget.recibo['numero_completo'] as String?) ?? widget.reciboId;
+      await Printing.sharePdf(
+        bytes: pdf.bytes,
+        filename: pdf.filename,
+        subject: 'Comprobante de Pago $numero',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al compartir PDF: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _guardandoPdf = false);
+    }
+  }
+
   List<Map<String, dynamic>> _cambioPlan = const [];
 
   @override
@@ -1348,9 +1369,27 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
           ),
         ],
         const SizedBox(height: 8),
+        // Enviar Recibo PDF por WhatsApp
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF25D366),
+            foregroundColor: Colors.white,
+          ),
+          icon: _guardandoPdf
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.picture_as_pdf, size: 18),
+          label: Text(_guardandoPdf
+              ? 'Preparando PDF...'
+              : 'Mandar Recibo PDF por WhatsApp'),
+          onPressed: _guardandoPdf ? null : _compartirPdfWhatsApp,
+        ),
+        const SizedBox(height: 8),
         FilledButton.tonalIcon(
-          icon: const Icon(Icons.share, size: 18),
-          label: const Text('Compartir por WhatsApp'),
+          icon: const Icon(Icons.chat, size: 18),
+          label: const Text('Enviar mensaje por WhatsApp'),
           onPressed: _compartirWhatsApp,
         ),
         const SizedBox(height: 8),

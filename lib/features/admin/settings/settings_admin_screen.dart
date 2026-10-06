@@ -39,8 +39,8 @@ class SettingsAdminScreen extends ConsumerWidget {
   // sólo para super_admin (ver build).
   static const _categoriasBase = [
     ('empresa', 'Empresa', Icons.business),
-    ('cobranza', 'Cobranza', Icons.receipt_long),
-    ('pagos', 'Pagos', Icons.payments),
+    ('cobranza', 'Préstamos y Cobranza', Icons.account_balance),
+    ('pagos', 'Métodos de Pago', Icons.payments),
     // Tab "Moneda" removido: la moneda principal SIEMPRE es córdoba (NIO). El
     // dólar es método de pago ALTERNO (con tasa de cambio, vuelto en córdobas),
     // no una moneda principal — el setting confundía. moneda.principal queda
@@ -48,7 +48,7 @@ class SettingsAdminScreen extends ConsumerWidget {
     // Tab "Cuotas" removido a pedido (cuotas manuales / editar monto fuera de
     // scope por ahora). El feature sigue en el código; solo se oculta de
     // settings. Los settings cuotas.* quedan huérfanos en la DB (sin tab).
-    ('recibos', 'Recibos', Icons.print),
+    ('recibos', 'Recibo de Pago', Icons.receipt_long),
   ];
 
   @override

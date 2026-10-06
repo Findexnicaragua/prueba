@@ -286,6 +286,7 @@ class _AjustesGenerales extends ConsumerStatefulWidget {
 class _AjustesGeneralesState extends ConsumerState<_AjustesGenerales> {
   late final TextEditingController _titulo;
   late final TextEditingController _pie;
+  late final TextEditingController _whatsappTemplate;
 
   @override
   void initState() {
@@ -293,12 +294,14 @@ class _AjustesGeneralesState extends ConsumerState<_AjustesGenerales> {
     final s = ref.read(appSettingsProvider);
     _titulo = TextEditingController(text: s.reciboTitulo);
     _pie = TextEditingController(text: s.pieRecibo);
+    _whatsappTemplate = TextEditingController(text: s.reciboWhatsappTemplate);
   }
 
   @override
   void dispose() {
     _titulo.dispose();
     _pie.dispose();
+    _whatsappTemplate.dispose();
     super.dispose();
   }
 
@@ -370,6 +373,111 @@ class _AjustesGeneralesState extends ConsumerState<_AjustesGenerales> {
               maxLines: 3,
               onSubmitted: (v) => _save('recibo.pie_libre', v.trim()),
               onTapOutside: (_) => _save('recibo.pie_libre', _pie.text.trim()),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.chat_bubble_outline, size: 18, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Plantilla de mensaje WhatsApp para el recibo',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.restart_alt, size: 16),
+                  label: const Text('Restaurar default', style: TextStyle(fontSize: 12)),
+                  onPressed: () {
+                    setState(() {
+                      _whatsappTemplate.text = kReciboWhatsappTemplateDefault;
+                    });
+                    _save('recibo.whatsapp_template', kReciboWhatsappTemplateDefault);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Mensaje predeterminado que se enviará por WhatsApp junto al comprobante. Toca las variables para insertarlas dinámicamente.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.outline,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _whatsappTemplate,
+              decoration: const InputDecoration(
+                labelText: 'Mensaje de WhatsApp',
+                alignLabelWithHint: true,
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              minLines: 5,
+              maxLines: 12,
+              onSubmitted: (v) => _save('recibo.whatsapp_template', v.trim()),
+              onTapOutside: (_) =>
+                  _save('recibo.whatsapp_template', _whatsappTemplate.text.trim()),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Variables disponibles (toca para insertar):',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final (label, variable) in const [
+                  ('Cliente', '{cliente}'),
+                  ('Nº Recibo', '{numero_recibo}'),
+                  ('Fecha', '{fecha}'),
+                  ('Monto', '{monto}'),
+                  ('Préstamo', '{concepto}'),
+                  ('Cuota', '{cuota}'),
+                  ('Capital', '{capital}'),
+                  ('Interés', '{interes}'),
+                  ('Mora', '{mora}'),
+                  ('Saldo restante', '{saldo_restante}'),
+                  ('Próximo pago', '{proximo_vencimiento}'),
+                  ('Método', '{metodo}'),
+                  ('Gestor', '{cobrador}'),
+                  ('Empresa', '{empresa}'),
+                ])
+                  ActionChip(
+                    avatar: const Icon(Icons.add, size: 14),
+                    label: Text('$label ($variable)',
+                        style: const TextStyle(fontSize: 11)),
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      final text = _whatsappTemplate.text;
+                      final selection = _whatsappTemplate.selection;
+                      final start =
+                          selection.start >= 0 ? selection.start : text.length;
+                      final end =
+                          selection.end >= 0 ? selection.end : text.length;
+                      final newText = text.replaceRange(start, end, variable);
+                      setState(() {
+                        _whatsappTemplate.text = newText;
+                        _whatsappTemplate.selection = TextSelection.collapsed(
+                            offset: start + variable.length);
+                      });
+                      _save('recibo.whatsapp_template', newText.trim());
+                    },
+                  ),
+              ],
             ),
           ],
         ),

@@ -267,9 +267,9 @@ const kReciboBloquesCatalogo = <ReciboBloqueInfo>[
   ReciboBloqueInfo('meta', 'Datos del recibo (N°, fecha, colector)', ReciboZona.body,
       espacioAntes: ReciboEspacio.amplio),
   // ── B: cliente y servicio ──
-  ReciboBloqueInfo('cliente', 'Cliente', ReciboZona.body,
+  ReciboBloqueInfo('cliente', 'Cliente / Titular del préstamo', ReciboZona.body,
       espacioAntes: ReciboEspacio.amplio),
-  ReciboBloqueInfo('servicio', 'Servicio y período', ReciboZona.body,
+  ReciboBloqueInfo('servicio', 'Préstamo / Concepto y Cuota', ReciboZona.body,
       espacioAntes: ReciboEspacio.chico),
   // Cambio de plan (0268). VISIBLE POR DEFECTO, a diferencia de 'cuota':
   // el desglose de la cuota es rutina y se puede apagar, pero acá se le está
@@ -277,19 +277,19 @@ const kReciboBloquesCatalogo = <ReciboBloqueInfo>[
   // cargo que el cliente no puede entender es un reclamo. Solo se dibuja
   // cuando esa cuota REALMENTE viene de un cambio de plan (el cargo trae
   // `detalle`), así que en un recibo normal no ocupa ni una línea.
-  ReciboBloqueInfo('cambio_plan', 'Cambio de plan (transición)', ReciboZona.body,
+  ReciboBloqueInfo('cambio_plan', 'Refinanciamiento / Cambio de condiciones', ReciboZona.body,
       espacioAntes: ReciboEspacio.normal),
   // ── C: pago (Monto → letras → método). 'cuota' oculto por defecto ──
-  ReciboBloqueInfo('cuota', 'Montos de la cuota (desglose)', ReciboZona.body,
+  ReciboBloqueInfo('cuota', 'Desglose de cuota (Capital, Interés, Mora)', ReciboZona.body,
       espacioAntes: ReciboEspacio.chico, visibleDefault: false),
-  ReciboBloqueInfo('totales', 'Monto (cobrado / vuelto / pagado)', ReciboZona.body,
+  ReciboBloqueInfo('totales', 'Monto pagado / cobrado (total y vuelto)', ReciboZona.body,
       hideable: false, espacioAntes: ReciboEspacio.amplio),
   ReciboBloqueInfo('letras', 'Monto en letras', ReciboZona.body,
       espacioAntes: ReciboEspacio.chico),
   ReciboBloqueInfo('metodo', 'Método de pago', ReciboZona.body,
       espacioAntes: ReciboEspacio.chico),
   // ── D: mora ──
-  ReciboBloqueInfo('mora', 'Detalle de mora', ReciboZona.body,
+  ReciboBloqueInfo('mora', 'Detalle de mora / recargos', ReciboZona.body,
       espacioAntes: ReciboEspacio.amplio),
   // ── E: pie (WhatsApp + eslogan) ──
   ReciboBloqueInfo('whatsapp', 'WhatsApp', ReciboZona.footer,

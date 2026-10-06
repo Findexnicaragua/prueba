@@ -53,12 +53,17 @@ class ReciboPreview extends ConsumerWidget {
       // sin este campo el preview rompía (DateTime.parse de null).
       'fecha_vencimiento':
           DateTime(periodo.year, periodo.month, 15).toIso8601String(),
-      'cliente_nombre': 'Cliente de Ejemplo',
+      'cliente_nombre': 'Carlos Mendoza (Cliente)',
       'cliente_codigo': 'C-0001',
       'cliente_cedula': '001-010190-0001A',
-      'plan_nombre': 'Plan Hogar 10 Mbps',
-      'cuota_descripcion': null,
-      'cobrador_nombre': 'Cobrador de Ejemplo',
+      'plan_nombre': 'Microcrédito Personal',
+      'contrato_codigo': 'PREST-0042',
+      'monto_prestado': 12000.0,
+      'capital': 800.0,
+      'interes': 200.0,
+      'saldo_restante': 7200.0,
+      'cuota_descripcion': 'Cuota 4/12',
+      'cobrador_nombre': 'Gestor de Cobro',
     };
   }
 

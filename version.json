@@ -1,6 +1,6 @@
 {
-  "version": "0.45.4",
-  "release_notes": "v0.45.4 - Rework visual de Préstamos / Contratos estilo Calculadora\n\n- Nueva interfaz interactiva para creación de préstamos basada en la Calculadora Financiera.\n- Tarjeta Teal con valor de cuota en vivo, 2x2 de indicadores y cronograma amortizado desplegable.\n- Selector por chips rápidos de montos, tasas de interés, plazos y frecuencia de pagos.\n- Preservación de validación de código único obligatorio, selector de prestatario y adjunto de pagaré/garantías.",
+  "version": "0.45.5",
+  "release_notes": "v0.45.5 - Naming de Préstamos en Configuración y Recibos + Envío PDF por WhatsApp\n\n- Adaptación completa de la configuración del sistema, grupos y secciones orientada a Préstamos y Cartera.\n- Diseñador de Recibos con nomenclatura financiera (Capital, Interés, Mora, Saldo restante).\n- Editor de plantilla (template) personalizada de mensaje WhatsApp para comprobantes de pago con variables dinámicas.\n- Nuevo botón para compartir/mandar el recibo en PDF directamente por WhatsApp.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"
