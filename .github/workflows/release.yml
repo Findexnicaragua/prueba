@@ -43,7 +43,7 @@ jobs:
         run: flutter build windows --release --dart-define-from-file=.env.json
 
       - name: Package MSIX Installer
-        run: dart run msix:create --build-windows false
+        run: dart run msix:create --build-windows false --install-certificate false
 
       - name: Locate and prepare MSIX file
         shell: pwsh

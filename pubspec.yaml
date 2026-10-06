@@ -188,6 +188,7 @@ msix_config:
   languages: es
   # Certificado self-signed para distribución B2B (no Microsoft Store).
   # Para producción: reemplazar con certificado comprado.
+  install_certificate: false
   store: false
 
 # Iconos de la app (Windows .ico + Android mipmaps). Fuente: el MISMO PNG que
