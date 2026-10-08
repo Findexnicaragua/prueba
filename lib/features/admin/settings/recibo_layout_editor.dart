@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/recibo_layout.dart';
@@ -454,6 +454,7 @@ class _AjustesGeneralesState extends ConsumerState<_AjustesGenerales> {
                   ('Método', '{metodo}'),
                   ('Gestor', '{cobrador}'),
                   ('Empresa', '{empresa}'),
+                  ('Link PDF', '{link_recibo}'),
                 ])
                   ActionChip(
                     avatar: const Icon(Icons.add, size: 14),

@@ -1,4 +1,4 @@
-# BITACORA.md — Control de cambios y estado vivo del proyecto
+﻿# BITACORA.md — Control de cambios y estado vivo del proyecto
 
 > **Quién lee esto:** la PRIMERA lectura de toda sesión nueva (humano o AI).
 > Responde "¿dónde quedamos, qué fue lo último que se trabajó y por qué?".

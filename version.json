@@ -1,6 +1,6 @@
-{
-  "version": "0.45.6",
-  "release_notes": "v0.45.6 - Limpieza Integral de Referencias ISP y Recibo PDF por WhatsApp con Plantilla Dinámica\n\n- Eliminación completa de referencias a ISP en Configuración, Creación de Empresas, Diagnóstico y Fichas.\n- Editor visual en Configuración > Recibo de Pago para personalizar el mensaje de WhatsApp con variables dinámicas ({cliente}, {recibo}, {prestamo}, {cuota}, {monto}, {capital}, {interes}, {saldo_restante}, {empresa}, {cobrador}).\n- Botón verde directo 'Mandar Recibo PDF por WhatsApp' con soporte nativo para adjuntar el PDF y prellenar el texto.",
+﻿{
+  "version": "0.45.7",
+  "release_notes": "v0.45.7 - Enlace directo de descarga de recibo PDF en WhatsApp y despliegue de Edge Functions\n\n- Inclusión automática de variable {link_recibo} / {link_pdf} en la plantilla de WhatsApp para descarga directa del recibo.\n- Subida automática en segundo plano del comprobante PDF a Supabase Storage (recibos-pdf).\n- Despliegue completo de Edge Functions en Supabase para creación y gestión de usuarios sin errores 404.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"

@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -208,7 +208,7 @@ const kAvisoMsgGraciaDefault =
 /// {cuota}, {capital}, {interes}, {mora}, {saldo_restante}, {proximo_vencimiento}, {metodo}, {cobrador}.
 const kReciboWhatsappTemplateDefault =
     '📄 *COMPROBANTE DE PAGO*\n'
-    '🏛️ *{empresa}*\n'
+    '🏢 *{empresa}*\n'
     '--------------------------------\n'
     '*Nº Recibo:* {numero_recibo}\n'
     '*Fecha:* {fecha}\n'
@@ -224,6 +224,8 @@ const kReciboWhatsappTemplateDefault =
     '*Próximo Vencimiento:* {proximo_vencimiento}\n'
     '*Método de Pago:* {metodo}\n'
     '*Gestor de Cobro:* {cobrador}\n'
+    '--------------------------------\n'
+    '📥 *Descargar Recibo PDF:*\n{link_recibo}\n'
     '--------------------------------\n'
     '_¡Gracias por su puntual pago!_';
 

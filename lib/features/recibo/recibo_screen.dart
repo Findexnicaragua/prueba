@@ -1,3 +1,5 @@
+﻿import 'dart:async';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/utils/formatters.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:flutter/foundation.dart';
@@ -489,6 +491,11 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
       template = kReciboWhatsappTemplateDefault;
     }
 
+    final tenantId = (r['tenant_id'] as String?) ?? '';
+    final linkPdf = tenantId.isNotEmpty
+        ? 'https://vowjhcekftogpuucoorl.supabase.co/storage/v1/object/public/recibos-pdf/$tenantId/${widget.reciboId}.pdf'
+        : '';
+
     var texto = template
         .replaceAll('{empresa}', empresa)
         .replaceAll('{cliente}', cliente)
@@ -506,7 +513,9 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
         .replaceAll('{saldo_restante}', saldoStr)
         .replaceAll('{proximo_vencimiento}', fechaVenc)
         .replaceAll('{metodo}', metodo)
-        .replaceAll('{cobrador}', cobrador);
+        .replaceAll('{cobrador}', cobrador)
+        .replaceAll('{link_recibo}', linkPdf)
+        .replaceAll('{link_pdf}', linkPdf);
 
     if (widget.multiRows != null && widget.multiRows!.isNotEmpty) {
       final bufferMulti = StringBuffer('\n*Detalle de cuotas:*');
@@ -521,10 +530,30 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
     return texto;
   }
 
+  Future<void> _subirPdfEnSegundoPlano() async {
+    try {
+      final pdf = await _generarReciboPdf();
+      final r = widget.recibo;
+      final tenantId = (r['tenant_id'] as String?) ?? '';
+      if (tenantId.isNotEmpty) {
+        await Supabase.instance.client.storage.from('recibos-pdf').uploadBinary(
+              '$tenantId/${widget.reciboId}.pdf',
+              pdf.bytes,
+              fileOptions: const FileOptions(
+                contentType: 'application/pdf',
+                upsert: true,
+              ),
+            );
+      }
+    } catch (_) {}
+  }
+
   Future<void> _compartirWhatsApp() async {
     final r = widget.recibo;
     final telefono = (r['cliente_telefono'] as String?)?.replaceAll(RegExp(r'[^0-9]'), '');
     final texto = _armarMensajeWhatsApp();
+
+    unawaited(_subirPdfEnSegundoPlano());
 
     var phone = telefono ?? '';
     if (phone.length == 8) {
@@ -552,6 +581,20 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
       final pdf = await _generarReciboPdf();
       final numero = (widget.recibo['numero_completo'] as String?) ?? widget.reciboId;
       final texto = _armarMensajeWhatsApp();
+
+      final r = widget.recibo;
+      final tenantId = (r['tenant_id'] as String?) ?? '';
+      if (tenantId.isNotEmpty) {
+        unawaited(Supabase.instance.client.storage.from('recibos-pdf').uploadBinary(
+              '$tenantId/${widget.reciboId}.pdf',
+              pdf.bytes,
+              fileOptions: const FileOptions(
+                contentType: 'application/pdf',
+                upsert: true,
+              ),
+            ));
+      }
+
       await Printing.sharePdf(
         bytes: pdf.bytes,
         filename: pdf.filename,
@@ -559,7 +602,6 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
         body: texto,
       );
       if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux)) {
-        final r = widget.recibo;
         final telefono = (r['cliente_telefono'] as String?)?.replaceAll(RegExp(r'[^0-9]'), '');
         var phone = telefono ?? '';
         if (phone.length == 8) phone = '505$phone';
