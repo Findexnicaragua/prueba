@@ -2643,6 +2643,7 @@ class _SettingTileState extends State<_SettingTile> {
   // (ej. feature flags pendientes de implementación).
   String? _descripcionOverride(String clave) {
     return switch (clave) {
+      'empresa.nombre' => 'Nombre comercial de la empresa',
       'caja_chica.habilitada' =>
         'Permite asignar caja chica diaria al cobrador y reconciliar '
             'efectivo al final del día. (Feature en desarrollo)',

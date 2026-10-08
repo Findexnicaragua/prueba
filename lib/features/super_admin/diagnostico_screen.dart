@@ -245,7 +245,7 @@ class _TabRadiografiaState extends State<_TabRadiografia>
     if (anuladas30 > 0) {
       out.add((Icons.block, const Color(0xFF7F77DD),
           '$anuladas30 cuota(s) anulada(s) en los últimos 30 días — el motivo '
-          'está en el historial de abajo. Si el ISP dice que sí se debe, '
+          'está en el historial de abajo. Si la empresa dice que sí se debe, '
           'usá "Revivir cuota" en Operaciones.'));
     }
     if (out.isEmpty) {

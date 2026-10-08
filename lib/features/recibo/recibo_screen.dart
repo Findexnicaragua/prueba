@@ -493,6 +493,9 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
         .replaceAll('{empresa}', empresa)
         .replaceAll('{cliente}', cliente)
         .replaceAll('{numero_recibo}', numero)
+        .replaceAll('{recibo}', numero)
+        .replaceAll('{nombre}', cliente)
+        .replaceAll('{prestamo}', concepto)
         .replaceAll('{fecha}', fecha)
         .replaceAll('{monto}', montoStr)
         .replaceAll('{concepto}', concepto)
@@ -548,11 +551,22 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
     try {
       final pdf = await _generarReciboPdf();
       final numero = (widget.recibo['numero_completo'] as String?) ?? widget.reciboId;
+      final texto = _armarMensajeWhatsApp();
       await Printing.sharePdf(
         bytes: pdf.bytes,
         filename: pdf.filename,
         subject: 'Comprobante de Pago $numero',
+        body: texto,
       );
+      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux)) {
+        final r = widget.recibo;
+        final telefono = (r['cliente_telefono'] as String?)?.replaceAll(RegExp(r'[^0-9]'), '');
+        var phone = telefono ?? '';
+        if (phone.length == 8) phone = '505$phone';
+        final encoded = Uri.encodeComponent(texto);
+        final uri = phone.isNotEmpty ? 'https://wa.me/$phone?text=$encoded' : 'https://wa.me/?text=$encoded';
+        await launchUrlString(uri, mode: LaunchMode.externalApplication);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -59,10 +59,10 @@ Future<void> _abrirCrearTenant(BuildContext context, WidgetRef ref) async {
         title: 'Credenciales del admin',
         email: resultado.adminEmail,
         password: password,
-        intro: 'El ISP ya está creado y el admin puede loguearse ya '
+        intro: 'La empresa ya está creada y el admin puede loguearse ya '
             'mismo con estas credenciales. Pasalas por canal seguro — '
             'si las compartiste por uno inseguro, podés rotarle la '
-            'contraseña en cualquier momento desde el detalle del ISP.',
+            'contraseña en cualquier momento desde el detalle de la empresa.',
       ),
     );
     if (copio == true && context.mounted) {
@@ -76,7 +76,7 @@ Future<void> _abrirCrearTenant(BuildContext context, WidgetRef ref) async {
   // navegar manualmente cada vez.
   messenger.showSnackBar(
     SnackBar(
-      content: const Text('ISP creado e invitación enviada por email'),
+      content: const Text('Empresa creada e invitación enviada por email'),
       behavior: SnackBarBehavior.floating,
       duration: const Duration(seconds: 6),
       action: SnackBarAction(
@@ -213,7 +213,7 @@ class _TenantCardState extends ConsumerState<_TenantCard> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(suspender ? 'Suspender ISP' : 'Reactivar ISP'),
+        title: Text(suspender ? 'Suspender empresa' : 'Reactivar empresa'),
         content: Text(suspender
             ? 'Se cortará el acceso de TODOS los usuarios de "${tenant.nombre}": '
                 'no podrán iniciar sesión ni sincronizar. Es reversible.'
@@ -239,7 +239,7 @@ class _TenantCardState extends ConsumerState<_TenantCard> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                  mensajeErrorHumano(e, contexto: 'cambiar el estado del ISP'))),
+                  mensajeErrorHumano(e, contexto: 'cambiar el estado de la empresa'))),
         );
       }
     }
@@ -451,7 +451,7 @@ class _CrearTenantCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Crear nuevo ISP',
+                        'Crear nueva empresa',
                         style: TextStyle(
                           color: scheme.onSurface,
                           fontWeight: FontWeight.w600,
@@ -460,7 +460,7 @@ class _CrearTenantCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Da de alta un ISP y enviá la invitación',
+                        'Da de alta una empresa y enviá la invitación',
                         style: TextStyle(
                           color: scheme.onSurfaceVariant,
                           fontSize: 12,
@@ -588,7 +588,7 @@ class _CrearTenantDialogState extends ConsumerState<_CrearTenantDialog> {
       canPop: !_busy,
       child: AlertDialog(
       icon: Icon(Icons.add_business, color: scheme.primary, size: 32),
-      title: const Text('Crear ISP'),
+      title: const Text('Crear empresa'),
       content: SizedBox(
         width: dialogW,
         child: Form(
@@ -608,8 +608,8 @@ class _CrearTenantDialogState extends ConsumerState<_CrearTenantDialog> {
                   autofocus: true,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
-                    labelText: 'Nombre del ISP',
-                    hintText: 'ej: ISP Las Lomas',
+                    labelText: 'Nombre de la empresa',
+                    hintText: 'ej: Microfinanzas El Triunfo',
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) =>
@@ -782,8 +782,8 @@ class _CrearTenantDialogState extends ConsumerState<_CrearTenantDialog> {
           button: true,
           enabled: !_busy,
           hint: _enviarEmail
-              ? 'Envía un correo de invitación al admin del ISP'
-              : 'Crea el ISP y genera la contraseña del admin para '
+              ? 'Envía un correo de invitación al admin de la empresa'
+              : 'Crea la empresa y genera la contraseña del admin para '
                   'que la copies',
           child: FilledButton.icon(
             icon: _busy
@@ -801,7 +801,7 @@ class _CrearTenantDialogState extends ConsumerState<_CrearTenantDialog> {
                       // Label "Crear ISP" en modo manual (no "generar",
                       // que es engañoso si el super_admin tipeó la pass).
                       : _modoManual
-                          ? 'Crear ISP'
+                          ? 'Crear empresa'
                           : 'Crear y generar contraseña',
             ),
             onPressed: (_busy || _passwordIncompleta) ? null : _crear,

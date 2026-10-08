@@ -89,7 +89,7 @@ Future<void> imprimirDeudaSuspension({
   final empresa = ref.read(appSettingsProvider).empresaNombre;
   try {
     final doc = await buildPdfDeudaSuspension(
-      empresaNombre: empresa.isEmpty ? 'ISP' : empresa,
+      empresaNombre: empresa.isEmpty ? 'Findex' : empresa,
       clienteNombre: clienteNombre ?? '—',
       codigo: codigo,
       planNombre: planNombre,
@@ -165,7 +165,7 @@ Future<void> imprimirDeudaCancelacion({
   final empresa = ref.read(appSettingsProvider).empresaNombre;
   try {
     final doc = await buildPdfDeudaSuspension(
-      empresaNombre: empresa.isEmpty ? 'ISP' : empresa,
+      empresaNombre: empresa.isEmpty ? 'Findex' : empresa,
       clienteNombre: clienteNombre ?? row['cliente_nombre'] as String? ?? '—',
       codigo: codigo ?? row['codigo'] as String?,
       planNombre: planNombre ?? row['plan_nombre'] as String?,

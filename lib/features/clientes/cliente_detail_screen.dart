@@ -1,4 +1,4 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -180,7 +180,7 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
       ''', [widget.clienteId, sql(desde), sql(hasta)]);
 
       final empresaNombre =
-          ref.read(empresaNombreProvider).valueOrNull ?? 'ISP';
+          ref.read(empresaNombreProvider).valueOrNull ?? 'Findex';
       Uint8List? logoBytes;
       try {
         logoBytes = await ref.read(logoEmpresaBytesProvider.future);

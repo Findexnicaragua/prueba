@@ -590,7 +590,7 @@ class _CambiarRolDialogState extends State<CambiarRolDialog> {
                   color: scheme.errorContainer,
                   onColor: scheme.onErrorContainer,
                   texto: 'Es el único admin activo del tenant. Tras este '
-                      'cambio nadie podrá administrar este ISP hasta que '
+                      'cambio nadie podrá administrar esta empresa hasta que '
                       'designes otro admin.',
                 ),
               ],

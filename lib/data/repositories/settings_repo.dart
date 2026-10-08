@@ -208,7 +208,7 @@ const kAvisoMsgGraciaDefault =
 /// {cuota}, {capital}, {interes}, {mora}, {saldo_restante}, {proximo_vencimiento}, {metodo}, {cobrador}.
 const kReciboWhatsappTemplateDefault =
     '📄 *COMPROBANTE DE PAGO*\n'
-    '🏢 *{empresa}*\n'
+    '🏛️ *{empresa}*\n'
     '--------------------------------\n'
     '*Nº Recibo:* {numero_recibo}\n'
     '*Fecha:* {fecha}\n'

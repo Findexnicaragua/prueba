@@ -4989,7 +4989,7 @@ class _BajaDeudaCardState extends ConsumerState<_BajaDeudaCard> {
               controller: _motivoCtrl,
               decoration: const InputDecoration(
                 labelText: 'Motivo (obligatorio, queda en el historial)',
-                hintText: 'ej. Se mudó de zona, decisión del ISP 20/08',
+                hintText: 'ej. Se mudó de zona, decisión de administración 20/08',
                 isDense: true,
                 border: OutlineInputBorder(),
               ),

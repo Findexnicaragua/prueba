@@ -554,7 +554,7 @@ class _MiembroCardState extends ConsumerState<MiembroCard> {
                     color: dialogScheme.errorContainer,
                     onColor: dialogScheme.onErrorContainer,
                     texto: 'Es el único admin activo del tenant. Tras '
-                        'desactivarlo, nadie podrá administrar este ISP '
+                        'desactivarlo, nadie podrá administrar esta empresa '
                         'hasta que reactives a alguien o invites otro '
                         'admin.',
                   ),

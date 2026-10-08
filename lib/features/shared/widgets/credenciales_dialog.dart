@@ -133,7 +133,7 @@ class _CredencialesDialogState extends State<CredencialesDialog> {
                   Expanded(
                     child: Text(
                       'La contraseña sólo se muestra una vez. Si la '
-                      'perdés, abrí el ISP y usá "Forzar contraseña" '
+                      'perdés, abrí la empresa y usá "Forzar contraseña" '
                       'en la fila del usuario para generar otra. Si '
                       'vas a probar el login en este browser, hacelo '
                       'en una ventana de incógnito — sino vas a '
