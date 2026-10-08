@@ -1,6 +1,6 @@
 {
-  "version": "0.45.5",
-  "release_notes": "v0.45.5 - Naming de Préstamos en Configuración y Recibos + Envío PDF por WhatsApp\n\n- Adaptación completa de la configuración del sistema, grupos y secciones orientada a Préstamos y Cartera.\n- Diseñador de Recibos con nomenclatura financiera (Capital, Interés, Mora, Saldo restante).\n- Editor de plantilla (template) personalizada de mensaje WhatsApp para comprobantes de pago con variables dinámicas.\n- Nuevo botón para compartir/mandar el recibo en PDF directamente por WhatsApp.",
+  "version": "0.45.6",
+  "release_notes": "v0.45.6 - Limpieza Integral de Referencias ISP y Recibo PDF por WhatsApp con Plantilla Dinámica\n\n- Eliminación completa de referencias a ISP en Configuración, Creación de Empresas, Diagnóstico y Fichas.\n- Editor visual en Configuración > Recibo de Pago para personalizar el mensaje de WhatsApp con variables dinámicas ({cliente}, {recibo}, {prestamo}, {cuota}, {monto}, {capital}, {interes}, {saldo_restante}, {empresa}, {cobrador}).\n- Botón verde directo 'Mandar Recibo PDF por WhatsApp' con soporte nativo para adjuntar el PDF y prellenar el texto.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"
