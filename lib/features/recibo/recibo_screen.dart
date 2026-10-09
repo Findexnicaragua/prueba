@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/utils/formatters.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -527,6 +527,10 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
       texto = '$texto\n$bufferMulti';
     }
 
+    if (linkPdf.isNotEmpty && !template.contains('{link_recibo}') && !template.contains('{link_pdf}')) {
+      texto = '$texto\n\n📄 *Descargar Recibo PDF:*\n$linkPdf';
+    }
+
     return texto;
   }
 
@@ -548,71 +552,49 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
     } catch (_) {}
   }
 
-  Future<void> _compartirWhatsApp() async {
-    final r = widget.recibo;
-    final telefono = (r['cliente_telefono'] as String?)?.replaceAll(RegExp(r'[^0-9]'), '');
-    final texto = _armarMensajeWhatsApp();
-
-    unawaited(_subirPdfEnSegundoPlano());
-
-    var phone = telefono ?? '';
-    if (phone.length == 8) {
-      phone = '505$phone';
-    }
-    final encoded = Uri.encodeComponent(texto);
-    final uri = phone.isNotEmpty
-        ? 'https://wa.me/$phone?text=$encoded'
-        : 'https://wa.me/?text=$encoded';
-
+  Future<void> _compartirReciboWhatsApp() async {
+    setState(() => _guardandoPdf = true);
     try {
+      final r = widget.recibo;
+      final tenantId = (r['tenant_id'] as String?) ?? '';
+
+      // 1. Generar y subir PDF a Supabase Storage para que el enlace esté disponible de inmediato
+      if (tenantId.isNotEmpty) {
+        try {
+          final pdf = await _generarReciboPdf();
+          await Supabase.instance.client.storage.from('recibos-pdf').uploadBinary(
+                '$tenantId/${widget.reciboId}.pdf',
+                pdf.bytes,
+                fileOptions: const FileOptions(
+                  contentType: 'application/pdf',
+                  upsert: true,
+                ),
+              );
+        } catch (e) {
+          debugPrint('Error al subir PDF para WhatsApp: $e');
+        }
+      }
+
+      // 2. Armar texto del mensaje con todos los datos y el enlace directo al PDF
+      final texto = _armarMensajeWhatsApp();
+
+      // 3. Autopopular el número de teléfono del cliente con código de país (+505)
+      final rawTel = (r['cliente_telefono'] as String?)?.replaceAll(RegExp(r'[^0-9]'), '') ?? '';
+      var phone = rawTel;
+      if (phone.length == 8) {
+        phone = '505$phone';
+      }
+
+      final encoded = Uri.encodeComponent(texto);
+      final uri = phone.isNotEmpty
+          ? 'https://wa.me/$phone?text=$encoded'
+          : 'https://wa.me/?text=$encoded';
+
       await launchUrlString(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No se pudo abrir WhatsApp: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _compartirPdfWhatsApp() async {
-    setState(() => _guardandoPdf = true);
-    try {
-      final pdf = await _generarReciboPdf();
-      final numero = (widget.recibo['numero_completo'] as String?) ?? widget.reciboId;
-      final texto = _armarMensajeWhatsApp();
-
-      final r = widget.recibo;
-      final tenantId = (r['tenant_id'] as String?) ?? '';
-      if (tenantId.isNotEmpty) {
-        unawaited(Supabase.instance.client.storage.from('recibos-pdf').uploadBinary(
-              '$tenantId/${widget.reciboId}.pdf',
-              pdf.bytes,
-              fileOptions: const FileOptions(
-                contentType: 'application/pdf',
-                upsert: true,
-              ),
-            ));
-      }
-
-      await Printing.sharePdf(
-        bytes: pdf.bytes,
-        filename: pdf.filename,
-        subject: 'Comprobante de Pago $numero',
-        body: texto,
-      );
-      if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux)) {
-        final telefono = (r['cliente_telefono'] as String?)?.replaceAll(RegExp(r'[^0-9]'), '');
-        var phone = telefono ?? '';
-        if (phone.length == 8) phone = '505$phone';
-        final encoded = Uri.encodeComponent(texto);
-        final uri = phone.isNotEmpty ? 'https://wa.me/$phone?text=$encoded' : 'https://wa.me/?text=$encoded';
-        await launchUrlString(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al compartir PDF: $e')),
         );
       }
     } finally {
@@ -1425,7 +1407,7 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
           ),
         ],
         const SizedBox(height: 8),
-        // Enviar Recibo PDF por WhatsApp
+        // Enviar Recibo y PDF por WhatsApp (unificado directo al contacto del cliente)
         FilledButton.icon(
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF25D366),
@@ -1436,17 +1418,11 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.picture_as_pdf, size: 18),
+              : const Icon(Icons.chat, size: 18),
           label: Text(_guardandoPdf
-              ? 'Preparando PDF...'
+              ? 'Preparando Recibo...'
               : 'Mandar Recibo PDF por WhatsApp'),
-          onPressed: _guardandoPdf ? null : _compartirPdfWhatsApp,
-        ),
-        const SizedBox(height: 8),
-        FilledButton.tonalIcon(
-          icon: const Icon(Icons.chat, size: 18),
-          label: const Text('Enviar mensaje por WhatsApp'),
-          onPressed: _compartirWhatsApp,
+          onPressed: _guardandoPdf ? null : _compartirReciboWhatsApp,
         ),
         const SizedBox(height: 8),
         if (!kIsWeb)
