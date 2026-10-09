@@ -1,3 +1,4 @@
+import '../features/shared/utils/sign_out_helper.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -678,8 +679,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ── Rutas push del cobrador (con back propio) ──────────────────────
       GoRoute(
         path: '/perfil',
-        builder: (_, __) => Scaffold(
-          appBar: AppBar(title: const Text('Mi perfil')),
+        builder: (context, __) => Scaffold(
+          appBar: AppBar(
+            title: const Text('Mi perfil'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout),
+                tooltip: 'Cerrar sesión',
+                onPressed: () => confirmarSignOut(context),
+              ),
+            ],
+          ),
           body: const PerfilScreen(),
         ),
       ),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../data/services/impersonation_service.dart';
@@ -6,11 +6,8 @@ import '../../../powersync/db.dart' as ps;
 
 /// Verifica si hay cambios locales sin sincronizar antes de cerrar sesión.
 /// Si hay pendientes, muestra un dialog de confirmación. Si no hay, hace
-/// sign-out directo. Cierra modals/drawers abiertos antes de mostrar el dialog.
+/// sign-out directo.
 Future<void> confirmarSignOut(BuildContext context) async {
-  // Cerrar drawer/modals primero para tener un context limpio.
-  Navigator.of(context).popUntil((route) => route.isFirst);
-
   final pendientes = await _contarCrudPendientes();
 
   if (pendientes > 0 && context.mounted) {
@@ -37,7 +34,7 @@ Future<void> confirmarSignOut(BuildContext context) async {
         ],
       ),
     );
-    if (confirmar != true || !context.mounted) return;
+    if (confirmar != true) return;
   }
 
   // Limpiar impersonación activa (#9) antes de cerrar sesión: si el
@@ -45,7 +42,11 @@ Future<void> confirmarSignOut(BuildContext context) async {
   // al re-loguear. Sin reconectar PowerSync (el signOut desconecta igual).
   await limpiarImpersonacionSiActiva();
 
-  await Supabase.instance.client.auth.signOut();
+  try {
+    await Supabase.instance.client.auth.signOut();
+  } catch (e) {
+    debugPrint('[SignOut] Error en auth.signOut: $e');
+  }
 }
 
 /// Si hay una impersonación activa (fila local), sale de ella antes del

@@ -1,6 +1,6 @@
-﻿{
-  "version": "0.45.7",
-  "release_notes": "v0.45.7 - Enlace directo de descarga de recibo PDF en WhatsApp y despliegue de Edge Functions\n\n- Inclusión automática de variable {link_recibo} / {link_pdf} en la plantilla de WhatsApp para descarga directa del recibo.\n- Subida automática en segundo plano del comprobante PDF a Supabase Storage (recibos-pdf).\n- Despliegue completo de Edge Functions en Supabase para creación y gestión de usuarios sin errores 404.",
+{
+  "version": "0.45.8",
+  "release_notes": "v0.45.8 - Corrección de cierre de sesión y accesibilidad en pantalla de perfil\n\n- Corrección en confirmarSignOut eliminando popUntil prematuro que cancelaba el cierre de sesión.\n- Botón de cierre de sesión persistente en pantalla de perfil incluso durante sincronización inicial.\n- Acceso directo para cerrar sesión en AppBar de Mi Perfil.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"

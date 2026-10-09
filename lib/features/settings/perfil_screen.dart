@@ -33,10 +33,37 @@ class PerfilScreen extends ConsumerWidget {
     final email = Supabase.instance.client.auth.currentUser?.email;
 
     if (cobrador == null) {
-      return const EmptyState(
-        icon: Icons.person_off,
-        titulo: 'No hay datos de tu perfil aún',
-        descripcion: 'Esperando primera sincronización.',
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const EmptyState(
+                icon: Icons.person_off,
+                titulo: 'No hay datos de tu perfil aún',
+                descripcion: 'Esperando primera sincronización.',
+              ),
+              if (email != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  email,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.logout),
+                label: const Text('Cerrar sesión'),
+                onPressed: () => confirmarSignOut(context),
+              ),
+              const SizedBox(height: 16),
+              const AppVersionLabel(),
+            ],
+          ),
+        ),
       );
     }
 
