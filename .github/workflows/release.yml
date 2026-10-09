@@ -1,4 +1,4 @@
-name: Release Windows (MSIX)
+﻿name: Release App (Windows MSIX & Android APK)
 
 on:
   push:
@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build & Release Windows MSIX
+  build-windows:
+    name: Build Windows MSIX
     runs-on: windows-latest
     steps:
       - name: Checkout repository
@@ -49,15 +49,87 @@ jobs:
         shell: pwsh
         run: |
           $msix = Get-ChildItem -Recurse -Filter *.msix build/windows | Select-Object -First 1
-          if (-not $msix) { throw 'No se encontró el instalador MSIX generado.' }
+          if (-not $msix) { throw 'No se encontro el instalador MSIX generado.' }
           Copy-Item -Path $msix.FullName -Destination 'Findex.msix'
           Write-Host ('MSIX preparado: ' + $msix.FullName + ' -> Findex.msix')
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msix
+          path: Findex.msix
+
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Create .env.json
+        run: |
+          cat << 'EOF' > .env.json
+          {
+            "UPDATE_REPO": "Findexnicaragua/prueba",
+            "SUPABASE_URL": "https://vowjhcekftogpuucoorl.supabase.co",
+            "SUPABASE_ANON_KEY": "sb_publishable_l8o4VaOAZoEF0fwkamxwvw_YhqUZw2_",
+            "POWERSYNC_URL": "https://6a80ff94f16f9067844280a4.powersync.journeyapps.com",
+            "POWERSYNC_TOKEN_ENDPOINT": "https://vowjhcekftogpuucoorl.supabase.co/functions/v1/powersync-auth"
+          }
+          EOF
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Android APK
+        run: flutter build apk --release --dart-define-from-file=.env.json
+
+      - name: Prepare APK file
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk Findex.apk
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: Findex.apk
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-msix
+
+      - name: Download Android Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             Findex.msix
+            Findex.apk
             version.json
           name: Release ${{ github.ref_name }}
           generate_release_notes: true

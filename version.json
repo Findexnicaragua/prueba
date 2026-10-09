@@ -1,6 +1,6 @@
 {
-  "version": "0.45.8",
-  "release_notes": "v0.45.8 - Corrección de cierre de sesión y accesibilidad en pantalla de perfil\n\n- Corrección en confirmarSignOut eliminando popUntil prematuro que cancelaba el cierre de sesión.\n- Botón de cierre de sesión persistente en pantalla de perfil incluso durante sincronización inicial.\n- Acceso directo para cerrar sesión en AppBar de Mi Perfil.",
+  "version": "0.45.9",
+  "release_notes": "v0.45.9 - Compilación y distribución automática de APK para Android y Windows MSIX\n\n- Soporte de build y release automático de Findex.apk para Android.\n- Integración completa de esquema y sincronización en tiempo real.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"
