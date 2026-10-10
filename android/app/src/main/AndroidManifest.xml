@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
-        android:label="CRM"
+        android:label="Findex"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

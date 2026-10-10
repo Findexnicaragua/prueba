@@ -1,6 +1,6 @@
 {
-  "version": "0.45.10",
-  "release_notes": "v0.45.10 - Unificación de envío de recibo PDF y mensaje por WhatsApp directo al número del cliente.\n\n- Botón unificado de WhatsApp que autopopula el contacto con el desglose completo y el enlace directo al PDF del recibo.",
+  "version": "0.45.11",
+  "release_notes": "v0.45.11 - Firma oficial permanente de release para APK de Android y nombre Findex.\n\n- Firma oficial consistente de release para permitir instalación y actualización directa en Android sin conflictos de firma.\n- Nombre oficial de la app ajustado a Findex en Android.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"

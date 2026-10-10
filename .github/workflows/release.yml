@@ -1,10 +1,9 @@
-﻿name: Release App (Windows MSIX & Android APK)
+name: Release App (Windows MSIX & Android APK)
 
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - 'v*.*.*'
 
 permissions:
   contents: write
@@ -26,15 +25,15 @@ jobs:
       - name: Create .env.json
         shell: pwsh
         run: |
-          if (-not (Test-Path .env.json)) {
-            @{
-              UPDATE_REPO = 'Findexnicaragua/prueba'
-              SUPABASE_URL = 'https://vowjhcekftogpuucoorl.supabase.co'
-              SUPABASE_ANON_KEY = 'sb_publishable_l8o4VaOAZoEF0fwkamxwvw_YhqUZw2_'
-              POWERSYNC_URL = 'https://6a80ff94f16f9067844280a4.powersync.journeyapps.com'
-              POWERSYNC_TOKEN_ENDPOINT = 'https://vowjhcekftogpuucoorl.supabase.co/functions/v1/powersync-auth'
-            } | ConvertTo-Json | Set-Content -Path .env.json
+          @'
+          {
+            "UPDATE_REPO": "Findexnicaragua/prueba",
+            "SUPABASE_URL": "https://vowjhcekftogpuucoorl.supabase.co",
+            "SUPABASE_ANON_KEY": "sb_publishable_l8o4VaOAZoEF0fwkamxwvw_YhqUZw2_",
+            "POWERSYNC_URL": "https://6a80ff94f16f9067844280a4.powersync.journeyapps.com",
+            "POWERSYNC_TOKEN_ENDPOINT": "https://vowjhcekftogpuucoorl.supabase.co/functions/v1/powersync-auth"
           }
+          '@ | Set-Content -Path .env.json -Encoding utf8
 
       - name: Install dependencies
         run: flutter pub get
@@ -43,7 +42,7 @@ jobs:
         run: flutter build windows --release --dart-define-from-file=.env.json
 
       - name: Package MSIX Installer
-        run: dart run msix:create --build-windows false --install-certificate false
+        run: dart run msix:create
 
       - name: Locate and prepare MSIX file
         shell: pwsh
@@ -88,6 +87,16 @@ jobs:
             "POWERSYNC_URL": "https://6a80ff94f16f9067844280a4.powersync.journeyapps.com",
             "POWERSYNC_TOKEN_ENDPOINT": "https://vowjhcekftogpuucoorl.supabase.co/functions/v1/powersync-auth"
           }
+          EOF
+
+      - name: Configure Android Release Signing
+        run: |
+          echo "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" | base64 --decode > android/app/findex-release.jks
+          cat << 'EOF' > android/key.properties
+          storePassword=findexrelease2026
+          keyPassword=findexrelease2026
+          keyAlias=findex
+          storeFile=findex-release.jks
           EOF
 
       - name: Install dependencies
