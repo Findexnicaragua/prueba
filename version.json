@@ -1,6 +1,6 @@
 {
-  "version": "0.45.11",
-  "release_notes": "v0.45.11 - Firma oficial permanente de release para APK de Android y nombre Findex.\n\n- Firma oficial consistente de release para permitir instalación y actualización directa en Android sin conflictos de firma.\n- Nombre oficial de la app ajustado a Findex en Android.",
+  "version": "0.45.12",
+  "release_notes": "v0.45.12 - Generación, subida y enlace directo de descarga al recibo PDF en mensaje de WhatsApp.\n\n- Corrección en la resolución del tenant_id del recibo para generar y subir el PDF al almacenamiento público.\n- Inserción garantizada del enlace directo al PDF en el mensaje de WhatsApp enviado al cliente.",
   "download_url_windows": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix",
   "download_url_android": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.apk",
   "download_url": "https://github.com/Findexnicaragua/prueba/releases/latest/download/Findex.msix"

@@ -117,7 +117,7 @@ class _ReciboScreenState extends ConsumerState<ReciboScreen> {
     if (_esMultiCuota) {
       _reciboStream = ps.db.watch(
         '''
-        SELECT r.id, r.numero_completo, r.prefijo, r.correlativo,
+        SELECT r.id, r.tenant_id, r.numero_completo, r.prefijo, r.correlativo,
                r.created_at, r.impreso_en, r.reimpresiones,
                r.periodo_label, r.plan_label,
                p.monto_cordobas, p.vuelto_cordobas, p.moneda, p.monto_original,
@@ -153,7 +153,7 @@ class _ReciboScreenState extends ConsumerState<ReciboScreen> {
     } else {
       _reciboStream = ps.db.watch(
         '''
-        SELECT r.id, r.numero_completo, r.prefijo, r.correlativo,
+        SELECT r.id, r.tenant_id, r.numero_completo, r.prefijo, r.correlativo,
                r.created_at, r.impreso_en, r.reimpresiones,
                r.periodo_label, r.plan_label,
                p.monto_cordobas, p.vuelto_cordobas, p.moneda, p.monto_original,
@@ -491,7 +491,9 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
       template = kReciboWhatsappTemplateDefault;
     }
 
-    final tenantId = (r['tenant_id'] as String?) ?? '';
+    final tenantId = (r['tenant_id'] as String?)?.isNotEmpty == true
+        ? (r['tenant_id'] as String)
+        : (ref.read(tenantIdProvider) ?? 'f7227a73-f6e8-4578-b5a6-f476f9ebeffe');
     final linkPdf = tenantId.isNotEmpty
         ? 'https://vowjhcekftogpuucoorl.supabase.co/storage/v1/object/public/recibos-pdf/$tenantId/${widget.reciboId}.pdf'
         : '';
@@ -536,10 +538,12 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
 
   Future<void> _subirPdfEnSegundoPlano() async {
     try {
-      final pdf = await _generarReciboPdf();
       final r = widget.recibo;
-      final tenantId = (r['tenant_id'] as String?) ?? '';
+      final tenantId = (r['tenant_id'] as String?)?.isNotEmpty == true
+          ? (r['tenant_id'] as String)
+          : (ref.read(tenantIdProvider) ?? 'f7227a73-f6e8-4578-b5a6-f476f9ebeffe');
       if (tenantId.isNotEmpty) {
+        final pdf = await _generarReciboPdf();
         await Supabase.instance.client.storage.from('recibos-pdf').uploadBinary(
               '$tenantId/${widget.reciboId}.pdf',
               pdf.bytes,
@@ -556,9 +560,11 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
     setState(() => _guardandoPdf = true);
     try {
       final r = widget.recibo;
-      final tenantId = (r['tenant_id'] as String?) ?? '';
+      final tenantId = (r['tenant_id'] as String?)?.isNotEmpty == true
+          ? (r['tenant_id'] as String)
+          : (ref.read(tenantIdProvider) ?? 'f7227a73-f6e8-4578-b5a6-f476f9ebeffe');
 
-      // 1. Generar y subir PDF a Supabase Storage para que el enlace esté disponible de inmediato
+      // 1. Generar y subir PDF a Supabase Storage asegurando que esté disponible de inmediato
       if (tenantId.isNotEmpty) {
         try {
           final pdf = await _generarReciboPdf();
@@ -575,7 +581,7 @@ class _AccionesImpresionState extends ConsumerState<_AccionesImpresion> {
         }
       }
 
-      // 2. Armar texto del mensaje con todos los datos y el enlace directo al PDF
+      // 2. Armar texto del mensaje con el desglose y el enlace directo al PDF
       final texto = _armarMensajeWhatsApp();
 
       // 3. Autopopular el número de teléfono del cliente con código de país (+505)
